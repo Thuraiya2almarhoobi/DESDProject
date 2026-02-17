@@ -1,0 +1,34 @@
+# Virtual environments
+venv/
+.venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Django
+*.log
+local_settings.py
+db.sqlite3
+media/
+staticfiles/
+
+# Environment variables
+.env
+.env.*
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Docker
+*.pid
+
+# Migrations (OPTIONAL: usually DO commit migrations once models are agreed)
+# **Do NOT ignore migrations unless your lecturer tells you to**
+# */migrations/*
+# !*/migrations/__init__.py
