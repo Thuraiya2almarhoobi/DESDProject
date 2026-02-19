@@ -1,11 +1,21 @@
-FROM python:3.14-slim
+FROM node:22-slim AS frontend-build
+
+WORKDIR /frontend
+
+COPY DESD/package*.json ./
+RUN npm install
+
+COPY DESD/ ./
+RUN npm run build
+
+
+FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-# System deps (needed for postgres drivers etc.)
 RUN apt-get update && apt-get install -y \
     gcc \
     libpq-dev \
@@ -16,7 +26,8 @@ RUN pip install --upgrade pip
 RUN pip install -r requirements.txt
 
 COPY . /app/
+COPY --from=frontend-build /frontend/dist /app/DESD/dist
 
 EXPOSE 8000
 
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+CMD ["sh", "-c", "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"]

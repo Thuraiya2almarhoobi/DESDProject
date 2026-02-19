@@ -1,0 +1,23 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DESD</title>
+    {% for css_file in frontend_css_files %}
+      <link rel="stylesheet" href="{% static css_file %}" />
+    {% endfor %}
+  </head>
+  <body>
+    <div id="root"></div>
+    {% if frontend_js_file %}
+      <script type="module" src="{% static frontend_js_file %}"></script>
+    {% else %}
+      <main style="font-family: sans-serif; padding: 2rem;">
+        <h1>Frontend bundle missing</h1>
+        <p>Run <code>npm install && npm run build</code> inside <code>DESD/</code>.</p>
+      </main>
+    {% endif %}
+  </body>
+</html>
