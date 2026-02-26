@@ -25,6 +25,7 @@ urlpatterns = [
     path("api/content/", include("apps.content.urls")),
     # Frontend route that intentionally uses /admin/commission.
     re_path(r"^admin/commission/?$", frontend_app, name="frontend-admin-commission"),
+    path("api/accounts/", include("apps.accounts.urls")),
     path('admin/', admin.site.urls),
     # Serve the React/Vite frontend for all application routes.
     re_path(r"^(?!admin/|api/|static/|media/).*$", frontend_app, name="frontend-app"),

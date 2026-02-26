@@ -4,7 +4,15 @@ import { apiJson, setBasicAuthToken } from '../lib/api';
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  profile: Record<string, unknown> | null;
+  addresses: MePayload['addresses'];
+  loading: boolean;
+  login: (email: string, password: string) => Promise<AuthResult>;
+  registerCustomer: (payload: CustomerRegisterPayload) => Promise<AuthResult>;
+  registerProducer: (payload: ProducerRegisterPayload) => Promise<AuthResult>;
+  registerCommunity: (payload: CommunityRegisterPayload) => Promise<AuthResult>;
+  registerRestaurant: (payload: RestaurantRegisterPayload) => Promise<AuthResult>;
+  getMe: () => Promise<MePayload>;
   logout: () => void;
   hasRole: (role: UserRole) => boolean;
 }
@@ -96,11 +104,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setBasicAuthToken(null);
     saveUser(null);
     setUser(null);
+    setProfile(null);
+    setAddresses([]);
   };
 
-  const hasRole = (role: UserRole) => {
-    return user?.role === role;
-  };
+  const hasRole = (role: UserRole) => user?.role === role;
 
   const value = useMemo(
     () => ({

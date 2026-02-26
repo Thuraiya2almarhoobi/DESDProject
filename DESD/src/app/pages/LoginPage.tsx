@@ -7,6 +7,7 @@ import { Label } from '../components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Alert, AlertDescription } from '../components/ui/alert';
 import { Sprout } from 'lucide-react';
+import { getDashboardPathForRole } from '../lib/roleRouting';
 
 export function LoginPage() {
   const navigate = useNavigate();

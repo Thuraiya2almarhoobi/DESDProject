@@ -1,14 +1,15 @@
 // User and Auth Types
-export type UserRole = 'customer' | 'producer' | 'admin';
+export type UserRole = 'CUSTOMER' | 'PRODUCER' | 'COMMUNITY' | 'RESTAURANT' | 'ADMIN';
 export type CustomerType = 'standard' | 'community' | 'restaurant';
 
 export interface User {
-  id: string;
+  id: number | string;
   email: string;
   role: UserRole;
   name: string;
   producerId?: string; // For producers
   customerType?: CustomerType; // For customers
+  profile?: Record<string, unknown> | null;
 }
 
 // Product Types

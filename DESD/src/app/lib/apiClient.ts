@@ -1,0 +1,86 @@
+import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
+
+import {
+  clearAuthStorage,
+  getAccessToken,
+  getRefreshToken,
+  setAuthTokens,
+} from './tokenStorage';
+
+type ExtendedRequestConfig = InternalAxiosRequestConfig & {
+  _retry?: boolean;
+};
+
+const env = import.meta.env as Record<string, string | undefined>;
+const rawApiBaseUrl = env.VITE_API_URL ?? env.REACT_APP_API_URL ?? 'http://127.0.0.1:8000/api';
+const apiBaseUrl = rawApiBaseUrl.replace(/\/$/, '');
+
+const apiClient = axios.create({
+  baseURL: apiBaseUrl,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+const refreshClient = axios.create({
+  baseURL: apiBaseUrl,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+apiClient.interceptors.request.use((config) => {
+  const accessToken = getAccessToken();
+  if (accessToken) {
+    config.headers.Authorization = `Bearer ${accessToken}`;
+  }
+  return config;
+});
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  async (error: AxiosError) => {
+    const request = error.config as ExtendedRequestConfig | undefined;
+    const statusCode = error.response?.status;
+
+    if (!request || statusCode !== 401 || request._retry) {
+      return Promise.reject(error);
+    }
+
+    const url = request.url ?? '';
+    const authEndpoint = url.includes('/accounts/auth/login/')
+      || url.includes('/accounts/auth/refresh/')
+      || url.includes('/accounts/auth/register/');
+    if (authEndpoint) {
+      return Promise.reject(error);
+    }
+
+    const refreshToken = getRefreshToken();
+    if (!refreshToken) {
+      clearAuthStorage();
+      return Promise.reject(error);
+    }
+
+    request._retry = true;
+
+    try {
+      const refreshResponse = await refreshClient.post('/accounts/auth/refresh/', {
+        refresh: refreshToken,
+      });
+      const newAccessToken = refreshResponse.data?.access as string | undefined;
+      if (!newAccessToken) {
+        throw new Error('No access token returned from refresh endpoint.');
+      }
+
+      setAuthTokens(newAccessToken, refreshToken);
+      request.headers.Authorization = `Bearer ${newAccessToken}`;
+      return apiClient(request);
+    } catch {
+      clearAuthStorage();
+      return Promise.reject(error);
+    }
+  }
+);
+
+export { apiBaseUrl };
+export default apiClient;
