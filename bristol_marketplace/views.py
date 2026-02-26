@@ -1,0 +1,39 @@
+import json
+from pathlib import Path
+
+from django.conf import settings
+from django.shortcuts import render
+
+
+def _load_frontend_assets() -> tuple[str | None, list[str]]:
+    manifest_path = Path(settings.FRONTEND_DIST_DIR) / ".vite" / "manifest.json"
+    if not manifest_path.exists():
+        return None, []
+
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    entry = manifest.get("src/main.tsx") or manifest.get("index.html")
+    if not entry:
+        return None, []
+
+    js_file = entry.get("file")
+    css_files: list[str] = list(entry.get("css", []))
+
+    for imported_chunk in entry.get("imports", []):
+        imported = manifest.get(imported_chunk, {})
+        for css_file in imported.get("css", []):
+            if css_file not in css_files:
+                css_files.append(css_file)
+
+    return js_file, css_files
+
+
+def frontend_app(request):
+    js_file, css_files = _load_frontend_assets()
+    return render(
+        request,
+        "frontend/index.html",
+        {
+            "frontend_js_file": js_file,
+            "frontend_css_files": css_files,
+        },
+    )
