@@ -4,6 +4,7 @@ import { ArrowLeft, ShoppingCart, Plus, Minus, ChefHat, MapPin, Sprout } from 'l
 import { useCart } from '../contexts/CartContext';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
+import { Checkbox } from '../components/ui/checkbox';
 import { Card, CardContent } from '../components/ui/card';
 import { AvailabilityBadge, OrganicBadge } from '../components/ProductBadges';
 import { ProductMeta } from '../components/ProductMeta';
@@ -11,6 +12,7 @@ import { AllergenBlock } from '../components/AllergenBlock';
 import { FarmLocationMap } from '../components/FarmLocationMap';
 import { Separator } from '../components/ui/separator';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../components/ui/accordion';
+import { Skeleton } from '../components/ui/skeleton';
 import { toast } from 'sonner';
 import { Product } from '../types';
 import { ApiProduct, ApiRecipe, apiJson, mapApiProductToProduct } from '../lib/api';
@@ -123,6 +125,14 @@ export function ProductDetailPage() {
 
     addToCart(product, quantity);
     toast.success(`Added ${quantity} ${product.unit} of ${product.name} to cart`);
+  };
+
+  const handleAllergenReviewToggle = (checked: boolean) => {
+    setHasReviewedAllergens(checked);
+
+    if (typeof window !== 'undefined' && requiresAllergenReview) {
+      window.localStorage.setItem(`allergen-reviewed-${product.id}`, checked ? 'true' : 'false');
+    }
   };
 
   const incrementQuantity = () => {

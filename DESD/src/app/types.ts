@@ -25,11 +25,19 @@ export interface Product {
   producerId: string;
   producerName: string;
   producerLocation: string;
+  producerDescription?: string;
+  producerDeliveryLeadTime?: number;
+  producerPostcode?: string;
+  producerCoordinates?: {
+    lat: number;
+    lng: number;
+  };
   category: string;
   harvestDate: string;
   availability: AvailabilityType;
   seasonalDates?: string; // e.g., "May - September"
   isOrganic: boolean;
+  organicCertification?: string;
   allergens: string[];
   imageUrl: string;
   stock: number;
@@ -41,6 +49,15 @@ export interface Product {
   surplusBestBefore?: string; // e.g., "3 days"
   storageTips?: string;
   recipeIdeas?: string[];
+}
+
+export interface ProductReview {
+  id: string;
+  reviewerName: string;
+  rating: number;
+  comment: string;
+  verifiedPurchase: boolean;
+  createdAt: string;
 }
 
 // Cart Types
