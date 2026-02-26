@@ -1,0 +1,33 @@
+from django.urls import path
+
+from .views import (
+    CartAPIView,
+    CartItemAddAPIView,
+    CartItemDetailAPIView,
+    CheckoutAPIView,
+    CheckoutPreviewAPIView,
+    CustomerProfileAPIView,
+    OrderDetailAPIView,
+    OrderHistoryAPIView,
+    OrderReceiptAPIView,
+    OrderReorderAPIView,
+    ProducerListCreateAPIView,
+    ProducerSubOrderListAPIView,
+    ProductListCreateAPIView,
+)
+
+urlpatterns = [
+    path("profile/", CustomerProfileAPIView.as_view(), name="orders-profile"),
+    path("producers/", ProducerListCreateAPIView.as_view(), name="orders-producers"),
+    path("products/", ProductListCreateAPIView.as_view(), name="orders-products"),
+    path("cart/", CartAPIView.as_view(), name="orders-cart"),
+    path("cart/items/", CartItemAddAPIView.as_view(), name="orders-cart-item-add"),
+    path("cart/items/<int:item_id>/", CartItemDetailAPIView.as_view(), name="orders-cart-item-detail"),
+    path("checkout/preview/", CheckoutPreviewAPIView.as_view(), name="orders-checkout-preview"),
+    path("checkout/", CheckoutAPIView.as_view(), name="orders-checkout"),
+    path("history/", OrderHistoryAPIView.as_view(), name="orders-history"),
+    path("history/<int:order_id>/", OrderDetailAPIView.as_view(), name="orders-history-detail"),
+    path("history/<int:order_id>/reorder/", OrderReorderAPIView.as_view(), name="orders-reorder"),
+    path("history/<int:order_id>/receipt/", OrderReceiptAPIView.as_view(), name="orders-receipt"),
+    path("producer/sub-orders/", ProducerSubOrderListAPIView.as_view(), name="orders-producer-sub-orders"),
+]

@@ -2,10 +2,10 @@ import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { Search, Filter, ShoppingCart, LogOut, X, Plus, Minus, AlertCircle, AlertTriangle, User } from 'lucide-react';
 import { toast } from 'sonner';
-import { mockProducts } from '../data/mockData';
 import { Product } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
+import { ApiProduct, apiJson, mapApiProductToProduct } from '../lib/api';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Checkbox } from '../components/ui/checkbox';
@@ -32,6 +32,7 @@ export function MarketplacePage() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const { getTotalItems, addToCart, undoLastAdd } = useCart();
+  const [products, setProducts] = useState<Product[]>([]);
   
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategories, setSelectedCategories] = useState<string[]>(['All']);
@@ -44,6 +45,54 @@ export function MarketplacePage() {
   const [hasError, setHasError] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('all');
   const [excludedAllergens, setExcludedAllergens] = useState<string[]>([]);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadProducts = async () => {
+      setIsLoading(true);
+      setHasError(false);
+
+      try {
+        const [profile, apiProducts] = await Promise.all([
+          apiJson<{ postcode: string }>('/api/orders/profile/'),
+          apiJson<ApiProduct[]>('/api/orders/products/?available=true'),
+        ]);
+
+        const producersNear = await apiJson<{
+          producers: Array<{ producer_id: number; distance_miles: number }>;
+        }>(`/api/geo/producers-near-me/?postcode=${encodeURIComponent(profile.postcode || '')}&radius_miles=200`);
+
+        const distanceByProducer = new Map<number, number>();
+        producersNear.producers.forEach((row) => {
+          distanceByProducer.set(row.producer_id, row.distance_miles);
+        });
+
+        const mapped = apiProducts.map((item) =>
+          mapApiProductToProduct(item, distanceByProducer.get(item.producer.id)),
+        );
+
+        if (mounted) {
+          setProducts(mapped);
+        }
+      } catch (error) {
+        if (mounted) {
+          setHasError(true);
+        }
+      } finally {
+        if (mounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void loadProducts();
+
+    return () => {
+      mounted = false;
+    };
+  }, [reloadKey]);
 
   // Auto-sort by "ending soon" when on Surplus tab (H)
   useEffect(() => {
@@ -79,7 +128,7 @@ export function MarketplacePage() {
 
   // Filter products (TC-004/005/014)
   const filteredProducts = useMemo(() => {
-    return mockProducts.filter(product => {
+    return products.filter(product => {
       // View mode filter (surplus vs all)
       if (viewMode === 'surplus' && !product.isSurplus) {
         return false;
@@ -124,7 +173,7 @@ export function MarketplacePage() {
 
       return true;
     });
-  }, [searchQuery, selectedCategories, showOnlyOrganic, showOnlyInSeason, showOnlyInStock, excludedAllergens, viewMode]);
+  }, [products, searchQuery, selectedCategories, showOnlyOrganic, showOnlyInSeason, showOnlyInStock, excludedAllergens, viewMode]);
 
   // Sort products (H - improved clarity)
   const sortedProducts = useMemo(() => {
@@ -206,10 +255,7 @@ export function MarketplacePage() {
 
   const retryLoad = () => {
     setHasError(false);
-    setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-    }, 500);
+    setReloadKey((value) => value + 1);
   };
 
   const FiltersContent = () => (
@@ -375,8 +421,14 @@ export function MarketplacePage() {
                 <DropdownMenuContent align="end">
                   <DropdownMenuLabel>Hello, {user?.name}</DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => navigate('/dashboard')}>
-                    Dashboard
+                  <DropdownMenuItem onClick={() => navigate('/orders/history')}>
+                    Order History
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate('/map')}>
+                    Producers Near Me
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate('/content/feed')}>
+                    Recipes & Stories
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={logout} className="text-red-600">
@@ -452,7 +504,7 @@ export function MarketplacePage() {
                   >
                     Surplus Deals
                     <Badge className="ml-2 px-1.5 min-w-5 h-5">
-                      {mockProducts.filter(p => p.isSurplus).length}
+                      {products.filter(p => p.isSurplus).length}
                     </Badge>
                   </TabsTrigger>
                 </TabsList>

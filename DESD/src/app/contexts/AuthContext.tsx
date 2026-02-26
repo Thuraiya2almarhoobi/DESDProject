@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useMemo, useState, ReactNode } from 'react';
 import { User, UserRole } from '../types';
-import { mockUsers } from '../data/mockData';
+import { apiJson, setBasicAuthToken } from '../lib/api';
 
 interface AuthContextType {
   user: User | null;
@@ -9,28 +9,92 @@ interface AuthContextType {
   hasRole: (role: UserRole) => boolean;
 }
 
+const USER_STORAGE_KEY = 'desd_user';
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function loadStoredUser(): User | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  const raw = window.localStorage.getItem(USER_STORAGE_KEY);
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(raw) as User;
+  } catch {
+    window.localStorage.removeItem(USER_STORAGE_KEY);
+    return null;
+  }
+}
+
+function saveUser(user: User | null): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  if (!user) {
+    window.localStorage.removeItem(USER_STORAGE_KEY);
+    return;
+  }
+
+  window.localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
+}
+
+function deriveRoleFromEmail(email: string): UserRole {
+  const value = email.toLowerCase();
+  if (value.includes('admin')) {
+    return 'admin';
+  }
+  if (value.includes('producer')) {
+    return 'producer';
+  }
+  return 'customer';
+}
+
+function inferDisplayName(email: string): string {
+  const local = email.split('@')[0] || 'User';
+  return local
+    .split(/[._-]/)
+    .filter(Boolean)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(' ');
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(() => loadStoredUser());
 
   const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 500));
+    const basicToken = btoa(`${email}:${password}`);
 
-    // For demo purposes, any password works
-    const foundUser = mockUsers.find(u => u.email === email);
-    
-    if (foundUser) {
-      setUser(foundUser);
+    try {
+      setBasicAuthToken(basicToken);
+      await apiJson('/api/orders/profile/');
+
+      const nextUser: User = {
+        id: email,
+        email,
+        role: deriveRoleFromEmail(email),
+        name: inferDisplayName(email),
+        customerType: deriveRoleFromEmail(email) === 'customer' ? 'standard' : undefined,
+      };
+
+      setUser(nextUser);
+      saveUser(nextUser);
       return { success: true };
+    } catch {
+      setBasicAuthToken(null);
+      saveUser(null);
+      setUser(null);
+      return { success: false, error: 'Invalid credentials' };
     }
-    
-    // Security: don't reveal if account exists
-    return { success: false, error: 'Invalid credentials' };
   };
 
   const logout = () => {
+    setBasicAuthToken(null);
+    saveUser(null);
     setUser(null);
   };
 
@@ -38,11 +102,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return user?.role === role;
   };
 
-  return (
-    <AuthContext.Provider value={{ user, login, logout, hasRole }}>
-      {children}
-    </AuthContext.Provider>
+  const value = useMemo(
+    () => ({
+      user,
+      login,
+      logout,
+      hasRole,
+    }),
+    [user],
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {

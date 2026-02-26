@@ -1,6 +1,8 @@
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ArrowLeft, Trash2, Plus, Minus, ShoppingBag } from 'lucide-react';
 import { useCart } from '../contexts/CartContext';
+import { apiJson } from '../lib/api';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Separator } from '../components/ui/separator';
@@ -8,10 +10,55 @@ import { Separator } from '../components/ui/separator';
 export function CartPage() {
   const navigate = useNavigate();
   const { items, updateQuantity, removeFromCart, getCartByProducer, getGrandTotal } = useCart();
+  const [totalFoodMiles, setTotalFoodMiles] = useState(0);
+  const [producerFoodMiles, setProducerFoodMiles] = useState<Record<string, number>>({});
 
   const cartByProducer = getCartByProducer();
   const grandTotal = getGrandTotal();
   const commission = grandTotal * 0.05;
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadFoodMiles = async () => {
+      if (items.length === 0) {
+        setTotalFoodMiles(0);
+        setProducerFoodMiles({});
+        return;
+      }
+
+      try {
+        const payload = await apiJson<{
+          total_food_miles: string;
+          producer_totals: Array<{ producer_id: number; distance_miles: string }>;
+        }>('/api/geo/food-miles/cart/');
+
+        if (!mounted) {
+          return;
+        }
+
+        setTotalFoodMiles(Number(payload.total_food_miles || 0));
+        const byProducer: Record<string, number> = {};
+        payload.producer_totals.forEach((row) => {
+          byProducer[String(row.producer_id)] = Number(row.distance_miles || 0);
+        });
+        setProducerFoodMiles(byProducer);
+      } catch {
+        if (mounted) {
+          setTotalFoodMiles(0);
+          setProducerFoodMiles({});
+        }
+      }
+    };
+
+    void loadFoodMiles();
+
+    return () => {
+      mounted = false;
+    };
+  }, [items]);
+
+  const totalWithCommission = useMemo(() => grandTotal + commission, [grandTotal, commission]);
 
   if (items.length === 0) {
     return (
@@ -69,6 +116,11 @@ export function CartPage() {
                   <p className="text-sm text-gray-600">
                     Delivery lead time: {group.deliveryLeadTime} hours minimum
                   </p>
+                  {producerFoodMiles[group.producerId] !== undefined && (
+                    <p className="text-xs text-gray-500">
+                      Approx. distance: {producerFoodMiles[group.producerId].toFixed(2)} miles
+                    </p>
+                  )}
                 </CardHeader>
                 <CardContent className="p-0">
                   <div className="divide-y">
@@ -171,12 +223,17 @@ export function CartPage() {
                   <span>£{commission.toFixed(2)}</span>
                 </div>
 
+                <div className="flex justify-between text-sm text-gray-600">
+                  <span>Total Food Miles</span>
+                  <span>{totalFoodMiles.toFixed(2)} miles</span>
+                </div>
+
                 <Separator />
 
                 {/* Total */}
                 <div className="flex justify-between text-lg font-semibold">
                   <span>Total</span>
-                  <span className="text-green-700">£{(grandTotal + commission).toFixed(2)}</span>
+                  <span className="text-green-700">£{totalWithCommission.toFixed(2)}</span>
                 </div>
 
                 <Button

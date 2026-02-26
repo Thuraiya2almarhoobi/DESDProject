@@ -1,3 +1,75 @@
-from django.test import TestCase
+from decimal import Decimal
 
-# Create your tests here.
+from django.contrib.auth import get_user_model
+from rest_framework import status
+from rest_framework.test import APIClient, APITestCase
+
+from apps.orders.models import Producer, Product
+
+from .models import Recipe
+
+
+User = get_user_model()
+
+
+class ContentApiTests(APITestCase):
+    def setUp(self):
+        self.producer_user = User.objects.create_user(username="content_producer", password="pass1234")
+        self.customer_user = User.objects.create_user(username="content_customer", password="pass1234")
+
+        self.producer = Producer.objects.create(
+            user=self.producer_user, business_name="Story Farm", postcode="BS1 4DJ"
+        )
+        self.product = Product.objects.create(
+            producer=self.producer,
+            name="Carrots",
+            unit="kg",
+            price=Decimal("2.20"),
+            stock_quantity=Decimal("20.00"),
+            is_available=True,
+        )
+
+        self.producer_client = APIClient()
+        self.producer_client.force_authenticate(self.producer_user)
+
+        self.customer_client = APIClient()
+        self.customer_client.force_authenticate(self.customer_user)
+
+    def test_create_recipe_and_feed_visibility(self):
+        create_res = self.producer_client.post(
+            "/api/content/recipes/",
+            {
+                "title": "Roasted Root Vegetable Medley",
+                "description": "Seasonal roast recipe",
+                "ingredients": "Carrots, Parsnips, Potatoes",
+                "instructions": "Roast at 200C for 35 minutes",
+                "seasonal_tag": "Autumn/Winter",
+                "product_ids": [self.product.id],
+            },
+            format="json",
+        )
+        self.assertEqual(create_res.status_code, status.HTTP_201_CREATED)
+
+        feed_res = self.customer_client.get("/api/content/feed/")
+        self.assertEqual(feed_res.status_code, status.HTTP_200_OK)
+        self.assertGreaterEqual(len(feed_res.data), 1)
+        self.assertEqual(feed_res.data[0]["type"], "recipe")
+
+    def test_product_recipes_and_save_toggle(self):
+        recipe = Recipe.objects.create(
+            producer=self.producer,
+            title="Farm Soup",
+            description="Simple soup",
+            ingredients="Carrots, onions",
+            instructions="Cook slowly",
+            is_published=True,
+        )
+        recipe.recipe_products.create(product=self.product)
+
+        recipes_res = self.customer_client.get(f"/api/content/products/{self.product.id}/recipes/")
+        self.assertEqual(recipes_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(recipes_res.data), 1)
+
+        save_res = self.customer_client.post(f"/api/content/recipes/{recipe.id}/save/")
+        self.assertEqual(save_res.status_code, status.HTTP_200_OK)
+        self.assertTrue(save_res.data["saved"])

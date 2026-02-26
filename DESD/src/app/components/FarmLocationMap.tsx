@@ -83,7 +83,7 @@ export function FarmLocationMap({
               
               <Badge className="bg-green-600 hover:bg-green-700 border-0">
                 <Navigation className="size-3 mr-1" />
-                {foodMiles} km
+                {foodMiles} miles
               </Badge>
             </div>
           </div>
