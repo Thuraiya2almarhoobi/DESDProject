@@ -3,21 +3,18 @@ import { ShieldAlert } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { useAuth } from '../contexts/AuthContext';
+import { getDashboardPathForRole } from '../lib/roleRouting';
 
 export function AccessDeniedPage() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
 
   const handleGoBack = () => {
-    if (user?.role === 'customer') {
-      navigate('/marketplace');
-    } else if (user?.role === 'producer') {
-      navigate('/producer/dashboard');
-    } else if (user?.role === 'admin') {
-      navigate('/admin/commission');
-    } else {
+    if (!user) {
       navigate('/login');
+      return;
     }
+    navigate(getDashboardPathForRole(user.role));
   };
 
   return (

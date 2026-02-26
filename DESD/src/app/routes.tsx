@@ -3,6 +3,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 
 // Pages
 import { LoginPage } from './pages/LoginPage';
+import { RegisterPage } from './pages/RegisterPage';
 import { AccessDeniedPage } from './pages/AccessDeniedPage';
 import { MarketplacePage } from './pages/MarketplacePage';
 import { ProductDetailPage } from './pages/ProductDetailPage';
@@ -13,6 +14,8 @@ import { ProducerOrdersPage } from './pages/producer/ProducerOrdersPage';
 import { ProducerInventoryPage } from './pages/producer/ProducerInventoryPage';
 import { ProducerPaymentsPage } from './pages/producer/ProducerPaymentsPage';
 import { AdminCommissionPage } from './pages/admin/AdminCommissionPage';
+import { CommunityDashboardPage } from './pages/community/CommunityDashboardPage';
+import { RestaurantDashboardPage } from './pages/restaurant/RestaurantDashboardPage';
 
 export const router = createBrowserRouter([
   {
@@ -24,6 +27,10 @@ export const router = createBrowserRouter([
     element: <LoginPage />,
   },
   {
+    path: '/register',
+    element: <RegisterPage />,
+  },
+  {
     path: '/access-denied',
     element: <AccessDeniedPage />,
   },
@@ -31,7 +38,7 @@ export const router = createBrowserRouter([
   {
     path: '/marketplace',
     element: (
-      <ProtectedRoute allowedRoles={['customer']}>
+      <ProtectedRoute allowedRoles={['CUSTOMER']}>
         <MarketplacePage />
       </ProtectedRoute>
     ),
@@ -39,7 +46,7 @@ export const router = createBrowserRouter([
   {
     path: '/product/:id',
     element: (
-      <ProtectedRoute allowedRoles={['customer']}>
+      <ProtectedRoute allowedRoles={['CUSTOMER']}>
         <ProductDetailPage />
       </ProtectedRoute>
     ),
@@ -47,7 +54,7 @@ export const router = createBrowserRouter([
   {
     path: '/cart',
     element: (
-      <ProtectedRoute allowedRoles={['customer']}>
+      <ProtectedRoute allowedRoles={['CUSTOMER']}>
         <CartPage />
       </ProtectedRoute>
     ),
@@ -55,7 +62,7 @@ export const router = createBrowserRouter([
   {
     path: '/checkout',
     element: (
-      <ProtectedRoute allowedRoles={['customer']}>
+      <ProtectedRoute allowedRoles={['CUSTOMER']}>
         <CheckoutPage />
       </ProtectedRoute>
     ),
@@ -64,7 +71,7 @@ export const router = createBrowserRouter([
   {
     path: '/producer/dashboard',
     element: (
-      <ProtectedRoute allowedRoles={['producer']}>
+      <ProtectedRoute allowedRoles={['PRODUCER']}>
         <ProducerDashboardPage />
       </ProtectedRoute>
     ),
@@ -72,7 +79,7 @@ export const router = createBrowserRouter([
   {
     path: '/producer/orders',
     element: (
-      <ProtectedRoute allowedRoles={['producer']}>
+      <ProtectedRoute allowedRoles={['PRODUCER']}>
         <ProducerOrdersPage />
       </ProtectedRoute>
     ),
@@ -80,7 +87,7 @@ export const router = createBrowserRouter([
   {
     path: '/producer/inventory',
     element: (
-      <ProtectedRoute allowedRoles={['producer']}>
+      <ProtectedRoute allowedRoles={['PRODUCER']}>
         <ProducerInventoryPage />
       </ProtectedRoute>
     ),
@@ -88,8 +95,26 @@ export const router = createBrowserRouter([
   {
     path: '/producer/payments',
     element: (
-      <ProtectedRoute allowedRoles={['producer']}>
+      <ProtectedRoute allowedRoles={['PRODUCER']}>
         <ProducerPaymentsPage />
+      </ProtectedRoute>
+    ),
+  },
+  // Community routes
+  {
+    path: '/community/dashboard',
+    element: (
+      <ProtectedRoute allowedRoles={['COMMUNITY']}>
+        <CommunityDashboardPage />
+      </ProtectedRoute>
+    ),
+  },
+  // Restaurant routes
+  {
+    path: '/restaurant/dashboard',
+    element: (
+      <ProtectedRoute allowedRoles={['RESTAURANT']}>
+        <RestaurantDashboardPage />
       </ProtectedRoute>
     ),
   },
@@ -97,7 +122,7 @@ export const router = createBrowserRouter([
   {
     path: '/admin/commission',
     element: (
-      <ProtectedRoute allowedRoles={['admin']}>
+      <ProtectedRoute allowedRoles={['ADMIN']}>
         <AdminCommissionPage />
       </ProtectedRoute>
     ),

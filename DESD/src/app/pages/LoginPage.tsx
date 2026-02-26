@@ -7,6 +7,7 @@ import { Label } from '../components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Alert, AlertDescription } from '../components/ui/alert';
 import { Sprout } from 'lucide-react';
+import { getDashboardPathForRole } from '../lib/roleRouting';
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -24,17 +25,7 @@ export function LoginPage() {
     const result = await login(email, password);
 
     if (result.success) {
-      // Role-aware redirects (TC-001/002)
-      const user = email.includes('customer') ? 'customer' : 
-                   email.includes('producer') ? 'producer' : 'admin';
-      
-      if (user === 'customer') {
-        navigate('/marketplace');
-      } else if (user === 'producer') {
-        navigate('/producer/dashboard');
-      } else {
-        navigate('/admin/commission');
-      }
+      navigate(getDashboardPathForRole(result.user.role));
     } else {
       setError(result.error || 'Login failed');
     }
@@ -88,15 +79,14 @@ export function LoginPage() {
               {loading ? 'Signing in...' : 'Sign In'}
             </Button>
 
-            <div className="mt-6 p-4 bg-gradient-to-br from-[oklch(0.96_0.02_145)] to-[oklch(0.94_0.03_142)] rounded-lg text-sm space-y-2 border border-[oklch(0.88_0.02_145)]">
-              <p className="font-medium text-[oklch(0.45_0.12_155)]">Demo Accounts:</p>
-              <div className="space-y-1 text-[oklch(0.40_0.05_150)]">
-                <p><strong>Customer:</strong> customer@example.com</p>
-                <p><strong>Producer:</strong> producer@example.com</p>
-                <p><strong>Admin:</strong> admin@example.com</p>
-                <p className="text-xs mt-2 text-muted-foreground">Password: any value</p>
-              </div>
-            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              onClick={() => navigate('/register')}
+            >
+              Create account
+            </Button>
           </form>
         </CardContent>
       </Card>

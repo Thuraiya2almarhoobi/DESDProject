@@ -15,13 +15,14 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path, re_path
+from django.urls import include, path, re_path
 
 from .views import frontend_app
 
 urlpatterns = [
     # Frontend route that intentionally uses /admin/commission.
     re_path(r"^admin/commission/?$", frontend_app, name="frontend-admin-commission"),
+    path("api/accounts/", include("apps.accounts.urls")),
     path('admin/', admin.site.urls),
     # Serve the React/Vite frontend for all application routes.
     re_path(r"^(?!admin/|api/|static/|media/).*$", frontend_app, name="frontend-app"),
