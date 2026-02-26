@@ -7,7 +7,15 @@ interface AllergenBlockProps {
 
 export function AllergenBlock({ allergens }: AllergenBlockProps) {
   if (allergens.length === 0) {
-    return null;
+    return (
+      <Alert className="border border-green-200 bg-green-50 text-green-900">
+        <AlertTriangle className="size-5 text-green-700" />
+        <AlertTitle>No common allergens</AlertTitle>
+        <AlertDescription>
+          This product does not list any common allergens.
+        </AlertDescription>
+      </Alert>
+    );
   }
 
   return (

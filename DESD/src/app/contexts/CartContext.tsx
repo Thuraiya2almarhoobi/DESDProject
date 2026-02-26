@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { Product, CartItem, CartByProducer } from '../types';
-import { mockProducers } from '../data/mockData';
 
 interface CartContextType {
   items: CartItem[];
@@ -88,7 +87,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }, {} as Record<string, CartItem[]>);
 
     return Object.entries(grouped).map(([producerId, producerItems]) => {
-      const producer = mockProducers.find(p => p.id === producerId);
+      const sampleProduct = producerItems[0]?.product;
       const subtotal = producerItems.reduce(
         (sum, item) => sum + item.product.price * item.quantity,
         0
@@ -96,8 +95,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
       return {
         producerId,
-        producerName: producer?.name || 'Unknown Producer',
-        deliveryLeadTime: producer?.deliveryLeadTime || 48,
+        producerName: sampleProduct?.producerName || 'Unknown Producer',
+        deliveryLeadTime: sampleProduct?.producerDeliveryLeadTime || 48,
         items: producerItems,
         subtotal,
       };

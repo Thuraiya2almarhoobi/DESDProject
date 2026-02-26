@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { Search, Filter, ShoppingCart, LogOut, X, Plus, Minus, AlertCircle, AlertTriangle, User } from 'lucide-react';
 import { toast } from 'sonner';
-import { mockProducts } from '../data/mockData';
+import { fetchCategories, fetchProducts } from '../api/catalog';
 import { Product } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
@@ -22,28 +22,63 @@ import { Card, CardContent } from '../components/ui/card';
 import { Sprout } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs';
 
-const categories = ['All', 'Vegetables', 'Fruit', 'Dairy', 'Eggs', 'Preserves', 'Bakery'];
-const commonAllergens = ['Milk', 'Eggs', 'Gluten', 'Nuts', 'Soy', 'Fish', 'Shellfish'];
+const fallbackCategories = ['All', 'Vegetables', 'Fruit', 'Dairy Products', 'Bakery', 'Preserves'];
+const commonAllergens = [
+  'Celery',
+  'Cereals containing Gluten',
+  'Crustaceans',
+  'Eggs',
+  'Fish',
+  'Lupin',
+  'Milk',
+  'Molluscs',
+  'Mustard',
+  'Nuts',
+  'Peanuts',
+  'Sesame',
+  'Soybeans',
+  'Sulphites',
+];
 
 type SortOption = 'relevance' | 'price-low' | 'price-high' | 'nearest' | 'harvest-newest' | 'ending-soon';
 type ViewMode = 'all' | 'surplus';
+type PriceFilter = 'any' | 'under-3' | '3-to-6' | 'over-6';
 
 export function MarketplacePage() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const { getTotalItems, addToCart, undoLastAdd } = useCart();
   
+  const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<string[]>(fallbackCategories);
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [selectedCategories, setSelectedCategories] = useState<string[]>(['All']);
   const [showOnlyOrganic, setShowOnlyOrganic] = useState(false);
+  const [priceFilter, setPriceFilter] = useState<PriceFilter>('any');
   const [showOnlyInSeason, setShowOnlyInSeason] = useState(false);
   const [showOnlyInStock, setShowOnlyInStock] = useState(true);
   const [sortBy, setSortBy] = useState<SortOption>('relevance');
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isFilterChanging, setIsFilterChanging] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('all');
   const [excludedAllergens, setExcludedAllergens] = useState<string[]>([]);
+  const [reloadCounter, setReloadCounter] = useState(0);
+
+  const getPriceBounds = (filter: PriceFilter): { minPrice?: number; maxPrice?: number } => {
+    switch (filter) {
+      case 'under-3':
+        return { maxPrice: 3 };
+      case '3-to-6':
+        return { minPrice: 3, maxPrice: 6 };
+      case 'over-6':
+        return { minPrice: 6 };
+      case 'any':
+      default:
+        return {};
+    }
+  };
 
   // Auto-sort by "ending soon" when on Surplus tab (H)
   useEffect(() => {
@@ -68,41 +103,85 @@ export function MarketplacePage() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Show skeleton briefly on filter change (G)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery.trim());
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    fetchCategories()
+      .then((apiCategories) => {
+        if (isCancelled) return;
+        if (apiCategories.length > 0) {
+          setCategories(["All", ...apiCategories]);
+        }
+      })
+      .catch(() => {
+        if (!isCancelled) {
+          setCategories(fallbackCategories);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let isCancelled = false;
+    setIsLoading(true);
+    setHasError(false);
+
+    const selectedCategoryValues = selectedCategories.filter((category) => category !== "All");
+    const priceBounds = getPriceBounds(priceFilter);
+
+    fetchProducts({
+      search: debouncedSearchQuery || undefined,
+      category: selectedCategoryValues.length > 0 ? selectedCategoryValues.join(",") : undefined,
+      organic: showOnlyOrganic ? true : undefined,
+      minPrice: priceBounds.minPrice,
+      maxPrice: priceBounds.maxPrice,
+    })
+      .then((apiProducts) => {
+        if (!isCancelled) {
+          setProducts(apiProducts);
+        }
+      })
+      .catch(() => {
+        if (!isCancelled) {
+          setProducts([]);
+          setHasError(true);
+        }
+      })
+      .finally(() => {
+        if (!isCancelled) {
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [debouncedSearchQuery, selectedCategories, showOnlyOrganic, priceFilter, reloadCounter]);
+
+  // Show skeleton briefly on local filter/sort changes.
   useEffect(() => {
     setIsFilterChanging(true);
     const timer = setTimeout(() => {
       setIsFilterChanging(false);
-    }, 400);
+    }, 300);
     return () => clearTimeout(timer);
-  }, [searchQuery, selectedCategories, showOnlyOrganic, showOnlyInSeason, showOnlyInStock, excludedAllergens, viewMode, sortBy]);
+  }, [showOnlyInSeason, showOnlyInStock, excludedAllergens, viewMode, sortBy, priceFilter]);
 
   // Filter products (TC-004/005/014)
   const filteredProducts = useMemo(() => {
-    return mockProducts.filter(product => {
+    return products.filter(product => {
       // View mode filter (surplus vs all)
       if (viewMode === 'surplus' && !product.isSurplus) {
-        return false;
-      }
-
-      // Search filter
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase();
-        const matchesSearch = 
-          product.name.toLowerCase().includes(query) ||
-          product.producerName.toLowerCase().includes(query) ||
-          product.category.toLowerCase().includes(query) ||
-          product.description.toLowerCase().includes(query);
-        if (!matchesSearch) return false;
-      }
-
-      // Category filter
-      if (!selectedCategories.includes('All') && !selectedCategories.includes(product.category)) {
-        return false;
-      }
-
-      // Organic filter
-      if (showOnlyOrganic && !product.isOrganic) {
         return false;
       }
 
@@ -124,7 +203,7 @@ export function MarketplacePage() {
 
       return true;
     });
-  }, [searchQuery, selectedCategories, showOnlyOrganic, showOnlyInSeason, showOnlyInStock, excludedAllergens, viewMode]);
+  }, [products, showOnlyInSeason, showOnlyInStock, excludedAllergens, viewMode]);
 
   // Sort products (H - improved clarity)
   const sortedProducts = useMemo(() => {
@@ -172,6 +251,7 @@ export function MarketplacePage() {
   const clearFilters = () => {
     setSelectedCategories(['All']);
     setShowOnlyOrganic(false);
+    setPriceFilter('any');
     setShowOnlyInSeason(false);
     setShowOnlyInStock(true);
     setSearchQuery('');
@@ -186,6 +266,7 @@ export function MarketplacePage() {
   const activeFiltersCount = 
     (selectedCategories.includes('All') ? 0 : selectedCategories.length) +
     (showOnlyOrganic ? 1 : 0) +
+    (priceFilter !== 'any' ? 1 : 0) +
     (showOnlyInSeason ? 1 : 0) +
     (!showOnlyInStock ? 1 : 0) +
     excludedAllergens.length +
@@ -194,6 +275,17 @@ export function MarketplacePage() {
 
   const handleAddToCart = (product: Product, quantity: number, e: React.MouseEvent) => {
     e.stopPropagation();
+    const requiresAllergenReview = product.allergens.length > 0;
+    const hasReviewedAllergens =
+      typeof window !== 'undefined' &&
+      window.localStorage.getItem(`allergen-reviewed-${product.id}`) === 'true';
+
+    if (requiresAllergenReview && !hasReviewedAllergens) {
+      toast.warning('Please review allergen information on the product page before adding to cart.');
+      navigate(`/product/${product.id}`);
+      return;
+    }
+
     addToCart(product, quantity);
     toast.success(`Added: ${product.name} (${quantity} ${product.unit})`, {
       action: {
@@ -206,10 +298,7 @@ export function MarketplacePage() {
 
   const retryLoad = () => {
     setHasError(false);
-    setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-    }, 500);
+    setReloadCounter((previous) => previous + 1);
   };
 
   const FiltersContent = () => (
@@ -248,6 +337,23 @@ export function MarketplacePage() {
             <Label htmlFor="organic" className="cursor-pointer">
               Organic only
             </Label>
+          </div>
+          <div className="space-y-2 pt-2">
+            <Label htmlFor="price-range">Price range</Label>
+            <Select
+              value={priceFilter}
+              onValueChange={(value) => setPriceFilter(value as PriceFilter)}
+            >
+              <SelectTrigger id="price-range" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="any">Any price</SelectItem>
+                <SelectItem value="under-3">Under £3</SelectItem>
+                <SelectItem value="3-to-6">£3 - £6</SelectItem>
+                <SelectItem value="over-6">Over £6</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div className="flex items-center space-x-2">
             <Checkbox
@@ -326,6 +432,20 @@ export function MarketplacePage() {
       case 'nearest': return 'Nearest';
       case 'harvest-newest': return 'Harvested newest';
       case 'ending-soon': return 'Ending soon';
+    }
+  };
+
+  const getPriceFilterLabel = (filter: PriceFilter): string => {
+    switch (filter) {
+      case 'under-3':
+        return 'Under £3';
+      case '3-to-6':
+        return '£3 - £6';
+      case 'over-6':
+        return 'Over £6';
+      case 'any':
+      default:
+        return 'Any price';
     }
   };
 
@@ -452,7 +572,7 @@ export function MarketplacePage() {
                   >
                     Surplus Deals
                     <Badge className="ml-2 px-1.5 min-w-5 h-5">
-                      {mockProducts.filter(p => p.isSurplus).length}
+                      {products.filter(p => p.isSurplus).length}
                     </Badge>
                   </TabsTrigger>
                 </TabsList>
@@ -555,6 +675,18 @@ export function MarketplacePage() {
                       onKeyDown={(e) => e.key === 'Enter' && setShowOnlyOrganic(false)}
                     >
                       Organic
+                      <X className="size-3" />
+                    </Badge>
+                  )}
+                  {priceFilter !== 'any' && (
+                    <Badge 
+                      variant="secondary" 
+                      className="gap-1 cursor-pointer hover:bg-gray-300 transition-colors focus-visible:ring-2 focus-visible:ring-green-600" 
+                      onClick={() => setPriceFilter('any')}
+                      tabIndex={0}
+                      onKeyDown={(e) => e.key === 'Enter' && setPriceFilter('any')}
+                    >
+                      Price: {getPriceFilterLabel(priceFilter)}
                       <X className="size-3" />
                     </Badge>
                   )}
@@ -676,7 +808,7 @@ export function MarketplacePage() {
               <Card>
                 <CardContent className="py-12 text-center">
                   <div className="space-y-4">
-                    <p className="text-gray-700 font-medium">No products match these filters</p>
+                    <p className="text-gray-700 font-medium">No results found</p>
                     <p className="text-sm text-gray-500">Try adjusting your filters to see more results</p>
                     <div className="flex flex-wrap gap-2 justify-center">
                       {excludedAllergens.length > 0 && (
@@ -767,6 +899,7 @@ function ProductCard({
           
           {/* Producer */}
           <p className="text-sm text-gray-600 mb-2">{product.producerName}</p>
+          <p className="text-xs text-gray-500 mb-2">{product.category}</p>
           
           {/* Meta row: distance + harvested */}
           <ProductMeta

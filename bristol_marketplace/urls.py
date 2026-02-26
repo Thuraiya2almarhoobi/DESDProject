@@ -15,11 +15,12 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path, re_path
+from django.urls import include, path, re_path
 
 from .views import frontend_app
 
 urlpatterns = [
+    path("api/", include("apps.catalog.urls")),
     # Frontend route that intentionally uses /admin/commission.
     re_path(r"^admin/commission/?$", frontend_app, name="frontend-admin-commission"),
     path('admin/', admin.site.urls),

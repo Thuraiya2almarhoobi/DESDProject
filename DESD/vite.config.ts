@@ -6,6 +6,14 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   // Django serves built assets under /static/
   base: '/static/',
+  server: {
+    proxy: {
+      '/api': {
+        target: process.env.VITE_PROXY_TARGET || 'http://localhost:8000',
+        changeOrigin: true,
+      },
+    },
+  },
   plugins: [
     // The React and Tailwind plugins are both required for Make, even if
     // Tailwind is not being actively used – do not remove them
