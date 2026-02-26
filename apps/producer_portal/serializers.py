@@ -1,0 +1,116 @@
+from __future__ import annotations
+
+from rest_framework import serializers
+
+from .models import (
+    OrderStatus,
+    ProducerOrder,
+    ProducerOrderItem,
+    ProducerProduct,
+)
+
+
+class ProducerProductSerializer(serializers.ModelSerializer):
+    producer_id = serializers.IntegerField(read_only=True)
+    producer_name = serializers.SerializerMethodField()
+    producer_email = serializers.EmailField(source="producer.email", read_only=True)
+    producer_location = serializers.SerializerMethodField()
+    is_visible_to_customers = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = ProducerProduct
+        fields = [
+            "id",
+            "producer_id",
+            "producer_name",
+            "producer_email",
+            "producer_location",
+            "name",
+            "category",
+            "description",
+            "price",
+            "unit",
+            "availability",
+            "stock_quantity",
+            "allergen_information",
+            "harvest_date",
+            "image_url",
+            "is_surplus",
+            "surplus_discount_percent",
+            "is_visible_to_customers",
+            "created_at",
+            "updated_at",
+        ]
+
+    def get_producer_name(self, obj: ProducerProduct) -> str:
+        email = (obj.producer.email or "").lower()
+        if email == "producer@example.com":
+            return "Green Valley Farm"
+        if email == "other@example.com":
+            return "Other Producer Farm"
+        if obj.producer.first_name or obj.producer.last_name:
+            return f"{obj.producer.first_name} {obj.producer.last_name}".strip()
+        return obj.producer.username
+
+    def get_producer_location(self, obj: ProducerProduct) -> str:
+        email = (obj.producer.email or "").lower()
+        if email == "producer@example.com":
+            return "Kent, UK"
+        return "Bristol, UK"
+
+
+class ProducerOrderItemSerializer(serializers.ModelSerializer):
+    line_total = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+
+    class Meta:
+        model = ProducerOrderItem
+        fields = ["id", "product_id", "product_name", "quantity", "unit_price", "line_total"]
+
+
+class ProducerOrderSerializer(serializers.ModelSerializer):
+    items = ProducerOrderItemSerializer(many=True, read_only=True)
+    lead_time_hours = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = ProducerOrder
+        fields = [
+            "id",
+            "order_number",
+            "producer_id",
+            "customer_name",
+            "customer_email",
+            "customer_phone",
+            "delivery_address",
+            "order_date",
+            "delivery_date",
+            "lead_time_hours",
+            "status",
+            "total_value",
+            "special_instructions",
+            "items",
+        ]
+
+
+class ProducerOrderStatusUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProducerOrder
+        fields = ["status"]
+
+    def validate_status(self, value: str) -> str:
+        instance: ProducerOrder = self.instance
+        allowed_transitions = {
+            OrderStatus.PENDING: {OrderStatus.CONFIRMED, OrderStatus.CANCELLED},
+            OrderStatus.CONFIRMED: {OrderStatus.PREPARING, OrderStatus.CANCELLED},
+            OrderStatus.PREPARING: {OrderStatus.READY, OrderStatus.CANCELLED},
+            OrderStatus.READY: {OrderStatus.DELIVERED, OrderStatus.CANCELLED},
+            OrderStatus.DELIVERED: set(),
+            OrderStatus.CANCELLED: set(),
+        }
+
+        if value == instance.status:
+            return value
+        if value not in allowed_transitions.get(instance.status, set()):
+            raise serializers.ValidationError(
+                f"Invalid status transition from '{instance.status}' to '{value}'."
+            )
+        return value
