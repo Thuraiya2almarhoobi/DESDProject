@@ -25,8 +25,12 @@ export function LoginPage() {
 
     if (result.success) {
       // Role-aware redirects (TC-001/002)
-      const user = email.includes('customer') ? 'customer' : 
-                   email.includes('producer') ? 'producer' : 'admin';
+      const normalized = email.toLowerCase();
+      const user = normalized.includes('customer')
+        ? 'customer'
+        : normalized.includes('producer')
+        ? 'producer'
+        : 'admin';
       
       if (user === 'customer') {
         navigate('/marketplace');
@@ -94,7 +98,7 @@ export function LoginPage() {
                 <p><strong>Customer:</strong> customer@example.com</p>
                 <p><strong>Producer:</strong> producer@example.com</p>
                 <p><strong>Admin:</strong> admin@example.com</p>
-                <p className="text-xs mt-2 text-muted-foreground">Password: any value</p>
+                <p className="text-xs mt-2 text-muted-foreground">Password: DemoPass123!</p>
               </div>
             </div>
           </form>

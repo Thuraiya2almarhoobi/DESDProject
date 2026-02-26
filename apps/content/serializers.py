@@ -1,0 +1,89 @@
+from rest_framework import serializers
+
+from apps.orders.models import Producer, Product
+
+from .models import FarmStory, Recipe, RecipeProduct, SavedRecipe
+
+
+class RecipeProductMiniSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Product
+        fields = ["id", "name", "unit", "price"]
+
+
+class RecipeSerializer(serializers.ModelSerializer):
+    producer_name = serializers.CharField(source="producer.business_name", read_only=True)
+    linked_products = serializers.SerializerMethodField()
+    product_ids = serializers.ListField(
+        child=serializers.IntegerField(), write_only=True, required=False
+    )
+    saved = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Recipe
+        fields = [
+            "id",
+            "producer",
+            "producer_name",
+            "title",
+            "description",
+            "ingredients",
+            "instructions",
+            "seasonal_tag",
+            "image_url",
+            "is_published",
+            "created_at",
+            "linked_products",
+            "product_ids",
+            "saved",
+        ]
+        read_only_fields = ["created_at"]
+
+    def get_linked_products(self, obj: Recipe):
+        products = Product.objects.filter(product_recipes__recipe=obj).distinct()
+        return RecipeProductMiniSerializer(products, many=True).data
+
+    def get_saved(self, obj: Recipe) -> bool:
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return False
+        return SavedRecipe.objects.filter(user=request.user, recipe=obj).exists()
+
+    def create(self, validated_data):
+        product_ids = validated_data.pop("product_ids", [])
+        recipe = super().create(validated_data)
+        self._sync_recipe_products(recipe, product_ids)
+        return recipe
+
+    def update(self, instance, validated_data):
+        product_ids = validated_data.pop("product_ids", None)
+        recipe = super().update(instance, validated_data)
+        if product_ids is not None:
+            self._sync_recipe_products(recipe, product_ids)
+        return recipe
+
+    def _sync_recipe_products(self, recipe: Recipe, product_ids: list[int]):
+        RecipeProduct.objects.filter(recipe=recipe).delete()
+        if not product_ids:
+            return
+        products = Product.objects.filter(id__in=product_ids, producer=recipe.producer)
+        RecipeProduct.objects.bulk_create([RecipeProduct(recipe=recipe, product=p) for p in products])
+
+
+class FarmStorySerializer(serializers.ModelSerializer):
+    producer_name = serializers.CharField(source="producer.business_name", read_only=True)
+
+    class Meta:
+        model = FarmStory
+        fields = [
+            "id",
+            "producer",
+            "producer_name",
+            "title",
+            "body",
+            "seasonal_tag",
+            "image_url",
+            "is_published",
+            "created_at",
+        ]
+        read_only_fields = ["created_at"]

@@ -20,7 +20,7 @@ export function ProductMeta({ producerName, producerLocation, harvestDate, foodM
       <div className="space-y-1 text-xs text-gray-600">
         <div className="flex items-center gap-1">
           <MapPin className="size-3" />
-          <span>{producerLocation} • {foodMiles} km</span>
+          <span>{producerLocation} • {foodMiles} miles</span>
         </div>
         <div className="flex items-center gap-1">
           <Calendar className="size-3" />
@@ -52,7 +52,7 @@ export function ProductMeta({ producerName, producerLocation, harvestDate, foodM
       </div>
       <div className="flex items-center gap-1.5">
         <Truck className="size-4" />
-        <span>{foodMiles} km</span>
+        <span>{foodMiles} miles</span>
       </div>
     </div>
   );
