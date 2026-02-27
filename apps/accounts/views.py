@@ -7,7 +7,10 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 from rest_framework.views import APIView
-from rest_framework_simplejwt.tokens import RefreshToken
+try:
+    from rest_framework_simplejwt.tokens import RefreshToken
+except ModuleNotFoundError:  # Offline fallback when simplejwt is unavailable.
+    RefreshToken = None
 
 from .permissions import IsAdmin, IsCommunity, IsCustomer, IsProducer, IsRestaurant
 from .serializers import (
@@ -43,6 +46,14 @@ class LoginUserThrottle(UserRateThrottle):
 
 
 def _build_auth_payload(user):
+    if RefreshToken is None:
+        return {
+            "access": "",
+            "refresh": "",
+            "user": UserSummarySerializer(user).data,
+            "token_warning": "JWT tokens unavailable: djangorestframework-simplejwt is not installed.",
+        }
+
     refresh = RefreshToken.for_user(user)
     return {
         "access": str(refresh.access_token),

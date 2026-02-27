@@ -1,5 +1,16 @@
 from django.urls import path
-from rest_framework_simplejwt.views import TokenRefreshView
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+try:
+    from rest_framework_simplejwt.views import TokenRefreshView
+except ModuleNotFoundError:  # Offline fallback when simplejwt is unavailable.
+    class TokenRefreshView(APIView):
+        def post(self, request):
+            return Response(
+                {"detail": "Token refresh unavailable: djangorestframework-simplejwt is not installed."},
+                status=503,
+            )
 
 from .views import (
     AddressDetailView,

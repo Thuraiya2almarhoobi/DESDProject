@@ -44,12 +44,24 @@ type SortOption = 'relevance' | 'price-low' | 'price-high' | 'nearest' | 'harves
 type ViewMode = 'all' | 'surplus';
 type PriceFilter = 'any' | 'under-3' | '3-to-6' | 'over-6';
 
+function getPriceBounds(priceFilter: PriceFilter): { minPrice?: number; maxPrice?: number } {
+  switch (priceFilter) {
+    case 'under-3':
+      return { maxPrice: 3 };
+    case '3-to-6':
+      return { minPrice: 3, maxPrice: 6 };
+    case 'over-6':
+      return { minPrice: 6 };
+    case 'any':
+    default:
+      return {};
+  }
+}
+
 export function MarketplacePage() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const { getTotalItems, addToCart, undoLastAdd } = useCart();
-  const [products, setProducts] = useState<Product[]>([]);
-  
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<string[]>(fallbackCategories);
   const [searchQuery, setSearchQuery] = useState('');
@@ -95,10 +107,13 @@ export function MarketplacePage() {
 
         if (mounted) {
           setProducts(mapped);
+          const dynamicCategories = Array.from(new Set(mapped.map((product) => product.category))).filter(Boolean);
+          setCategories(dynamicCategories.length > 0 ? ['All', ...dynamicCategories] : fallbackCategories);
         }
       } catch (error) {
         if (mounted) {
           setHasError(true);
+          setCategories(fallbackCategories);
         }
       } finally {
         if (mounted) {
@@ -144,64 +159,6 @@ export function MarketplacePage() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  useEffect(() => {
-    let isCancelled = false;
-
-    fetchCategories()
-      .then((apiCategories) => {
-        if (isCancelled) return;
-        if (apiCategories.length > 0) {
-          setCategories(["All", ...apiCategories]);
-        }
-      })
-      .catch(() => {
-        if (!isCancelled) {
-          setCategories(fallbackCategories);
-        }
-      });
-
-    return () => {
-      isCancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let isCancelled = false;
-    setIsLoading(true);
-    setHasError(false);
-
-    const selectedCategoryValues = selectedCategories.filter((category) => category !== "All");
-    const priceBounds = getPriceBounds(priceFilter);
-
-    fetchProducts({
-      search: debouncedSearchQuery || undefined,
-      category: selectedCategoryValues.length > 0 ? selectedCategoryValues.join(",") : undefined,
-      organic: showOnlyOrganic ? true : undefined,
-      minPrice: priceBounds.minPrice,
-      maxPrice: priceBounds.maxPrice,
-    })
-      .then((apiProducts) => {
-        if (!isCancelled) {
-          setProducts(apiProducts);
-        }
-      })
-      .catch(() => {
-        if (!isCancelled) {
-          setProducts([]);
-          setHasError(true);
-        }
-      })
-      .finally(() => {
-        if (!isCancelled) {
-          setIsLoading(false);
-        }
-      });
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [debouncedSearchQuery, selectedCategories, showOnlyOrganic, priceFilter, reloadCounter]);
-
   // Show skeleton briefly on local filter/sort changes.
   useEffect(() => {
     setIsFilterChanging(true);
@@ -213,7 +170,33 @@ export function MarketplacePage() {
 
   // Filter products (TC-004/005/014)
   const filteredProducts = useMemo(() => {
+    const searchTerm = debouncedSearchQuery.toLowerCase();
+    const selectedCategoryValues = selectedCategories.filter((category) => category !== 'All').map((category) => category.toLowerCase());
+    const { minPrice, maxPrice } = getPriceBounds(priceFilter);
+
     return products.filter(product => {
+      if (searchTerm) {
+        const haystack = `${product.name} ${product.description} ${product.producerName} ${product.category}`.toLowerCase();
+        if (!haystack.includes(searchTerm)) {
+          return false;
+        }
+      }
+
+      if (selectedCategoryValues.length > 0 && !selectedCategoryValues.includes(product.category.toLowerCase())) {
+        return false;
+      }
+
+      if (showOnlyOrganic && !product.isOrganic) {
+        return false;
+      }
+
+      if (minPrice !== undefined && product.price < minPrice) {
+        return false;
+      }
+      if (maxPrice !== undefined && product.price > maxPrice) {
+        return false;
+      }
+
       // View mode filter (surplus vs all)
       if (viewMode === 'surplus' && !product.isSurplus) {
         return false;
@@ -237,7 +220,7 @@ export function MarketplacePage() {
 
       return true;
     });
-  }, [products, searchQuery, selectedCategories, showOnlyOrganic, showOnlyInSeason, showOnlyInStock, excludedAllergens, viewMode]);
+  }, [products, debouncedSearchQuery, selectedCategories, showOnlyOrganic, priceFilter, showOnlyInSeason, showOnlyInStock, excludedAllergens, viewMode]);
 
   // Sort products (H - improved clarity)
   const sortedProducts = useMemo(() => {

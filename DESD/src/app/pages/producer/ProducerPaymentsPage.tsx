@@ -1,30 +1,126 @@
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { ArrowLeft, Download, Calendar } from 'lucide-react';
-import { mockCommissionRecords } from '../../data/mockData';
+import { ArrowLeft, Calendar, Download, Loader2 } from 'lucide-react';
+import { format, isValid, parseISO } from 'date-fns';
+import { toast } from 'sonner';
+import { apiBlob, apiJson } from '../../lib/api';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
-import { format } from 'date-fns';
-import { toast } from 'sonner';
+import { Badge } from '../../components/ui/badge';
+
+interface WeeklySettlementApi {
+  id: number;
+  week_start: string;
+  week_end: string;
+  gross_amount: string;
+  commission_amount: string;
+  net_amount: string;
+  status: string;
+  transaction_reference: string;
+  order_count: number;
+  running_tax_year_total: string;
+}
+
+function toNumber(value: string): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatDate(value: string): string {
+  const parsed = parseISO(value);
+  if (!isValid(parsed)) {
+    return value;
+  }
+  return format(parsed, 'MMM d, yyyy');
+}
+
+function triggerDownload(blob: Blob, filename: string): void {
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = objectUrl;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(objectUrl);
+}
 
 export function ProducerPaymentsPage() {
   const navigate = useNavigate();
-  
-  // Filter commission records for current producer (producer-1)
-  const producerCommissions = mockCommissionRecords.filter(c => c.producerId === 'producer-1');
+  const [settlements, setSettlements] = useState<WeeklySettlementApi[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [exportingId, setExportingId] = useState<number | null>(null);
 
-  const totalEarnings = producerCommissions.reduce((sum, c) => sum + (c.totalSales - c.commissionAmount), 0);
-  const totalSales = producerCommissions.reduce((sum, c) => sum + c.totalSales, 0);
-  const totalCommission = producerCommissions.reduce((sum, c) => sum + c.commissionAmount, 0);
+  useEffect(() => {
+    let mounted = true;
 
-  const handleExport = () => {
-    // Simulate CSV export
-    toast.success('Payment report exported as CSV');
+    const loadSettlements = async () => {
+      setLoading(true);
+      try {
+        const payload = await apiJson<WeeklySettlementApi[]>('/api/payments/settlements/');
+        if (!mounted) {
+          return;
+        }
+        setSettlements(payload);
+      } catch (error) {
+        if (mounted) {
+          const message = error instanceof Error ? error.message : 'Unable to load settlement history.';
+          toast.error(message);
+          setSettlements([]);
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void loadSettlements();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const totalEarnings = useMemo(
+    () => settlements.reduce((sum, settlement) => sum + toNumber(settlement.net_amount), 0),
+    [settlements],
+  );
+  const totalSales = useMemo(
+    () => settlements.reduce((sum, settlement) => sum + toNumber(settlement.gross_amount), 0),
+    [settlements],
+  );
+  const totalCommission = useMemo(
+    () => settlements.reduce((sum, settlement) => sum + toNumber(settlement.commission_amount), 0),
+    [settlements],
+  );
+
+  const exportSettlement = async (settlement: WeeklySettlementApi) => {
+    setExportingId(settlement.id);
+    try {
+      const csvBlob = await apiBlob(`/api/payments/settlements/${settlement.id}/export/`);
+      const filename = `settlement-${settlement.week_start}-${settlement.week_end}.csv`;
+      triggerDownload(csvBlob, filename);
+      toast.success(`Exported ${settlement.transaction_reference}.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to export settlement CSV.';
+      toast.error(message);
+    } finally {
+      setExportingId(null);
+    }
+  };
+
+  const exportLatest = async () => {
+    const latest = settlements[0];
+    if (!latest) {
+      toast.info('No settlements available to export yet.');
+      return;
+    }
+    await exportSettlement(latest);
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[oklch(0.98_0.01_145)] to-[oklch(0.96_0.02_150)]">
-      {/* Header */}
       <header className="bg-white/80 backdrop-blur-sm border-b border-[oklch(0.88_0.02_145)] shadow-sm">
         <div className="max-w-6xl mx-auto px-4 py-4">
           <Button variant="ghost" onClick={() => navigate('/producer/dashboard')}>
@@ -34,31 +130,26 @@ export function ProducerPaymentsPage() {
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="max-w-6xl mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-3xl font-semibold">Payment History</h1>
             <p className="text-gray-600">Weekly settlement reports</p>
           </div>
-          <Button onClick={handleExport}>
-            <Download className="size-4 mr-2" />
-            Export CSV
+          <Button onClick={exportLatest} disabled={loading || settlements.length === 0 || exportingId !== null}>
+            {exportingId !== null ? <Loader2 className="size-4 mr-2 animate-spin" /> : <Download className="size-4 mr-2" />}
+            Export Latest CSV
           </Button>
         </div>
 
-        {/* Summary Cards */}
         <div className="grid md:grid-cols-3 gap-6 mb-8">
           <Card>
             <CardContent className="p-6">
               <p className="text-sm text-gray-600 mb-1">Total Earnings</p>
-              <p className="text-3xl font-semibold text-green-700">
-                £{totalEarnings.toFixed(2)}
-              </p>
+              <p className="text-3xl font-semibold text-green-700">£{totalEarnings.toFixed(2)}</p>
               <p className="text-xs text-gray-500 mt-1">After 5% commission</p>
             </CardContent>
           </Card>
-
           <Card>
             <CardContent className="p-6">
               <p className="text-sm text-gray-600 mb-1">Total Sales</p>
@@ -66,74 +157,94 @@ export function ProducerPaymentsPage() {
               <p className="text-xs text-gray-500 mt-1">Gross revenue</p>
             </CardContent>
           </Card>
-
           <Card>
             <CardContent className="p-6">
               <p className="text-sm text-gray-600 mb-1">Platform Commission</p>
-              <p className="text-3xl font-semibold text-gray-700">
-                £{totalCommission.toFixed(2)}
-              </p>
+              <p className="text-3xl font-semibold text-gray-700">£{totalCommission.toFixed(2)}</p>
               <p className="text-xs text-gray-500 mt-1">5% of sales</p>
             </CardContent>
           </Card>
         </div>
 
-        {/* Payment History Table */}
         <Card>
           <CardHeader>
             <CardTitle>Weekly Statements</CardTitle>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Period</TableHead>
-                  <TableHead className="text-right">Orders</TableHead>
-                  <TableHead className="text-right">Total Sales</TableHead>
-                  <TableHead className="text-right">Commission (5%)</TableHead>
-                  <TableHead className="text-right">Your Earnings</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {producerCommissions.map(record => (
-                  <TableRow key={record.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Calendar className="size-4 text-gray-400" />
-                        <div>
-                          <p className="font-medium">
-                            {format(new Date(record.weekStart), 'MMM d')} -{' '}
-                            {format(new Date(record.weekEnd), 'MMM d, yyyy')}
-                          </p>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right">{record.ordersCount}</TableCell>
-                    <TableCell className="text-right">
-                      £{record.totalSales.toFixed(2)}
-                    </TableCell>
-                    <TableCell className="text-right text-gray-600">
-                      -£{record.commissionAmount.toFixed(2)}
-                    </TableCell>
-                    <TableCell className="text-right font-semibold text-green-700">
-                      £{(record.totalSales - record.commissionAmount).toFixed(2)}
-                    </TableCell>
+            {loading ? (
+              <div className="py-10 text-center text-gray-600">
+                <Loader2 className="size-6 animate-spin mx-auto mb-3" />
+                Loading settlement history...
+              </div>
+            ) : settlements.length === 0 ? (
+              <div className="py-10 text-center text-gray-600">No weekly settlements found yet.</div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Period</TableHead>
+                    <TableHead className="text-right">Orders</TableHead>
+                    <TableHead className="text-right">Total Sales</TableHead>
+                    <TableHead className="text-right">Commission (5%)</TableHead>
+                    <TableHead className="text-right">Your Earnings</TableHead>
+                    <TableHead className="text-right">Status</TableHead>
+                    <TableHead className="text-right">Export</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {settlements.map((settlement) => (
+                    <TableRow key={settlement.id}>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Calendar className="size-4 text-gray-400" />
+                          <div>
+                            <p className="font-medium">
+                              {formatDate(settlement.week_start)} - {formatDate(settlement.week_end)}
+                            </p>
+                            <p className="text-xs text-gray-500">{settlement.transaction_reference}</p>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">{settlement.order_count}</TableCell>
+                      <TableCell className="text-right">£{toNumber(settlement.gross_amount).toFixed(2)}</TableCell>
+                      <TableCell className="text-right text-gray-600">
+                        -£{toNumber(settlement.commission_amount).toFixed(2)}
+                      </TableCell>
+                      <TableCell className="text-right font-semibold text-green-700">
+                        £{toNumber(settlement.net_amount).toFixed(2)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Badge variant="outline">{settlement.status.replaceAll('_', ' ')}</Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => exportSettlement(settlement)}
+                          disabled={exportingId !== null}
+                        >
+                          {exportingId === settlement.id ? (
+                            <Loader2 className="size-4 animate-spin" />
+                          ) : (
+                            <Download className="size-4" />
+                          )}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
 
-        {/* Payment Info */}
         <Card className="mt-6">
           <CardContent className="p-6">
             <h3 className="font-semibold mb-2">Payment Information</h3>
             <div className="text-sm text-gray-600 space-y-1">
-              <p>• Settlements are processed weekly on Mondays</p>
-              <p>• A 5% platform commission is deducted from all sales</p>
-              <p>• Payments are transferred to your registered bank account within 2-3 business days</p>
-              <p>• Export your statements as CSV for accounting purposes</p>
+              <p>Settlements are processed weekly and include delivered orders only.</p>
+              <p>Platform commission is fixed at 5% per settlement line.</p>
+              <p>Use CSV export for finance reconciliation and evidence in reports.</p>
             </div>
           </CardContent>
         </Card>

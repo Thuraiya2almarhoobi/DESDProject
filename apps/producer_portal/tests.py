@@ -8,6 +8,8 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from apps.orders.models import Producer as OrdersProducer
+from apps.orders.models import Product as OrdersProduct
 from apps.producer_portal.models import (
     OrderStatus,
     ProducerOrder,
@@ -184,3 +186,63 @@ class ProducerPortalCriticalTestCases(APITestCase):
         producer_view = self.client.get("/api/producer/products/", HTTP_X_DEMO_USER="producer@example.com")
         self.assertEqual(producer_view.status_code, status.HTTP_200_OK)
         self.assertTrue(any(item["name"] == "Database Saved Lettuce" for item in producer_view.data))
+
+    def test_product_syncs_into_orders_catalog_on_create_update_and_delete(self):
+        payload = {
+            "name": "Sync Ready Beetroot",
+            "category": "Vegetables",
+            "description": "Cross-app sync validation",
+            "price": "2.40",
+            "unit": "kg",
+            "availability": ProductAvailability.YEAR_ROUND,
+            "stock_quantity": 14,
+            "allergen_information": "",
+            "harvest_date": timezone.localdate().isoformat(),
+        }
+        create_response = self.client.post("/api/producer/products/", payload, format="json")
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+
+        orders_producer = OrdersProducer.objects.filter(user=self.producer).first()
+        self.assertIsNotNone(orders_producer)
+        self.assertTrue(
+            OrdersProduct.objects.filter(
+                producer=orders_producer,
+                name="Sync Ready Beetroot",
+                stock_quantity=Decimal("14.00"),
+                is_available=True,
+            ).exists()
+        )
+
+        patch_response = self.client.patch(
+            f"/api/producer/products/{create_response.data['id']}/",
+            {
+                "name": "Synced Beetroot Renamed",
+                "stock_quantity": 0,
+                "availability": ProductAvailability.UNAVAILABLE,
+            },
+            format="json",
+        )
+        self.assertEqual(patch_response.status_code, status.HTTP_200_OK)
+        self.assertFalse(
+            OrdersProduct.objects.filter(
+                producer=orders_producer,
+                name="Sync Ready Beetroot",
+            ).exists()
+        )
+        self.assertTrue(
+            OrdersProduct.objects.filter(
+                producer=orders_producer,
+                name="Synced Beetroot Renamed",
+                stock_quantity=Decimal("0.00"),
+                is_available=False,
+            ).exists()
+        )
+
+        delete_response = self.client.delete(f"/api/producer/products/{create_response.data['id']}/")
+        self.assertEqual(delete_response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(
+            OrdersProduct.objects.filter(
+                producer=orders_producer,
+                name="Synced Beetroot Renamed",
+            ).exists()
+        )

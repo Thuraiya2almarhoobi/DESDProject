@@ -11,6 +11,16 @@ from django.utils import timezone
 class UserManager(BaseUserManager):
     use_in_migrations = True
 
+    @staticmethod
+    def _email_from_username(username: str | None) -> str:
+        if not username:
+            return ""
+        normalized = "".join(
+            char if char.isalnum() or char in {".", "_", "-"} else "-"
+            for char in str(username).strip().lower()
+        )
+        return f"{normalized or 'user'}@local.test"
+
     def _create_user(self, email: str, password: str, **extra_fields):
         if not email:
             raise ValueError("The email address must be set.")
@@ -20,7 +30,10 @@ class UserManager(BaseUserManager):
         user.save(using=self._db)
         return user
 
-    def create_user(self, email: str, password: str | None = None, **extra_fields):
+    def create_user(self, email: str | None = None, password: str | None = None, **extra_fields):
+        username = extra_fields.pop("username", None)
+        if not email:
+            email = self._email_from_username(username)
         extra_fields.setdefault("is_staff", False)
         extra_fields.setdefault("is_superuser", False)
         extra_fields.setdefault("role", User.Role.CUSTOMER)
@@ -28,7 +41,12 @@ class UserManager(BaseUserManager):
             raise ValueError("The password must be set.")
         return self._create_user(email=email, password=password, **extra_fields)
 
-    def create_superuser(self, email: str, password: str, **extra_fields):
+    def create_superuser(self, email: str | None = None, password: str | None = None, **extra_fields):
+        username = extra_fields.pop("username", None)
+        if not email:
+            email = self._email_from_username(username)
+        if password is None:
+            raise ValueError("The password must be set.")
         extra_fields.setdefault("is_staff", True)
         extra_fields.setdefault("is_superuser", True)
         extra_fields.setdefault("role", User.Role.ADMIN)

@@ -29,6 +29,82 @@ def _parse_quantity(value) -> Decimal:
     return quantity.quantize(Decimal("0.01"))
 
 
+PRODUCER_SUBORDER_ALLOWED_TRANSITIONS = {
+    Order.Status.PENDING: {Order.Status.CONFIRMED, Order.Status.CANCELLED},
+    Order.Status.CONFIRMED: {Order.Status.READY, Order.Status.CANCELLED},
+    Order.Status.READY: {Order.Status.DELIVERED, Order.Status.CANCELLED},
+    Order.Status.DELIVERED: set(),
+    Order.Status.CANCELLED: set(),
+}
+
+
+def _customer_name_for_order(order: Order) -> str:
+    profile = getattr(order.customer, "orders_customer_profile", None)
+    if profile and profile.full_name:
+        return profile.full_name
+    local_part = (order.customer.email or "customer").split("@")[0]
+    if not local_part:
+        return "Customer"
+    return " ".join(part.capitalize() for part in local_part.replace(".", " ").replace("_", " ").split())
+
+
+def _allowed_next_statuses(current_status: str) -> list[str]:
+    allowed = sorted((str(value) for value in PRODUCER_SUBORDER_ALLOWED_TRANSITIONS.get(current_status, set())))
+    return [str(current_status), *allowed]
+
+
+def _sync_parent_order_status(order: Order) -> None:
+    statuses = list(order.sub_orders.values_list("status", flat=True))
+    if not statuses:
+        return
+
+    unique_statuses = set(statuses)
+    next_status = order.status
+    if unique_statuses == {Order.Status.DELIVERED}:
+        next_status = Order.Status.DELIVERED
+    elif unique_statuses == {Order.Status.CANCELLED}:
+        next_status = Order.Status.CANCELLED
+    elif Order.Status.PENDING in unique_statuses:
+        next_status = Order.Status.PENDING
+    elif Order.Status.CONFIRMED in unique_statuses:
+        next_status = Order.Status.CONFIRMED
+    elif Order.Status.READY in unique_statuses:
+        next_status = Order.Status.READY
+
+    if next_status != order.status:
+        order.status = next_status
+        order.save(update_fields=["status", "updated_at"])
+
+
+def _producer_sub_order_payload(sub_order: ProducerSubOrder) -> dict:
+    order = sub_order.order
+    return {
+        "id": sub_order.id,
+        "order_number": order.order_number,
+        "status": sub_order.status,
+        "allowed_next_statuses": _allowed_next_statuses(sub_order.status),
+        "delivery_date": sub_order.delivery_date,
+        "subtotal_amount": sub_order.subtotal_amount,
+        "commission_amount": sub_order.commission_amount,
+        "payout_amount": sub_order.payout_amount,
+        "customer_name": _customer_name_for_order(order),
+        "customer_email": order.customer.email,
+        "delivery_address": order.delivery_address,
+        "customer_postcode": order.customer_postcode,
+        "lead_time_hours": sub_order.producer.lead_time_hours,
+        "order_created_at": order.created_at,
+        "items": [
+            {
+                "product_name": item.product_name,
+                "quantity": item.quantity,
+                "unit": item.unit,
+                "line_total": item.line_total,
+            }
+            for item in sub_order.items.all()
+        ],
+    }
+
+
 class CustomerProfileAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -267,25 +343,35 @@ class ProducerSubOrderListAPIView(APIView):
             .prefetch_related("items")
             .order_by("-created_at")
         )
-        payload = [
-            {
-                "id": sub_order.id,
-                "order_number": sub_order.order.order_number,
-                "status": sub_order.status,
-                "delivery_date": sub_order.delivery_date,
-                "subtotal_amount": sub_order.subtotal_amount,
-                "commission_amount": sub_order.commission_amount,
-                "payout_amount": sub_order.payout_amount,
-                "items": [
-                    {
-                        "product_name": item.product_name,
-                        "quantity": item.quantity,
-                        "unit": item.unit,
-                        "line_total": item.line_total,
-                    }
-                    for item in sub_order.items.all()
-                ],
-            }
-            for sub_order in sub_orders
-        ]
+        payload = [_producer_sub_order_payload(sub_order) for sub_order in sub_orders]
         return Response(payload)
+
+
+class ProducerSubOrderStatusUpdateAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, sub_order_id: int):
+        producer = get_object_or_404(Producer, user=request.user, is_active=True)
+        sub_order = get_object_or_404(
+            ProducerSubOrder.objects.select_related("order", "producer").prefetch_related("items"),
+            id=sub_order_id,
+            producer=producer,
+        )
+
+        next_status = request.data.get("status")
+        valid_choices = {choice for choice, _ in Order.Status.choices}
+        if next_status not in valid_choices:
+            return Response({"detail": "Invalid status value."}, status=status.HTTP_400_BAD_REQUEST)
+        if next_status != sub_order.status:
+            allowed = PRODUCER_SUBORDER_ALLOWED_TRANSITIONS.get(sub_order.status, set())
+            if next_status not in allowed:
+                return Response(
+                    {"detail": f"Invalid status transition from '{sub_order.status}' to '{next_status}'."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            sub_order.status = next_status
+            sub_order.save(update_fields=["status", "updated_at"])
+            _sync_parent_order_status(sub_order.order)
+            sub_order.refresh_from_db()
+
+        return Response(_producer_sub_order_payload(sub_order), status=status.HTTP_200_OK)

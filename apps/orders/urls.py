@@ -13,6 +13,7 @@ from .views import (
     OrderReorderAPIView,
     ProducerListCreateAPIView,
     ProducerSubOrderListAPIView,
+    ProducerSubOrderStatusUpdateAPIView,
     ProductListCreateAPIView,
 )
 
@@ -30,4 +31,9 @@ urlpatterns = [
     path("history/<int:order_id>/reorder/", OrderReorderAPIView.as_view(), name="orders-reorder"),
     path("history/<int:order_id>/receipt/", OrderReceiptAPIView.as_view(), name="orders-receipt"),
     path("producer/sub-orders/", ProducerSubOrderListAPIView.as_view(), name="orders-producer-sub-orders"),
+    path(
+        "producer/sub-orders/<int:sub_order_id>/status/",
+        ProducerSubOrderStatusUpdateAPIView.as_view(),
+        name="orders-producer-sub-order-status-update",
+    ),
 ]

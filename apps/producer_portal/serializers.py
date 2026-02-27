@@ -48,9 +48,10 @@ class ProducerProductSerializer(serializers.ModelSerializer):
             return "Green Valley Farm"
         if email == "other@example.com":
             return "Other Producer Farm"
-        if obj.producer.first_name or obj.producer.last_name:
-            return f"{obj.producer.first_name} {obj.producer.last_name}".strip()
-        return obj.producer.username
+        local_part = email.split("@")[0].replace(".", " ").replace("_", " ").replace("-", " ").strip()
+        if local_part:
+            return " ".join(part.capitalize() for part in local_part.split())
+        return "Producer"
 
     def get_producer_location(self, obj: ProducerProduct) -> str:
         email = (obj.producer.email or "").lower()

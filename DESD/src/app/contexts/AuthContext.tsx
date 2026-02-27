@@ -1,6 +1,31 @@
-import React, { createContext, useContext, useMemo, useState, ReactNode } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { User, UserRole } from '../types';
-import { apiJson, setBasicAuthToken } from '../lib/api';
+import {
+  CommunityRegisterPayload,
+  CustomerRegisterPayload,
+  MePayload,
+  ProducerRegisterPayload,
+  RestaurantRegisterPayload,
+  getMe as getMeRequest,
+  login as loginRequest,
+  logout as clearAuthStorage,
+  registerCommunity as registerCommunityRequest,
+  registerCustomer as registerCustomerRequest,
+  registerProducer as registerProducerRequest,
+  registerRestaurant as registerRestaurantRequest,
+} from '../services/authService';
+import { setBasicAuthToken } from '../lib/api';
+import { getAccessToken } from '../lib/tokenStorage';
+
+type AuthResult =
+  | {
+      success: true;
+      user: User;
+    }
+  | {
+      success: false;
+      error: string;
+    };
 
 interface AuthContextType {
   user: User | null;
@@ -24,12 +49,10 @@ function loadStoredUser(): User | null {
   if (typeof window === 'undefined') {
     return null;
   }
-
   const raw = window.localStorage.getItem(USER_STORAGE_KEY);
   if (!raw) {
     return null;
   }
-
   try {
     return JSON.parse(raw) as User;
   } catch {
@@ -42,27 +65,21 @@ function saveUser(user: User | null): void {
   if (typeof window === 'undefined') {
     return;
   }
-
   if (!user) {
     window.localStorage.removeItem(USER_STORAGE_KEY);
     return;
   }
-
   window.localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
 }
 
-function deriveRoleFromEmail(email: string): UserRole {
-  const value = email.toLowerCase();
-  if (value.includes('admin')) {
-    return 'admin';
+function inferName(email: string, profile: Record<string, unknown> | null): string {
+  const candidateKeys = ['full_name', 'business_name', 'organisation_name', 'contact_name'];
+  for (const key of candidateKeys) {
+    const value = profile?.[key];
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
+    }
   }
-  if (value.includes('producer')) {
-    return 'producer';
-  }
-  return 'customer';
-}
-
-function inferDisplayName(email: string): string {
   const local = email.split('@')[0] || 'User';
   return local
     .split(/[._-]/)
@@ -71,53 +88,203 @@ function inferDisplayName(email: string): string {
     .join(' ');
 }
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(() => loadStoredUser());
-
-  const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
-    const basicToken = btoa(`${email}:${password}`);
-
-    try {
-      setBasicAuthToken(basicToken);
-      await apiJson('/api/orders/profile/');
-
-      const nextUser: User = {
-        id: email,
-        email,
-        role: deriveRoleFromEmail(email),
-        name: inferDisplayName(email),
-        customerType: deriveRoleFromEmail(email) === 'customer' ? 'standard' : undefined,
-      };
-
-      setUser(nextUser);
-      saveUser(nextUser);
-      return { success: true };
-    } catch {
-      setBasicAuthToken(null);
-      saveUser(null);
-      setUser(null);
-      return { success: false, error: 'Invalid credentials' };
-    }
+function buildUserPayload(
+  apiUser: { id: number; email: string; role: UserRole },
+  profile: Record<string, unknown> | null,
+): User {
+  return {
+    id: apiUser.id,
+    email: apiUser.email,
+    role: apiUser.role,
+    name: inferName(apiUser.email, profile),
+    profile,
   };
+}
 
-  const logout = () => {
+function errorMessageFromUnknown(error: unknown): string {
+  if (error && typeof error === 'object') {
+    const maybeResponse = (error as { response?: { data?: unknown } }).response;
+    const payload = maybeResponse?.data;
+    if (payload && typeof payload === 'object') {
+      const detail = (payload as { detail?: unknown }).detail;
+      if (typeof detail === 'string' && detail.trim()) {
+        return detail;
+      }
+      for (const value of Object.values(payload as Record<string, unknown>)) {
+        if (typeof value === 'string' && value.trim()) {
+          return value;
+        }
+        if (Array.isArray(value) && typeof value[0] === 'string' && value[0].trim()) {
+          return value[0];
+        }
+      }
+    }
+  }
+  return 'Request failed';
+}
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<User | null>(() => loadStoredUser());
+  const [profile, setProfile] = useState<Record<string, unknown> | null>(null);
+  const [addresses, setAddresses] = useState<MePayload['addresses']>([]);
+  const [loading, setLoading] = useState(true);
+
+  const persistUser = useCallback((nextUser: User | null) => {
+    setUser(nextUser);
+    saveUser(nextUser);
+  }, []);
+
+  const applyMePayload = useCallback(
+    (payload: MePayload): User => {
+      const nextUser = buildUserPayload(payload.user, payload.profile);
+      persistUser(nextUser);
+      setProfile(payload.profile);
+      setAddresses(payload.addresses);
+      return nextUser;
+    },
+    [persistUser],
+  );
+
+  const getMe = useCallback(async (): Promise<MePayload> => {
+    const payload = await getMeRequest();
+    applyMePayload(payload);
+    return payload;
+  }, [applyMePayload]);
+
+  const runAuthFlow = useCallback(
+    async (authAction: () => Promise<{ user: { id: number; email: string; role: UserRole } }>): Promise<AuthResult> => {
+      try {
+        const authPayload = await authAction();
+        const me = await getMeRequest().catch(() => null);
+        const nextUser = me
+          ? applyMePayload(me)
+          : buildUserPayload(authPayload.user, null);
+        if (!me) {
+          persistUser(nextUser);
+        }
+        return { success: true, user: nextUser };
+      } catch (error) {
+        clearAuthStorage();
+        setBasicAuthToken(null);
+        persistUser(null);
+        setProfile(null);
+        setAddresses([]);
+        return { success: false, error: errorMessageFromUnknown(error) };
+      }
+    },
+    [applyMePayload, persistUser],
+  );
+
+  const login = useCallback(
+    async (email: string, password: string): Promise<AuthResult> => {
+      const result = await runAuthFlow(() => loginRequest(email, password));
+      if (result.success) {
+        setBasicAuthToken(btoa(`${email}:${password}`));
+      }
+      return result;
+    },
+    [runAuthFlow],
+  );
+
+  const registerCustomer = useCallback(
+    async (payload: CustomerRegisterPayload): Promise<AuthResult> => {
+      const result = await runAuthFlow(() => registerCustomerRequest(payload));
+      if (result.success) {
+        setBasicAuthToken(btoa(`${payload.email}:${payload.password}`));
+      }
+      return result;
+    },
+    [runAuthFlow],
+  );
+
+  const registerProducer = useCallback(
+    async (payload: ProducerRegisterPayload): Promise<AuthResult> => {
+      const result = await runAuthFlow(() => registerProducerRequest(payload));
+      if (result.success) {
+        setBasicAuthToken(btoa(`${payload.email}:${payload.password}`));
+      }
+      return result;
+    },
+    [runAuthFlow],
+  );
+
+  const registerCommunity = useCallback(
+    async (payload: CommunityRegisterPayload): Promise<AuthResult> => {
+      const result = await runAuthFlow(() => registerCommunityRequest(payload));
+      if (result.success) {
+        setBasicAuthToken(btoa(`${payload.email}:${payload.password}`));
+      }
+      return result;
+    },
+    [runAuthFlow],
+  );
+
+  const registerRestaurant = useCallback(
+    async (payload: RestaurantRegisterPayload): Promise<AuthResult> => {
+      const result = await runAuthFlow(() => registerRestaurantRequest(payload));
+      if (result.success) {
+        setBasicAuthToken(btoa(`${payload.email}:${payload.password}`));
+      }
+      return result;
+    },
+    [runAuthFlow],
+  );
+
+  const logout = useCallback(() => {
+    clearAuthStorage();
     setBasicAuthToken(null);
-    saveUser(null);
-    setUser(null);
+    persistUser(null);
     setProfile(null);
     setAddresses([]);
-  };
+  }, [persistUser]);
 
-  const hasRole = (role: UserRole) => user?.role === role;
+  const hasRole = useCallback((role: UserRole) => user?.role === role, [user]);
+
+  useEffect(() => {
+    const bootstrap = async () => {
+      try {
+        if (!getAccessToken()) {
+          return;
+        }
+        await getMe();
+      } catch {
+        logout();
+      } finally {
+        setLoading(false);
+      }
+    };
+    void bootstrap();
+  }, [getMe, logout]);
 
   const value = useMemo(
     () => ({
       user,
+      profile,
+      addresses,
+      loading,
       login,
+      registerCustomer,
+      registerProducer,
+      registerCommunity,
+      registerRestaurant,
+      getMe,
       logout,
       hasRole,
     }),
-    [user],
+    [
+      user,
+      profile,
+      addresses,
+      loading,
+      login,
+      registerCustomer,
+      registerProducer,
+      registerCommunity,
+      registerRestaurant,
+      getMe,
+      logout,
+      hasRole,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

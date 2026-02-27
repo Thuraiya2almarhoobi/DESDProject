@@ -25,21 +25,7 @@ export function LoginPage() {
     const result = await login(email, password);
 
     if (result.success) {
-      // Role-aware redirects (TC-001/002)
-      const normalized = email.toLowerCase();
-      const user = normalized.includes('customer')
-        ? 'customer'
-        : normalized.includes('producer')
-        ? 'producer'
-        : 'admin';
-      
-      if (user === 'customer') {
-        navigate('/marketplace');
-      } else if (user === 'producer') {
-        navigate('/producer/dashboard');
-      } else {
-        navigate('/admin/commission');
-      }
+      navigate(getDashboardPathForRole(result.user.role));
     } else {
       setError(result.error || 'Login failed');
     }
@@ -91,6 +77,9 @@ export function LoginPage() {
 
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? 'Signing in...' : 'Sign In'}
+            </Button>
+            <Button type="button" variant="outline" className="w-full" onClick={() => navigate('/register')}>
+              Create Account
             </Button>
 
             <div className="mt-6 p-4 bg-gradient-to-br from-[oklch(0.96_0.02_145)] to-[oklch(0.94_0.03_142)] rounded-lg text-sm space-y-2 border border-[oklch(0.88_0.02_145)]">

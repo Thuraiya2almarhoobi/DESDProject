@@ -30,7 +30,7 @@ class ProductAdmin(admin.ModelAdmin):
 @admin.register(CustomerProfile)
 class CustomerProfileAdmin(admin.ModelAdmin):
     list_display = ("user", "postcode", "updated_at")
-    search_fields = ("user__username", "user__email", "postcode")
+    search_fields = ("user__email", "postcode")
 
 
 class CartItemInline(admin.TabularInline):
@@ -54,7 +54,7 @@ class OrderItemInline(admin.TabularInline):
 class OrderAdmin(admin.ModelAdmin):
     list_display = ("order_number", "customer", "status", "payment_status", "total_amount", "created_at")
     list_filter = ("status", "payment_status", "created_at")
-    search_fields = ("order_number", "customer__username", "customer__email")
+    search_fields = ("order_number", "customer__email")
     inlines = [OrderItemInline]
 
 

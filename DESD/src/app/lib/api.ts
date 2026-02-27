@@ -1,4 +1,5 @@
 import { Product } from '../types';
+import { getAccessToken } from './tokenStorage';
 
 const AUTH_STORAGE_KEY = 'desd_basic_auth_token';
 const API_BASE = import.meta.env.VITE_API_BASE || '';
@@ -190,10 +191,15 @@ function toUrl(path: string): string {
 
 function buildHeaders(inputHeaders?: HeadersInit): Headers {
   const headers = new Headers(inputHeaders);
-  const token = getBasicAuthToken();
+  const accessToken = getAccessToken();
+  const basicToken = getBasicAuthToken();
 
-  if (token && !headers.has('Authorization')) {
-    headers.set('Authorization', `Basic ${token}`);
+  if (!headers.has('Authorization')) {
+    if (accessToken) {
+      headers.set('Authorization', `Bearer ${accessToken}`);
+    } else if (basicToken) {
+      headers.set('Authorization', `Basic ${basicToken}`);
+    }
   }
 
   return headers;

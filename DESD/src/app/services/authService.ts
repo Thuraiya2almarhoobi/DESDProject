@@ -1,6 +1,6 @@
-import apiClient from '../lib/apiClient';
 import {
   clearAuthStorage,
+  getAccessToken,
   getStoredRole,
   setAuthTokens,
   setStoredRole,
@@ -74,15 +74,105 @@ export interface RestaurantRegisterPayload {
   phone: string;
 }
 
+class AuthApiError extends Error {
+  status: number;
+  response: { data: unknown };
+
+  constructor(message: string, status: number, data: unknown) {
+    super(message);
+    this.name = 'AuthApiError';
+    this.status = status;
+    this.response = { data };
+  }
+}
+
+const env = import.meta.env as Record<string, string | undefined>;
+const rawApiBaseUrl = env.VITE_API_URL ?? env.REACT_APP_API_URL ?? 'http://127.0.0.1:8000/api';
+const apiBaseUrl = rawApiBaseUrl.replace(/\/$/, '');
+
+function toApiUrl(path: string): string {
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    return path;
+  }
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  return `${apiBaseUrl}${normalizedPath}`;
+}
+
+async function readResponseBody(response: Response): Promise<unknown> {
+  const contentType = response.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    return response.json();
+  }
+  return response.text();
+}
+
+function messageFromPayload(payload: unknown, fallback: string): string {
+  if (payload && typeof payload === 'object') {
+    const detail = (payload as { detail?: unknown }).detail;
+    if (typeof detail === 'string' && detail.trim()) {
+      return detail;
+    }
+    for (const value of Object.values(payload as Record<string, unknown>)) {
+      if (typeof value === 'string' && value.trim()) {
+        return value;
+      }
+      if (Array.isArray(value) && typeof value[0] === 'string' && value[0].trim()) {
+        return value[0];
+      }
+    }
+  }
+  return fallback;
+}
+
+async function requestJson<T>(
+  path: string,
+  init: RequestInit = {},
+  withAccessToken = false,
+): Promise<T> {
+  const headers = new Headers(init.headers);
+  if (init.body && !(init.body instanceof FormData) && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+
+  if (withAccessToken) {
+    const accessToken = getAccessToken();
+    if (accessToken && !headers.has('Authorization')) {
+      headers.set('Authorization', `Bearer ${accessToken}`);
+    }
+  }
+
+  const response = await fetch(toApiUrl(path), {
+    ...init,
+    headers,
+  });
+  const payload = await readResponseBody(response);
+
+  if (!response.ok) {
+    throw new AuthApiError(
+      messageFromPayload(payload, `Request failed with status ${response.status}`),
+      response.status,
+      payload,
+    );
+  }
+  return payload as T;
+}
+
 function persistTokens(payload: AuthTokensPayload): void {
   setAuthTokens(payload.access, payload.refresh);
   setStoredRole(payload.user.role);
 }
 
 async function postAuthPayload<TPayload>(url: string, payload: TPayload): Promise<AuthTokensPayload> {
-  const response = await apiClient.post<AuthTokensPayload>(url, payload);
-  persistTokens(response.data);
-  return response.data;
+  const response = await requestJson<AuthTokensPayload>(
+    url,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+    false,
+  );
+  persistTokens(response);
+  return response;
 }
 
 export function getStoredUserRole(): string | null {
@@ -114,6 +204,5 @@ export async function registerRestaurant(payload: RestaurantRegisterPayload): Pr
 }
 
 export async function getMe(): Promise<MePayload> {
-  const response = await apiClient.get<MePayload>('/accounts/me/');
-  return response.data;
+  return requestJson<MePayload>('/accounts/me/', { method: 'GET' }, true);
 }

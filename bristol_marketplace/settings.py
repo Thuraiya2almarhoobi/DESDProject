@@ -10,13 +10,13 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
+import importlib.util
 import os
 from datetime import timedelta
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
@@ -33,8 +33,9 @@ ALLOWED_HOSTS = [
     if host.strip()
 ]
 
-
 # Application definition
+HAS_CORSHEADERS = importlib.util.find_spec("corsheaders") is not None
+HAS_SIMPLEJWT = importlib.util.find_spec("rest_framework_simplejwt") is not None
 
 INSTALLED_APPS = [
     # Django default apps
@@ -46,7 +47,6 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
 
     # Third-party
-    "corsheaders",
     "rest_framework",
 
     # Your apps
@@ -60,11 +60,11 @@ INSTALLED_APPS = [
     "apps.content",
 ]
 
-
+if HAS_CORSHEADERS:
+    INSTALLED_APPS.insert(6, "corsheaders")
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -72,6 +72,9 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
+if HAS_CORSHEADERS:
+    MIDDLEWARE.insert(1, 'corsheaders.middleware.CorsMiddleware')
 
 ROOT_URLCONF = 'bristol_marketplace.urls'
 
@@ -92,21 +95,22 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'bristol_marketplace.wsgi.application'
 
-
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
-
+DEFAULT_DB_PATH = BASE_DIR / "db.sqlite3"
+SPRINT_DB_PATH = BASE_DIR / "db_sprint1.sqlite3"
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'NAME': os.getenv(
+            "DJANGO_DB_NAME",
+            str(SPRINT_DB_PATH if SPRINT_DB_PATH.exists() else DEFAULT_DB_PATH),
+        ),
     }
 }
 
-
 # Password validation
 # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
-
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
@@ -123,22 +127,15 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
-
 LANGUAGE_CODE = 'en-us'
-
 TIME_ZONE = 'UTC'
-
 USE_I18N = True
-
 USE_TZ = True
-
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
-
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [
@@ -152,7 +149,16 @@ AUTH_USER_MODEL = "accounts.User"
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        (
+            "rest_framework_simplejwt.authentication.JWTAuthentication",
+            "rest_framework.authentication.BasicAuthentication",
+            "rest_framework.authentication.SessionAuthentication",
+        )
+        if HAS_SIMPLEJWT
+        else (
+            "rest_framework.authentication.BasicAuthentication",
+            "rest_framework.authentication.SessionAuthentication",
+        )
     ),
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.AllowAny",
@@ -167,12 +173,13 @@ REST_FRAMEWORK = {
     },
 }
 
-SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
-    "AUTH_HEADER_TYPES": ("Bearer",),
-    "UPDATE_LAST_LOGIN": True,
-}
+if HAS_SIMPLEJWT:
+    SIMPLE_JWT = {
+        "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
+        "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+        "AUTH_HEADER_TYPES": ("Bearer",),
+        "UPDATE_LAST_LOGIN": True,
+    }
 
 CORS_ALLOWED_ORIGINS = [
     origin.strip()

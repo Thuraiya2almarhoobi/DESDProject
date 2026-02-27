@@ -211,3 +211,63 @@ class OrdersCriticalFlowTests(APITestCase):
         reorder_res = self.client.post(f"/api/orders/history/{order_id}/reorder/")
         self.assertEqual(reorder_res.status_code, status.HTTP_200_OK)
         self.assertEqual(len(reorder_res.data["unavailable_items"]), 1)
+
+    def test_producer_can_update_sub_order_status_with_transition_rules(self):
+        self._add_to_cart(self.product_a1, "2")
+        checkout_res = self.client.post(
+            "/api/orders/checkout/",
+            {
+                "delivery_address": "45 Park Street, Bristol",
+                "customer_postcode": "BS1 5JG",
+                "delivery_date": (timezone.localdate() + timedelta(days=2)).isoformat(),
+                "payment_method": "test_card",
+                "payment_token": "tok_visa",
+            },
+            format="json",
+        )
+        self.assertEqual(checkout_res.status_code, status.HTTP_201_CREATED)
+
+        order = Order.objects.get(id=checkout_res.data["order"]["id"])
+        sub_order = order.sub_orders.get(producer=self.producer_a)
+
+        producer_client = APIClient()
+        producer_client.force_authenticate(self.producer_user_a)
+
+        list_res = producer_client.get("/api/orders/producer/sub-orders/")
+        self.assertEqual(list_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(list_res.data[0]["customer_email"], self.customer.email)
+        self.assertIn("confirmed", list_res.data[0]["allowed_next_statuses"])
+
+        invalid_res = producer_client.patch(
+            f"/api/orders/producer/sub-orders/{sub_order.id}/status/",
+            {"status": Order.Status.DELIVERED},
+            format="json",
+        )
+        self.assertEqual(invalid_res.status_code, status.HTTP_400_BAD_REQUEST)
+
+        confirm_res = producer_client.patch(
+            f"/api/orders/producer/sub-orders/{sub_order.id}/status/",
+            {"status": Order.Status.CONFIRMED},
+            format="json",
+        )
+        self.assertEqual(confirm_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(confirm_res.data["status"], Order.Status.CONFIRMED)
+
+        ready_res = producer_client.patch(
+            f"/api/orders/producer/sub-orders/{sub_order.id}/status/",
+            {"status": Order.Status.READY},
+            format="json",
+        )
+        self.assertEqual(ready_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(ready_res.data["status"], Order.Status.READY)
+
+        delivered_res = producer_client.patch(
+            f"/api/orders/producer/sub-orders/{sub_order.id}/status/",
+            {"status": Order.Status.DELIVERED},
+            format="json",
+        )
+        self.assertEqual(delivered_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(delivered_res.data["status"], Order.Status.DELIVERED)
+
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.DELIVERED)

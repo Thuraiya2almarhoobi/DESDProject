@@ -1,68 +1,151 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { ArrowLeft, Package, Calendar, MapPin, Clock, AlertCircle, MessageCircle, FileText, TrendingUp } from 'lucide-react';
-import { mockOrders } from '../../data/mockData';
-import { OrderStatus } from '../../types';
+import {
+  AlertCircle,
+  ArrowLeft,
+  Calendar,
+  Clock,
+  FileText,
+  Loader2,
+  MapPin,
+  MessageCircle,
+  Package,
+  TrendingUp,
+} from 'lucide-react';
+import { differenceInHours, format, isValid, parseISO } from 'date-fns';
+import { toast } from 'sonner';
+import { apiJson } from '../../lib/api';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Separator } from '../../components/ui/separator';
-import { Tabs, TabsList, TabsTrigger } from '../../components/ui/tabs';
-import { toast } from 'sonner';
-import { format, differenceInHours, parseISO } from 'date-fns';
+
+type ProducerOrderStatus = 'pending' | 'confirmed' | 'ready' | 'delivered' | 'cancelled';
+
+interface ProducerSubOrderItemApi {
+  product_name: string;
+  quantity: string;
+  unit: string;
+  line_total: string;
+}
+
+interface ProducerSubOrderApi {
+  id: number;
+  order_number: string;
+  status: ProducerOrderStatus;
+  allowed_next_statuses: ProducerOrderStatus[];
+  delivery_date: string;
+  subtotal_amount: string;
+  commission_amount: string;
+  payout_amount: string;
+  customer_name: string;
+  customer_email: string;
+  delivery_address: string;
+  customer_postcode: string;
+  lead_time_hours: number;
+  order_created_at: string;
+  items: ProducerSubOrderItemApi[];
+}
+
+function toNumber(value: string): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function isOrderUrgent(order: ProducerSubOrderApi): boolean {
+  const parsedDelivery = parseISO(order.delivery_date);
+  if (!isValid(parsedDelivery)) {
+    return false;
+  }
+  const hoursUntilDelivery = differenceInHours(parsedDelivery, new Date());
+  return (
+    hoursUntilDelivery > 0 &&
+    hoursUntilDelivery < 24 &&
+    order.status !== 'delivered' &&
+    order.status !== 'cancelled'
+  );
+}
 
 export function ProducerOrdersPage() {
   const navigate = useNavigate();
-  
-  // Filter orders for current producer (producer-1 in mock data)
-  const producerOrders = mockOrders
-    .filter(order => order.producerId === 'producer-1')
-    .sort((a, b) => new Date(a.deliveryDate).getTime() - new Date(b.deliveryDate).getTime()); // 3) Sort by delivery date (earliest first)
+  const [orders, setOrders] = useState<ProducerSubOrderApi[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState<ProducerOrderStatus | 'all'>('all');
+  const [updatingOrderId, setUpdatingOrderId] = useState<number | null>(null);
 
-  const [orders, setOrders] = useState(producerOrders);
-  const [statusFilter, setStatusFilter] = useState<OrderStatus | 'all'>('all');
+  useEffect(() => {
+    let mounted = true;
 
-  // 3) Calculate order counts by status
-  const statusCounts = useMemo(() => {
-    return {
-      pending: orders.filter(o => o.status === 'pending').length,
-      confirmed: orders.filter(o => o.status === 'confirmed').length,
-      preparing: orders.filter(o => o.status === 'preparing').length,
-      ready: orders.filter(o => o.status === 'ready').length,
-      delivered: orders.filter(o => o.status === 'delivered').length,
+    const loadOrders = async () => {
+      setLoading(true);
+      try {
+        const payload = await apiJson<ProducerSubOrderApi[]>('/api/orders/producer/sub-orders/');
+        if (!mounted) {
+          return;
+        }
+        setOrders(payload);
+      } catch (error) {
+        if (mounted) {
+          const message = error instanceof Error ? error.message : 'Unable to load producer orders.';
+          toast.error(message);
+          setOrders([]);
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
     };
-  }, [orders]);
 
-  // 3) Calculate urgent orders (delivery < 24h)
-  const urgentOrders = useMemo(() => {
-    const now = new Date();
-    return orders.filter(order => {
-      const deliveryDate = parseISO(order.deliveryDate);
-      const hoursUntilDelivery = differenceInHours(deliveryDate, now);
-      return hoursUntilDelivery < 24 && hoursUntilDelivery > 0 && order.status !== 'delivered' && order.status !== 'cancelled';
-    });
-  }, [orders]);
+    void loadOrders();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
-  // Filter orders by status
-  const filteredOrders = statusFilter === 'all' 
-    ? orders 
-    : orders.filter(o => o.status === statusFilter);
+  const statusCounts = useMemo(
+    () => ({
+      pending: orders.filter((order) => order.status === 'pending').length,
+      confirmed: orders.filter((order) => order.status === 'confirmed').length,
+      ready: orders.filter((order) => order.status === 'ready').length,
+      delivered: orders.filter((order) => order.status === 'delivered').length,
+      cancelled: orders.filter((order) => order.status === 'cancelled').length,
+    }),
+    [orders],
+  );
 
-  const updateOrderStatus = (orderId: string, status: OrderStatus) => {
-    setOrders(prev =>
-      prev.map(order =>
-        order.id === orderId ? { ...order, status } : order
-      )
-    );
-    toast.success(`Order ${orderId} status updated to ${status}`);
+  const urgentOrders = useMemo(() => orders.filter((order) => isOrderUrgent(order)), [orders]);
+  const filteredOrders = useMemo(
+    () => (statusFilter === 'all' ? orders : orders.filter((order) => order.status === statusFilter)),
+    [orders, statusFilter],
+  );
+
+  const updateOrderStatus = async (order: ProducerSubOrderApi, nextStatus: ProducerOrderStatus) => {
+    if (nextStatus === order.status) {
+      return;
+    }
+
+    setUpdatingOrderId(order.id);
+    try {
+      const updated = await apiJson<ProducerSubOrderApi>(`/api/orders/producer/sub-orders/${order.id}/status/`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      setOrders((previous) => previous.map((row) => (row.id === updated.id ? updated : row)));
+      toast.success(`Order ${updated.order_number} updated to ${updated.status}.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to update order status.';
+      toast.error(message);
+    } finally {
+      setUpdatingOrderId(null);
+    }
   };
 
-  const getStatusColor = (status: OrderStatus) => {
-    const colors: Record<OrderStatus, string> = {
+  const getStatusColor = (status: ProducerOrderStatus) => {
+    const colors: Record<ProducerOrderStatus, string> = {
       pending: 'bg-yellow-100 text-yellow-800 border-yellow-300',
       confirmed: 'bg-blue-100 text-blue-800 border-blue-300',
-      preparing: 'bg-purple-100 text-purple-800 border-purple-300',
       ready: 'bg-green-100 text-green-800 border-green-300',
       delivered: 'bg-gray-100 text-gray-800 border-gray-300',
       cancelled: 'bg-red-100 text-red-800 border-red-300',
@@ -70,20 +153,12 @@ export function ProducerOrdersPage() {
     return colors[status];
   };
 
-  const isOrderUrgent = (order: typeof orders[0]) => {
-    const now = new Date();
-    const deliveryDate = parseISO(order.deliveryDate);
-    const hoursUntilDelivery = differenceInHours(deliveryDate, now);
-    return hoursUntilDelivery < 24 && hoursUntilDelivery > 0 && order.status !== 'delivered' && order.status !== 'cancelled';
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-[oklch(0.98_0.01_145)] to-[oklch(0.96_0.02_150)]">
-      {/* Header */}
       <header className="bg-white/80 backdrop-blur-sm border-b border-[oklch(0.88_0.02_145)] shadow-sm">
         <div className="max-w-6xl mx-auto px-4 py-4">
-          <Button 
-            variant="ghost" 
+          <Button
+            variant="ghost"
             onClick={() => navigate('/producer/dashboard')}
             className="focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
           >
@@ -93,14 +168,13 @@ export function ProducerOrdersPage() {
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="max-w-6xl mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-3xl font-semibold">Orders</h1>
             <p className="text-gray-700 mt-1 flex items-center gap-2">
               <TrendingUp className="size-4" />
-              Sorted by delivery date (earliest first)
+              Live checkout orders for your producer account
             </p>
           </div>
           <Badge variant="secondary" className="text-base px-3 py-1.5">
@@ -108,7 +182,6 @@ export function ProducerOrdersPage() {
           </Badge>
         </div>
 
-        {/* 3) Urgent Orders Warning */}
         {urgentOrders.length > 0 && (
           <Card className="mb-6 border-red-300 bg-red-50/50">
             <CardContent className="p-4">
@@ -118,18 +191,11 @@ export function ProducerOrdersPage() {
                 </div>
                 <div className="flex-1">
                   <p className="font-semibold text-red-900">
-                    {urgentOrders.length} order{urgentOrders.length !== 1 ? 's' : ''} due to dispatch in &lt; 24h
+                    {urgentOrders.length} order{urgentOrders.length === 1 ? '' : 's'} due to dispatch in &lt; 24h
                   </p>
-                  <p className="text-sm text-red-700 mt-0.5">
-                    Review and update status to avoid delivery delays
-                  </p>
+                  <p className="text-sm text-red-700 mt-0.5">Prioritise these first to avoid delays</p>
                 </div>
-                <Button 
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => setStatusFilter('pending')}
-                  className="focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
-                >
+                <Button variant="destructive" size="sm" onClick={() => setStatusFilter('pending')}>
                   View urgent
                 </Button>
               </div>
@@ -137,7 +203,6 @@ export function ProducerOrdersPage() {
           </Card>
         )}
 
-        {/* 3) Status Filter Tabs */}
         <Card className="mb-6">
           <CardContent className="p-6">
             <div className="flex flex-wrap items-center gap-3">
@@ -145,70 +210,59 @@ export function ProducerOrdersPage() {
               <div className="flex flex-wrap gap-2">
                 <Badge
                   variant={statusFilter === 'all' ? 'default' : 'outline'}
-                  className="cursor-pointer hover:bg-gray-100 transition-colors focus-visible:ring-2 focus-visible:ring-green-600"
+                  className="cursor-pointer"
                   onClick={() => setStatusFilter('all')}
-                  tabIndex={0}
-                  onKeyDown={(e) => e.key === 'Enter' && setStatusFilter('all')}
                 >
                   All ({orders.length})
                 </Badge>
                 <Badge
                   variant={statusFilter === 'pending' ? 'default' : 'outline'}
-                  className="cursor-pointer hover:bg-yellow-100 transition-colors focus-visible:ring-2 focus-visible:ring-green-600"
+                  className="cursor-pointer"
                   onClick={() => setStatusFilter('pending')}
-                  tabIndex={0}
-                  onKeyDown={(e) => e.key === 'Enter' && setStatusFilter('pending')}
                 >
-                  <div className="size-2 rounded-full bg-yellow-500 mr-1.5" />
-                  New ({statusCounts.pending})
+                  Pending ({statusCounts.pending})
                 </Badge>
                 <Badge
                   variant={statusFilter === 'confirmed' ? 'default' : 'outline'}
-                  className="cursor-pointer hover:bg-blue-100 transition-colors focus-visible:ring-2 focus-visible:ring-green-600"
+                  className="cursor-pointer"
                   onClick={() => setStatusFilter('confirmed')}
-                  tabIndex={0}
-                  onKeyDown={(e) => e.key === 'Enter' && setStatusFilter('confirmed')}
                 >
-                  <div className="size-2 rounded-full bg-blue-500 mr-1.5" />
                   Confirmed ({statusCounts.confirmed})
                 </Badge>
                 <Badge
-                  variant={statusFilter === 'preparing' ? 'default' : 'outline'}
-                  className="cursor-pointer hover:bg-purple-100 transition-colors focus-visible:ring-2 focus-visible:ring-green-600"
-                  onClick={() => setStatusFilter('preparing')}
-                  tabIndex={0}
-                  onKeyDown={(e) => e.key === 'Enter' && setStatusFilter('preparing')}
-                >
-                  <div className="size-2 rounded-full bg-purple-500 mr-1.5" />
-                  Packing ({statusCounts.preparing})
-                </Badge>
-                <Badge
                   variant={statusFilter === 'ready' ? 'default' : 'outline'}
-                  className="cursor-pointer hover:bg-green-100 transition-colors focus-visible:ring-2 focus-visible:ring-green-600"
+                  className="cursor-pointer"
                   onClick={() => setStatusFilter('ready')}
-                  tabIndex={0}
-                  onKeyDown={(e) => e.key === 'Enter' && setStatusFilter('ready')}
                 >
-                  <div className="size-2 rounded-full bg-green-500 mr-1.5" />
                   Ready ({statusCounts.ready})
                 </Badge>
                 <Badge
                   variant={statusFilter === 'delivered' ? 'default' : 'outline'}
-                  className="cursor-pointer hover:bg-gray-100 transition-colors focus-visible:ring-2 focus-visible:ring-green-600"
+                  className="cursor-pointer"
                   onClick={() => setStatusFilter('delivered')}
-                  tabIndex={0}
-                  onKeyDown={(e) => e.key === 'Enter' && setStatusFilter('delivered')}
                 >
-                  <div className="size-2 rounded-full bg-gray-500 mr-1.5" />
-                  Completed ({statusCounts.delivered})
+                  Delivered ({statusCounts.delivered})
+                </Badge>
+                <Badge
+                  variant={statusFilter === 'cancelled' ? 'default' : 'outline'}
+                  className="cursor-pointer"
+                  onClick={() => setStatusFilter('cancelled')}
+                >
+                  Cancelled ({statusCounts.cancelled})
                 </Badge>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Orders List */}
-        {filteredOrders.length === 0 ? (
+        {loading ? (
+          <Card>
+            <CardContent className="py-12 text-center text-gray-600">
+              <Loader2 className="size-6 animate-spin mx-auto mb-3" />
+              Loading producer orders...
+            </CardContent>
+          </Card>
+        ) : filteredOrders.length === 0 ? (
           <Card>
             <CardContent className="py-12 text-center">
               <Package className="size-12 text-gray-400 mx-auto mb-4" />
@@ -216,11 +270,7 @@ export function ProducerOrdersPage() {
                 {statusFilter === 'all' ? 'No orders yet' : `No ${statusFilter} orders`}
               </p>
               {statusFilter !== 'all' && (
-                <Button 
-                  variant="outline" 
-                  onClick={() => setStatusFilter('all')}
-                  className="mt-4"
-                >
+                <Button variant="outline" onClick={() => setStatusFilter('all')} className="mt-4">
                   View all orders
                 </Button>
               )}
@@ -228,22 +278,21 @@ export function ProducerOrdersPage() {
           </Card>
         ) : (
           <div className="space-y-4">
-            {filteredOrders.map(order => {
+            {filteredOrders.map((order) => {
               const urgent = isOrderUrgent(order);
+              const subtotal = toNumber(order.subtotal_amount);
+              const commission = toNumber(order.commission_amount);
+              const payout = toNumber(order.payout_amount);
+              const parsedDate = parseISO(order.delivery_date);
+              const statusOptions = order.allowed_next_statuses || [order.status];
+
               return (
-                <Card 
-                  key={order.id}
-                  className={`transition-shadow hover:shadow-md ${
-                    urgent ? 'border-red-300 bg-red-50/30' : ''
-                  }`}
-                >
+                <Card key={order.id} className={`transition-shadow hover:shadow-md ${urgent ? 'border-red-300 bg-red-50/30' : ''}`}>
                   <CardHeader>
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <CardTitle className="text-lg">
-                            Order #{order.id}
-                          </CardTitle>
+                          <CardTitle className="text-lg">Order {order.order_number}</CardTitle>
                           {urgent && (
                             <Badge variant="destructive" className="gap-1">
                               <Clock className="size-3" />
@@ -251,28 +300,22 @@ export function ProducerOrdersPage() {
                             </Badge>
                           )}
                         </div>
-                        <p className="text-sm text-gray-700">
-                          {order.customerName} • {order.customerEmail}
-                        </p>
+                        <p className="text-sm text-gray-700">{order.customer_name} • {order.customer_email}</p>
                       </div>
-                      <Badge className={`${getStatusColor(order.status)} border`}>
-                        {order.status}
-                      </Badge>
+                      <Badge className={`${getStatusColor(order.status)} border`}>{order.status}</Badge>
                     </div>
                   </CardHeader>
+
                   <CardContent className="space-y-4">
-                    {/* Order Items */}
                     <div>
                       <h4 className="font-medium mb-2 text-gray-900">Items</h4>
                       <div className="space-y-2">
-                        {order.items.map((item, idx) => (
-                          <div key={idx} className="flex justify-between text-sm">
+                        {order.items.map((item, index) => (
+                          <div key={`${order.id}-${item.product_name}-${index}`} className="flex justify-between text-sm">
                             <span className="text-gray-700">
-                              {item.product.name} × {item.quantity} {item.product.unit}
+                              {item.product_name} × {item.quantity} {item.unit}
                             </span>
-                            <span className="font-medium text-gray-900">
-                              £{(item.product.price * item.quantity).toFixed(2)}
-                            </span>
+                            <span className="font-medium text-gray-900">£{toNumber(item.line_total).toFixed(2)}</span>
                           </div>
                         ))}
                       </div>
@@ -280,92 +323,83 @@ export function ProducerOrdersPage() {
 
                     <Separator />
 
-                    {/* Delivery Info */}
                     <div className="grid md:grid-cols-2 gap-4">
                       <div className="flex items-start gap-2">
                         <Calendar className="size-4 mt-0.5 text-gray-500" />
                         <div>
                           <p className="text-sm font-medium text-gray-900">Delivery Date</p>
                           <p className="text-sm text-gray-700">
-                            {format(parseISO(order.deliveryDate), 'MMMM d, yyyy')}
+                            {isValid(parsedDate) ? format(parsedDate, 'MMMM d, yyyy') : order.delivery_date}
                           </p>
-                          {urgent && (
-                            <p className="text-xs text-red-600 mt-1 font-medium">
-                              ⚠ Less than 24 hours
-                            </p>
-                          )}
+                          {urgent && <p className="text-xs text-red-600 mt-1 font-medium">Less than 24 hours</p>}
                         </div>
                       </div>
                       <div className="flex items-start gap-2">
                         <MapPin className="size-4 mt-0.5 text-gray-500" />
                         <div>
                           <p className="text-sm font-medium text-gray-900">Delivery Address</p>
-                          <p className="text-sm text-gray-700">{order.deliveryAddress}</p>
+                          <p className="text-sm text-gray-700">{order.delivery_address}</p>
                         </div>
                       </div>
                     </div>
 
                     <Separator />
 
-                    {/* Order Total */}
                     <div className="space-y-1">
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-600">Subtotal</span>
-                        <span className="text-gray-900">£{order.subtotal.toFixed(2)}</span>
+                        <span className="text-gray-900">£{subtotal.toFixed(2)}</span>
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-600">Commission (5%)</span>
-                        <span className="text-gray-700">-£{order.commission.toFixed(2)}</span>
+                        <span className="text-gray-700">-£{commission.toFixed(2)}</span>
                       </div>
                       <div className="flex justify-between font-semibold pt-2 border-t">
                         <span className="text-gray-900">Your Earnings</span>
-                        <span className="text-green-700">£{order.subtotal.toFixed(2)}</span>
+                        <span className="text-green-700">£{payout.toFixed(2)}</span>
                       </div>
                     </div>
 
                     <Separator />
 
-                    {/* Actions Row */}
                     <div className="grid md:grid-cols-2 gap-4">
-                      {/* Status Update */}
                       <div>
                         <label className="text-sm font-medium mb-2 block text-gray-900">Update Status</label>
                         <Select
                           value={order.status}
-                          onValueChange={(value) => updateOrderStatus(order.id, value as OrderStatus)}
+                          onValueChange={(value) => updateOrderStatus(order, value as ProducerOrderStatus)}
+                          disabled={updatingOrderId === order.id}
                         >
                           <SelectTrigger className="focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="pending">Pending</SelectItem>
-                            <SelectItem value="confirmed">Confirmed</SelectItem>
-                            <SelectItem value="preparing">Preparing</SelectItem>
-                            <SelectItem value="ready">Ready for Delivery</SelectItem>
-                            <SelectItem value="delivered">Delivered</SelectItem>
-                            <SelectItem value="cancelled">Cancelled</SelectItem>
+                            {statusOptions.map((status) => (
+                              <SelectItem key={status} value={status}>
+                                {status}
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       </div>
 
-                      {/* 3) Contact Buyer / Delivery Note */}
                       <div className="flex flex-col gap-2">
                         <label className="text-sm font-medium text-gray-900">Actions</label>
                         <div className="flex gap-2">
-                          <Button 
-                            variant="outline" 
+                          <Button
+                            variant="outline"
                             size="sm"
-                            className="flex-1 gap-2 focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
-                            onClick={() => toast.info('Contact buyer feature coming soon')}
+                            className="flex-1 gap-2"
+                            onClick={() => toast.info(`Contact ${order.customer_name} at ${order.customer_email}`)}
                           >
                             <MessageCircle className="size-4" />
                             Contact
                           </Button>
-                          <Button 
-                            variant="outline" 
+                          <Button
+                            variant="outline"
                             size="sm"
-                            className="flex-1 gap-2 focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
-                            onClick={() => toast.info('Delivery note feature coming soon')}
+                            className="flex-1 gap-2"
+                            onClick={() => toast.info(`Delivery postcode: ${order.customer_postcode}`)}
                           >
                             <FileText className="size-4" />
                             Note
@@ -374,12 +408,11 @@ export function ProducerOrdersPage() {
                       </div>
                     </div>
 
-                    {/* 8) Help text */}
                     {order.status === 'pending' && (
                       <div className="bg-blue-50 border border-blue-200 p-3 rounded-lg">
                         <p className="text-xs text-blue-900 flex items-start gap-2">
                           <AlertCircle className="size-3 mt-0.5 flex-shrink-0" />
-                          <span>Confirm orders within 12 hours to maintain high seller ratings</span>
+                          <span>Confirm pending orders quickly so customers get status updates.</span>
                         </p>
                       </div>
                     )}

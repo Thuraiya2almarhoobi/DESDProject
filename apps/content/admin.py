@@ -26,4 +26,4 @@ class FarmStoryAdmin(admin.ModelAdmin):
 @admin.register(SavedRecipe)
 class SavedRecipeAdmin(admin.ModelAdmin):
     list_display = ("user", "recipe", "created_at")
-    search_fields = ("user__username", "recipe__title")
+    search_fields = ("user__email", "recipe__title")

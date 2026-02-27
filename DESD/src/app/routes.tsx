@@ -73,7 +73,7 @@ export const router = createBrowserRouter([
   {
     path: '/orders/history',
     element: (
-      <ProtectedRoute allowedRoles={['customer']}>
+      <ProtectedRoute allowedRoles={['CUSTOMER']}>
         <OrderHistoryPage />
       </ProtectedRoute>
     ),
@@ -81,7 +81,7 @@ export const router = createBrowserRouter([
   {
     path: '/map',
     element: (
-      <ProtectedRoute allowedRoles={['customer']}>
+      <ProtectedRoute allowedRoles={['CUSTOMER']}>
         <MapPage />
       </ProtectedRoute>
     ),
@@ -89,7 +89,7 @@ export const router = createBrowserRouter([
   {
     path: '/content/feed',
     element: (
-      <ProtectedRoute allowedRoles={['customer']}>
+      <ProtectedRoute allowedRoles={['CUSTOMER']}>
         <ContentFeedPage />
       </ProtectedRoute>
     ),

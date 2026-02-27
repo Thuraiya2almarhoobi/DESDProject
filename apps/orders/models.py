@@ -16,7 +16,7 @@ class Producer(models.Model):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="producer_profile",
+        related_name="orders_producer_profile",
     )
     business_name = models.CharField(max_length=255, unique=True)
     contact_email = models.EmailField(blank=True)
@@ -36,7 +36,7 @@ class Producer(models.Model):
 
 class CustomerProfile(models.Model):
     user = models.OneToOneField(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="customer_profile"
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="orders_customer_profile"
     )
     full_name = models.CharField(max_length=255, blank=True)
     phone = models.CharField(max_length=30, blank=True)

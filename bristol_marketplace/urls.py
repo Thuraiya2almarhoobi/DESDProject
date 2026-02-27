@@ -20,7 +20,12 @@ from django.urls import include, path, re_path
 from .views import frontend_app
 
 urlpatterns = [
+    # Catalog endpoints preserved at /api/products and /api/categories for existing test/frontend contracts.
+    path("api/", include("apps.catalog.urls")),
+    path("api/catalog/", include("apps.catalog.urls")),
     path("api/orders/", include("apps.orders.urls")),
+    path("api/producer/", include("apps.producer_portal.urls")),
+    path("api/payments/", include("apps.payments.urls")),
     path("api/geo/", include("apps.geo.urls")),
     path("api/content/", include("apps.content.urls")),
     # Frontend route that intentionally uses /admin/commission.
