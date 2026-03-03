@@ -45,7 +45,7 @@ class ProducerProduct(models.Model):
         default=ProductAvailability.IN_SEASON,
     )
     stock_quantity = models.PositiveIntegerField(default=0)
-    allergen_information = models.CharField(max_length=255, blank=True)
+    allergen_information = models.JSONField(default=list, blank=True)
     harvest_date = models.DateField()
     image_url = models.URLField(blank=True)
     is_surplus = models.BooleanField(default=False)

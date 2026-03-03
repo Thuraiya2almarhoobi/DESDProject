@@ -15,6 +15,7 @@ from apps.producer_portal.models import (
     ProducerProduct,
     ProductAvailability,
 )
+from apps.producer_portal.serializers import ALLOWED_ALLERGENS
 
 User = get_user_model()
 
@@ -68,7 +69,7 @@ class ProducerPortalCriticalTestCases(APITestCase):
             "unit": "dozen",
             "availability": ProductAvailability.IN_SEASON,
             "stock_quantity": 50,
-            "allergen_information": "Contains eggs",
+            "allergen_information": ["Eggs"],
             "harvest_date": timezone.localdate().isoformat(),
             "image_url": "https://example.com/eggs.jpg",
         }
@@ -81,6 +82,7 @@ class ProducerPortalCriticalTestCases(APITestCase):
         self.assertEqual(product.name, payload["name"])
         self.assertEqual(product.category, payload["category"])
         self.assertEqual(product.stock_quantity, 50)
+        self.assertEqual(product.allergen_information, ["Eggs"])
         self.assertTrue(product.is_visible_to_customers)
 
         list_response = self.client.get("/api/producer/products/")
@@ -88,6 +90,67 @@ class ProducerPortalCriticalTestCases(APITestCase):
         self.assertEqual(len(list_response.data), 1)
         self.assertEqual(list_response.data[0]["name"], payload["name"])
         self.assertEqual(list_response.data[0]["availability"], ProductAvailability.IN_SEASON)
+        self.assertEqual(list_response.data[0]["allergen_information"], ["Eggs"])
+
+    def test_product_rejects_allergen_values_outside_the_approved_list(self):
+        payload = {
+            "name": "Soup Mix",
+            "category": "Prepared Foods",
+            "description": "Ready to heat",
+            "price": "4.50",
+            "unit": "each",
+            "availability": ProductAvailability.YEAR_ROUND,
+            "stock_quantity": 10,
+            "allergen_information": ["Chocolate"],
+            "harvest_date": timezone.localdate().isoformat(),
+        }
+
+        create_response = self.client.post("/api/producer/products/", payload, format="json")
+        self.assertEqual(create_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("allergen_information", create_response.data)
+
+    def test_product_accepts_multiple_approved_allergens(self):
+        payload = {
+            "name": "Nutty Granola",
+            "category": "Pantry",
+            "description": "Toasted granola clusters",
+            "price": "5.20",
+            "unit": "each",
+            "availability": ProductAvailability.YEAR_ROUND,
+            "stock_quantity": 18,
+            "allergen_information": [ALLOWED_ALLERGENS[1], ALLOWED_ALLERGENS[9], ALLOWED_ALLERGENS[13]],
+            "harvest_date": timezone.localdate().isoformat(),
+        }
+
+        create_response = self.client.post("/api/producer/products/", payload, format="json")
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(create_response.data["allergen_information"], payload["allergen_information"])
+
+    def test_product_accepts_json_encoded_allergen_list_strings(self):
+        payload = {
+            "name": "Festival Salad",
+            "category": "Prepared Foods",
+            "description": "Mixed salad with dressing",
+            "price": "6.10",
+            "unit": "each",
+            "availability": ProductAvailability.YEAR_ROUND,
+            "stock_quantity": 7,
+            "allergen_information": (
+                '["Celery (including stalks, leaves, seeds, and root)", '
+                '"Sulphur dioxide and sulphites (at concentrations above 10 parts per million)"]'
+            ),
+            "harvest_date": timezone.localdate().isoformat(),
+        }
+
+        create_response = self.client.post("/api/producer/products/", payload, format="json")
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(
+            create_response.data["allergen_information"],
+            [
+                "Celery (including stalks, leaves, seeds, and root)",
+                "Sulphur dioxide and sulphites (at concentrations above 10 parts per million)",
+            ],
+        )
 
     def test_tc_009_producer_views_only_their_orders_sorted_by_delivery_date(self):
         product = ProducerProduct.objects.create(

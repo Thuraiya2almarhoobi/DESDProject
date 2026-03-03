@@ -15,7 +15,7 @@ interface BackendProduct {
   unit: Product['unit'];
   availability: BackendAvailability;
   stock_quantity: number;
-  allergen_information: string;
+  allergen_information: string[];
   harvest_date: string;
   image_url: string;
   is_surplus: boolean;
@@ -30,7 +30,7 @@ interface ProducerCreatePayload {
   unit: Product['unit'];
   availability: AvailabilityType;
   stock: number;
-  allergens?: string;
+  allergens?: string[];
   harvestDate: string;
   imageUrl?: string;
   isSurplus?: boolean;
@@ -60,7 +60,10 @@ function toFrontendAvailability(availability: BackendAvailability): Availability
   return 'unavailable';
 }
 
-function parseAllergens(raw: string): string[] {
+function parseAllergens(raw: string[] | string): string[] {
+  if (Array.isArray(raw)) {
+    return raw;
+  }
   if (!raw.trim()) {
     return [];
   }
@@ -138,7 +141,7 @@ export async function createProducerProductInApi(
     unit: payload.unit,
     availability: toBackendAvailability(payload.availability),
     stock_quantity: payload.stock,
-    allergen_information: payload.allergens ?? '',
+    allergen_information: payload.allergens ?? [],
     harvest_date: payload.harvestDate,
     image_url: payload.imageUrl ?? '',
     is_surplus: Boolean(payload.isSurplus),

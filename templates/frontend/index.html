@@ -13,6 +13,7 @@
     <div id="root"></div>
     {% if frontend_js_file %}
       <script type="module" src="{% static frontend_js_file %}"></script>
+      <script src="{% static 'assets/producer-allergens-patch.js' %}"></script>
     {% else %}
       <main style="font-family: sans-serif; padding: 2rem;">
         <h1>Frontend bundle missing</h1>

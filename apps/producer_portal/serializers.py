@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from rest_framework import serializers
 
 from .models import (
@@ -9,6 +11,80 @@ from .models import (
     ProducerProduct,
 )
 
+ALLOWED_ALLERGENS = [
+    "Celery (including stalks, leaves, seeds, and root)",
+    "Cereals containing gluten (such as wheat, rye, barley, and oats)",
+    "Crustaceans (such as prawns, crabs, and lobsters)",
+    "Eggs",
+    "Fish",
+    "Lupin (flour and seeds)",
+    "Milk (including lactose)",
+    "Molluscs (such as mussels, oysters, and squid)",
+    "Mustard",
+    "Peanuts",
+    "Sesame seeds",
+    "Soybeans",
+    "Sulphur dioxide and sulphites (at concentrations above 10 parts per million)",
+    "Tree nuts (almonds, hazelnuts, walnuts, cashews, pecans, brazil nuts, pistachios, macadamia nuts)",
+]
+
+
+class AllergenListField(serializers.Field):
+    default_error_messages = {
+        "invalid_type": "Allergen information must be provided as a list of values.",
+        "invalid_choice": "Allergen information contains unsupported values.",
+    }
+
+    def to_representation(self, value):
+        if not value:
+            return []
+        if isinstance(value, list):
+            return [item for item in value if isinstance(item, str) and item]
+        return [item.strip() for item in str(value).split(",") if item.strip()]
+
+    def to_internal_value(self, data):
+        if data in (None, ""):
+            return []
+        if isinstance(data, str):
+            parsed_json = None
+            if data.lstrip().startswith("["):
+                try:
+                    parsed_json = json.loads(data)
+                except json.JSONDecodeError:
+                    parsed_json = None
+            if isinstance(parsed_json, list):
+                entries = []
+                for item in parsed_json:
+                    if not isinstance(item, str):
+                        self.fail("invalid_type")
+                    item = item.strip()
+                    if item:
+                        entries.append(item)
+            else:
+                entries = [item.strip() for item in data.split(",") if item.strip()]
+        elif isinstance(data, list):
+            entries = []
+            for item in data:
+                if not isinstance(item, str):
+                    self.fail("invalid_type")
+                item = item.strip()
+                if item:
+                    entries.append(item)
+        else:
+            self.fail("invalid_type")
+
+        invalid = [item for item in entries if item not in ALLOWED_ALLERGENS]
+        if invalid:
+            self.fail("invalid_choice")
+
+        deduplicated: list[str] = []
+        seen: set[str] = set()
+        for item in entries:
+            if item not in seen:
+                deduplicated.append(item)
+                seen.add(item)
+        return deduplicated
+
 
 class ProducerProductSerializer(serializers.ModelSerializer):
     producer_id = serializers.IntegerField(read_only=True)
@@ -16,6 +92,7 @@ class ProducerProductSerializer(serializers.ModelSerializer):
     producer_email = serializers.EmailField(source="producer.email", read_only=True)
     producer_location = serializers.SerializerMethodField()
     is_visible_to_customers = serializers.BooleanField(read_only=True)
+    allergen_information = AllergenListField(required=False)
 
     class Meta:
         model = ProducerProduct
