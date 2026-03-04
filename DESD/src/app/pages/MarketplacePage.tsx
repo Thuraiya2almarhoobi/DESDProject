@@ -60,7 +60,7 @@ function getPriceBounds(priceFilter: PriceFilter): { minPrice?: number; maxPrice
 
 export function MarketplacePage() {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, logout, addresses } = useAuth();
   const { getTotalItems, addToCart, undoLastAdd } = useCart();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<string[]>(fallbackCategories);
@@ -78,6 +78,21 @@ export function MarketplacePage() {
   const [viewMode, setViewMode] = useState<ViewMode>('all');
   const [excludedAllergens, setExcludedAllergens] = useState<string[]>([]);
   const [reloadKey, setReloadKey] = useState(0);
+  const customerName = (user?.name || '').trim() || 'Customer';
+  const defaultAddressText = useMemo(() => {
+    if (!addresses || addresses.length === 0) {
+      return '';
+    }
+    const defaultAddress = addresses.find((address) => address.is_default) || addresses[0];
+    return [defaultAddress.line1, defaultAddress.city, defaultAddress.postcode]
+      .filter(Boolean)
+      .join(', ');
+  }, [addresses]);
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -476,7 +491,13 @@ export function MarketplacePage() {
               <div className="size-10 bg-gradient-to-br from-[oklch(0.45_0.12_155)] to-[oklch(0.55_0.10_150)] rounded-full flex items-center justify-center shadow-sm">
                 <Sprout className="size-5 text-white" />
               </div>
-              <h1 className="text-2xl font-semibold">Local Food Marketplace</h1>
+              <div>
+                <h1 className="text-2xl font-semibold">Local Food Marketplace</h1>
+                <p className="text-sm text-gray-700">Signed in as {customerName}</p>
+                {defaultAddressText && (
+                  <p className="text-xs text-gray-600 truncate max-w-[22rem]">Delivery address: {defaultAddressText}</p>
+                )}
+              </div>
             </div>
             
             <div className="flex items-center gap-2">
@@ -497,6 +518,16 @@ export function MarketplacePage() {
                   </Badge>
                 )}
               </Button>
+
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleLogout}
+                className="focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
+              >
+                <LogOut className="size-4 sm:mr-2" />
+                <span className="hidden sm:inline">Sign Out</span>
+              </Button>
               
               {/* Account Menu (D - compact) */}
               <DropdownMenu>
@@ -510,7 +541,7 @@ export function MarketplacePage() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuLabel>Hello, {user?.name}</DropdownMenuLabel>
+                  <DropdownMenuLabel>Hello, {customerName}</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => navigate('/orders/history')}>
                     Order History
@@ -522,7 +553,7 @@ export function MarketplacePage() {
                     Recipes & Stories
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={logout} className="text-red-600">
+                  <DropdownMenuItem onClick={handleLogout} className="text-red-600">
                     <LogOut className="size-4 mr-2" />
                     Logout
                   </DropdownMenuItem>

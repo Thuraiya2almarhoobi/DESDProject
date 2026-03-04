@@ -5,6 +5,7 @@ from .models import (
     Address,
     CommunityGroupProfile,
     CustomerProfile,
+    LoginAttempt,
     ProducerProfile,
     RestaurantProfile,
     User,
@@ -16,12 +17,12 @@ class UserAdmin(DjangoUserAdmin):
     model = User
     ordering = ("id",)
     list_display = ("email", "role", "is_staff", "is_active")
-    list_filter = ("role", "is_staff", "is_superuser", "is_active")
+    list_filter = ("role", "email_verified", "is_staff", "is_superuser", "is_active")
     search_fields = ("email",)
 
     fieldsets = (
         (None, {"fields": ("email", "password")}),
-        ("Role", {"fields": ("role",)}),
+        ("Role", {"fields": ("role", "email_verified", "email_verification_sent_at")}),
         (
             "Permissions",
             {
@@ -50,6 +51,7 @@ class UserAdmin(DjangoUserAdmin):
                     "is_staff",
                     "is_superuser",
                     "is_active",
+                    "email_verified",
                 ),
             },
         ),
@@ -85,3 +87,11 @@ class CommunityGroupProfileAdmin(admin.ModelAdmin):
 class RestaurantProfileAdmin(admin.ModelAdmin):
     list_display = ("id", "user", "business_name", "contact_name", "phone")
     search_fields = ("user__email", "business_name", "contact_name")
+
+
+@admin.register(LoginAttempt)
+class LoginAttemptAdmin(admin.ModelAdmin):
+    list_display = ("id", "email", "user", "success", "ip_address", "timestamp", "reason")
+    list_filter = ("success", "reason", "timestamp")
+    search_fields = ("email", "user__email", "ip_address", "user_agent")
+    readonly_fields = ("email", "user", "ip_address", "user_agent", "success", "timestamp", "reason")

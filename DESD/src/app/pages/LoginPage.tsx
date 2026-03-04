@@ -14,6 +14,7 @@ export function LoginPage() {
   const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -22,7 +23,7 @@ export function LoginPage() {
     setError('');
     setLoading(true);
 
-    const result = await login(email, password);
+    const result = await login(email, password, rememberMe);
 
     if (result.success) {
       navigate(getDashboardPathForRole(result.user.role));
@@ -73,6 +74,24 @@ export function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
               />
+            </div>
+
+            <div className="flex items-center justify-between text-sm">
+              <label className="inline-flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                />
+                <span>Remember me</span>
+              </label>
+              <button
+                type="button"
+                className="text-[oklch(0.45_0.12_155)] hover:underline"
+                onClick={() => navigate('/forgot-password')}
+              >
+                Forgot password?
+              </button>
             </div>
 
             <Button type="submit" className="w-full" disabled={loading}>

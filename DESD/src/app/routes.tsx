@@ -4,6 +4,9 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 // Pages
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
+import { VerifyEmailPage } from './pages/VerifyEmailPage';
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
+import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { AccessDeniedPage } from './pages/AccessDeniedPage';
 import { MarketplacePage } from './pages/MarketplacePage';
 import { ProductDetailPage } from './pages/ProductDetailPage';
@@ -32,6 +35,18 @@ export const router = createBrowserRouter([
   {
     path: '/register',
     element: <RegisterPage />,
+  },
+  {
+    path: '/verify-email',
+    element: <VerifyEmailPage />,
+  },
+  {
+    path: '/forgot-password',
+    element: <ForgotPasswordPage />,
+  },
+  {
+    path: '/reset-password',
+    element: <ResetPasswordPage />,
   },
   {
     path: '/access-denied',

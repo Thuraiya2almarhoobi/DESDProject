@@ -47,7 +47,7 @@ def _validate_password_complexity(password: str):
 class UserSummarySerializer(serializers.ModelSerializer):
     class Meta:
         model = UserModel
-        fields = ("id", "email", "role")
+        fields = ("id", "email", "role", "email_verified")
 
 
 class AddressSerializer(serializers.ModelSerializer):
@@ -164,7 +164,12 @@ class BaseRegistrationSerializer(serializers.Serializer):
         email = validated_data.pop("email")
         password = validated_data.pop("password")
         validated_data.pop("confirm_password", None)
-        user = UserModel.objects.create_user(email=email, password=password, role=self.user_role)
+        user = UserModel.objects.create_user(
+            email=email,
+            password=password,
+            role=self.user_role,
+            email_verified=False,
+        )
         self.create_profile(user, validated_data)
         return user
 
@@ -258,12 +263,28 @@ class RestaurantRegistrationSerializer(BaseRegistrationSerializer):
 class LoginSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True)
+    remember_me = serializers.BooleanField(required=False, default=False)
 
     def validate(self, attrs):
         email = attrs.get("email")
         password = attrs.get("password")
+        remember_me = attrs.get("remember_me", False)
         user = authenticate(self.context.get("request"), username=email, password=password)
         if not user or not user.is_active:
             raise serializers.ValidationError("Invalid credentials")
         attrs["user"] = user
+        attrs["remember_me"] = bool(remember_me)
         return attrs
+
+
+class VerifyEmailSerializer(serializers.Serializer):
+    token = serializers.CharField()
+
+
+class PasswordResetRequestSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    token = serializers.CharField()
+    new_password = serializers.CharField(write_only=True)

@@ -1,7 +1,15 @@
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
+from urllib.parse import unquote
 
+from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password
+from django.core import signing
+from django.core.exceptions import ValidationError as DjangoValidationError
+from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework import generics, status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -12,21 +20,31 @@ try:
 except ModuleNotFoundError:  # Offline fallback when simplejwt is unavailable.
     RefreshToken = None
 
+from .auth_tokens import (
+    load_user_from_email_verification_token,
+    load_user_from_password_reset_token,
+)
+from .email_utils import send_email_verification_message, send_password_reset_message
+from .models import Address, LoginAttempt
 from .permissions import IsAdmin, IsCommunity, IsCustomer, IsProducer, IsRestaurant
 from .serializers import (
     AddressSerializer,
     CommunityRegistrationSerializer,
     CustomerRegistrationSerializer,
     LoginSerializer,
+    PasswordResetConfirmSerializer,
+    PasswordResetRequestSerializer,
     PROFILE_MODEL_BY_ROLE,
     PROFILE_SERIALIZER_BY_ROLE,
     ProducerRegistrationSerializer,
     RestaurantRegistrationSerializer,
     UserSummarySerializer,
+    VerifyEmailSerializer,
+    _validate_password_complexity,
 )
-from .models import Address
 
 logger = logging.getLogger("apps.accounts.auth")
+UserModel = get_user_model()
 
 
 class RegisterAnonThrottle(AnonRateThrottle):
@@ -45,7 +63,44 @@ class LoginUserThrottle(UserRateThrottle):
     scope = "login_user"
 
 
-def _build_auth_payload(user):
+def _get_client_ip(request) -> str:
+    forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    return request.META.get("REMOTE_ADDR", "") or ""
+
+
+def _get_user_agent(request) -> str:
+    return (request.META.get("HTTP_USER_AGENT", "") or "")[:512]
+
+
+def _resolve_failed_login_context(email: str, password: str):
+    normalized_email = UserModel.objects.normalize_email(email or "")
+    if not normalized_email:
+        return None, "invalid_credentials"
+
+    user = UserModel.objects.filter(email__iexact=normalized_email).first()
+    if user is None:
+        return None, "invalid_credentials"
+    if not user.is_active:
+        return user, "inactive_user"
+    if not user.check_password(password or ""):
+        return user, "invalid_password"
+    return user, "invalid_credentials"
+
+
+def _record_login_attempt(request, *, email: str, user, success: bool, reason: str = ""):
+    LoginAttempt.objects.create(
+        email=UserModel.objects.normalize_email(email or ""),
+        user=user,
+        ip_address=_get_client_ip(request),
+        user_agent=_get_user_agent(request),
+        success=success,
+        reason=reason,
+    )
+
+
+def _build_auth_payload(user, *, remember_me: bool = False):
     if RefreshToken is None:
         return {
             "access": "",
@@ -55,6 +110,11 @@ def _build_auth_payload(user):
         }
 
     refresh = RefreshToken.for_user(user)
+    if remember_me:
+        refresh_lifetime = getattr(settings, "JWT_REMEMBER_ME_REFRESH_LIFETIME", timedelta(days=30))
+    else:
+        refresh_lifetime = getattr(settings, "JWT_DEFAULT_REFRESH_LIFETIME", timedelta(days=1))
+    refresh.set_exp(lifetime=refresh_lifetime)
     return {
         "access": str(refresh.access_token),
         "refresh": str(refresh),
@@ -94,8 +154,14 @@ class BaseRegistrationView(APIView):
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
+        try:
+            send_email_verification_message(user)
+        except Exception:
+            logger.exception("Failed to send verification email for user_id=%s", user.id)
         logger.info("Registration successful for email=%s role=%s", user.email, user.role)
-        return Response(_build_auth_payload(user), status=status.HTTP_201_CREATED)
+        response_payload = _build_auth_payload(user)
+        response_payload["detail"] = "Registration successful, check your email to verify."
+        return Response(response_payload, status=status.HTTP_201_CREATED)
 
 
 class CustomerRegistrationView(BaseRegistrationView):
@@ -123,17 +189,128 @@ class LoginView(APIView):
         if not serializer.is_valid():
             non_field_errors = serializer.errors.get("non_field_errors", [])
             if any(str(error) == "Invalid credentials" for error in non_field_errors):
+                failed_user, reason = _resolve_failed_login_context(
+                    request.data.get("email", ""),
+                    request.data.get("password", ""),
+                )
+                _record_login_attempt(
+                    request,
+                    email=request.data.get("email", ""),
+                    user=failed_user,
+                    success=False,
+                    reason=reason,
+                )
                 logger.warning(
                     "Login failed for email=%s ip=%s",
                     request.data.get("email"),
-                    request.META.get("REMOTE_ADDR"),
+                    _get_client_ip(request),
                 )
                 return Response({"detail": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         user = serializer.validated_data["user"]
+        remember_me = serializer.validated_data.get("remember_me", False)
+        _record_login_attempt(
+            request,
+            email=user.email,
+            user=user,
+            success=True,
+            reason="success",
+        )
         logger.info("Login successful for email=%s role=%s", user.email, user.role)
-        return Response(_build_auth_payload(user), status=status.HTTP_200_OK)
+        return Response(_build_auth_payload(user, remember_me=remember_me), status=status.HTTP_200_OK)
+
+
+class VerifyEmailView(APIView):
+    permission_classes = (AllowAny,)
+
+    def post(self, request):
+        serializer = VerifyEmailSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        token = unquote(serializer.validated_data["token"])
+
+        try:
+            user = load_user_from_email_verification_token(token)
+        except (signing.BadSignature, signing.SignatureExpired):
+            return Response(
+                {"detail": "Invalid or expired verification token."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if user is None:
+            return Response(
+                {"detail": "Invalid or expired verification token."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not user.email_verified:
+            user.email_verified = True
+            user.save(update_fields=["email_verified"])
+        return Response({"detail": "Email verified successfully."}, status=status.HTTP_200_OK)
+
+
+class PasswordResetRequestView(APIView):
+    permission_classes = (AllowAny,)
+    throttle_classes = (RegisterAnonThrottle, RegisterUserThrottle)
+
+    def post(self, request):
+        serializer = PasswordResetRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        email = serializer.validated_data["email"]
+        normalized_email = UserModel.objects.normalize_email(email)
+        user = UserModel.objects.filter(email__iexact=normalized_email).first()
+        if user is not None:
+            try:
+                send_password_reset_message(user)
+            except Exception:
+                logger.exception("Failed to send password reset email for user_id=%s", user.id)
+        return Response(
+            {"detail": "If the email exists, a reset link has been sent."},
+            status=status.HTTP_200_OK,
+        )
+
+
+class PasswordResetConfirmView(APIView):
+    permission_classes = (AllowAny,)
+    throttle_classes = (RegisterAnonThrottle, RegisterUserThrottle)
+
+    def post(self, request):
+        serializer = PasswordResetConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        token = unquote(serializer.validated_data["token"])
+        new_password = serializer.validated_data["new_password"]
+
+        try:
+            user = load_user_from_password_reset_token(token)
+        except (signing.BadSignature, signing.SignatureExpired):
+            return Response(
+                {"detail": "Invalid or expired reset token."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if user is None:
+            return Response(
+                {"detail": "Invalid or expired reset token."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            _validate_password_complexity(new_password)
+            validate_password(new_password, user=user)
+        except (DjangoValidationError, DRFValidationError) as exc:
+            if isinstance(exc, DjangoValidationError):
+                errors = exc.messages
+            else:
+                details = exc.detail
+                errors = details if isinstance(details, list) else [str(details)]
+            return Response({"new_password": errors}, status=status.HTTP_400_BAD_REQUEST)
+
+        user.set_password(new_password)
+        user.save(update_fields=["password"])
+        return Response(
+            {"detail": "Password reset successful. Please log in."},
+            status=status.HTTP_200_OK,
+        )
 
 
 class MeView(APIView):

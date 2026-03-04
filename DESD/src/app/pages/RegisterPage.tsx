@@ -1,13 +1,13 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { CheckCircle2, Sprout, XCircle } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { Alert, AlertDescription } from '../components/ui/alert';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { getDashboardPathForRole } from '../lib/roleRouting';
 import { UserRole } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -52,6 +52,8 @@ export function RegisterPage() {
   const [contactName, setContactName] = useState('');
   const [sharedPhone, setSharedPhone] = useState('');
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [registrationComplete, setRegistrationComplete] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const passwordChecks = useMemo(() => {
@@ -78,11 +80,12 @@ export function RegisterPage() {
 
   const isPasswordValid = Object.values(passwordChecks).every(Boolean);
   const passwordMatch = password.length > 0 && password === confirmPassword;
-  const canSubmit = isPasswordValid && passwordMatch && (role !== 'CUSTOMER' || acceptTerms) && !loading;
+  const canSubmit = isPasswordValid && passwordMatch && (role !== 'CUSTOMER' || acceptTerms) && !loading && !registrationComplete;
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError('');
+    setSuccessMessage('');
 
     if (!isPasswordValid) {
       setError('Password must satisfy all required security rules.');
@@ -147,8 +150,12 @@ export function RegisterPage() {
     }
 
     if (result.success) {
-      navigate(getDashboardPathForRole(result.user.role));
+      const message = result.message || 'Registration successful. Please check your email to verify your account.';
+      setRegistrationComplete(true);
+      setSuccessMessage(message);
+      toast.success(message);
     } else {
+      setRegistrationComplete(false);
       setError(result.error);
     }
 
@@ -184,6 +191,11 @@ export function RegisterPage() {
             {error && (
               <Alert variant="destructive">
                 <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+            {successMessage && (
+              <Alert>
+                <AlertDescription>{successMessage}</AlertDescription>
               </Alert>
             )}
 
@@ -428,6 +440,12 @@ export function RegisterPage() {
             <Button type="submit" className="w-full" disabled={!canSubmit}>
               {loading ? 'Creating account...' : 'Register'}
             </Button>
+
+            {registrationComplete && (
+              <Button type="button" className="w-full" onClick={() => navigate('/login')}>
+                Continue to Login
+              </Button>
+            )}
 
             <Button type="button" variant="outline" className="w-full" onClick={() => navigate('/login')}>
               Back to login

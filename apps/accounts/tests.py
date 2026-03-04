@@ -1,14 +1,20 @@
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
+from django.core import mail
 from django.urls import reverse
+from django.test import override_settings
+import re
+from urllib.parse import unquote
 from rest_framework import status
 from rest_framework.test import APITestCase
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from .auth_tokens import generate_password_reset_token
 from .models import (
     Address,
     CommunityGroupProfile,
     CustomerProfile,
+    LoginAttempt,
     ProducerProfile,
     RestaurantProfile,
     User,
@@ -17,7 +23,15 @@ from .models import (
 UserModel = get_user_model()
 
 
+@override_settings(
+    EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+    FRONTEND_URL="http://localhost:5173",
+)
 class AccountsRegistrationTests(APITestCase):
+    def setUp(self):
+        super().setUp()
+        mail.outbox = []
+
     def _assert_profile_for_role(self, user, role):
         self.assertEqual(CustomerProfile.objects.filter(user=user).exists(), role == User.Role.CUSTOMER)
         self.assertEqual(ProducerProfile.objects.filter(user=user).exists(), role == User.Role.PRODUCER)
@@ -85,16 +99,22 @@ class AccountsRegistrationTests(APITestCase):
             with self.subTest(endpoint=endpoint):
                 response = self.client.post(endpoint, payload, format="json")
                 self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+                self.assertEqual(
+                    response.data.get("detail"),
+                    "Registration successful, check your email to verify.",
+                )
 
                 user = UserModel.objects.get(email=payload["email"])
                 self.assertEqual(user.role, expected_role)
                 self.assertTrue(user.check_password(payload["password"]))
                 self.assertNotEqual(user.password, payload["password"])
+                self.assertFalse(user.email_verified)
                 self._assert_profile_for_role(user, expected_role)
 
                 self.assertIn("access", response.data)
                 self.assertIn("refresh", response.data)
                 self.assertEqual(response.data["user"]["role"], expected_role)
+                self.assertEqual(response.data["user"]["email_verified"], False)
 
                 if expected_role == User.Role.CUSTOMER:
                     profile = CustomerProfile.objects.get(user=user)
@@ -107,6 +127,9 @@ class AccountsRegistrationTests(APITestCase):
                     self.assertIsNotNone(profile.address)
                     self.assertEqual(profile.address.postcode, payload["postcode"])
                     self.assertEqual(profile.lead_time_hours, 48)
+
+        self.assertEqual(len(mail.outbox), len(cases))
+        self.assertIn("/verify-email?token=", mail.outbox[-1].body)
 
     def test_customer_registration_requires_terms_acceptance(self):
         response = self.client.post(
@@ -240,6 +263,140 @@ class AccountsLoginTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
         self.assertEqual(response.data.get("detail"), "Invalid credentials")
+
+    def test_remember_me_issues_longer_refresh_lifetime(self):
+        from datetime import timedelta
+
+        UserModel.objects.create_user(
+            email="remember@example.com",
+            password="StrongPass123!",
+            role=User.Role.CUSTOMER,
+        )
+
+        with self.settings(
+            JWT_DEFAULT_REFRESH_LIFETIME=timedelta(days=1),
+            JWT_REMEMBER_ME_REFRESH_LIFETIME=timedelta(days=30),
+        ):
+            normal = self.client.post(
+                reverse("auth-login"),
+                {"email": "remember@example.com", "password": "StrongPass123!", "remember_me": False},
+                format="json",
+            )
+            remembered = self.client.post(
+                reverse("auth-login"),
+                {"email": "remember@example.com", "password": "StrongPass123!", "remember_me": True},
+                format="json",
+            )
+
+        self.assertEqual(normal.status_code, status.HTTP_200_OK)
+        self.assertEqual(remembered.status_code, status.HTTP_200_OK)
+
+        normal_refresh = RefreshToken(normal.data["refresh"])
+        remember_refresh = RefreshToken(remembered.data["refresh"])
+
+        normal_lifetime_seconds = int(normal_refresh["exp"]) - int(normal_refresh["iat"])
+        remember_lifetime_seconds = int(remember_refresh["exp"]) - int(remember_refresh["iat"])
+        self.assertGreater(remember_lifetime_seconds, normal_lifetime_seconds)
+
+    def test_failed_login_creates_login_attempt_record(self):
+        UserModel.objects.create_user(
+            email="attempts@example.com",
+            password="StrongPass123!",
+            role=User.Role.CUSTOMER,
+        )
+
+        response = self.client.post(
+            reverse("auth-login"),
+            {"email": "attempts@example.com", "password": "WrongPass123!"},
+            format="json",
+            REMOTE_ADDR="203.0.113.7",
+            HTTP_USER_AGENT="UnitTestAgent/1.0",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        attempt = LoginAttempt.objects.get(email="attempts@example.com")
+        self.assertFalse(attempt.success)
+        self.assertEqual(attempt.ip_address, "203.0.113.7")
+        self.assertEqual(attempt.reason, "invalid_password")
+
+
+@override_settings(
+    EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+    FRONTEND_URL="http://localhost:5173",
+)
+class AccountsVerificationAndPasswordResetTests(APITestCase):
+    def setUp(self):
+        super().setUp()
+        mail.outbox = []
+
+    def test_verify_email_endpoint_marks_email_verified(self):
+        response = self.client.post(
+            reverse("register-customer"),
+            {
+                "email": "verify-me@example.com",
+                "password": "StrongPass123!",
+                "confirm_password": "StrongPass123!",
+                "full_name": "Verify Me",
+                "phone": "07000000001",
+                "delivery_address": "1 Test Street, Bristol",
+                "postcode": "BS1 1AA",
+                "accept_terms": True,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(len(mail.outbox), 1)
+
+        body = mail.outbox[0].body
+        token_match = re.search(r"token=([^\s]+)", body)
+        self.assertIsNotNone(token_match)
+        token = unquote(token_match.group(1))
+
+        verify_response = self.client.post(
+            reverse("auth-verify-email"),
+            {"token": token},
+            format="json",
+        )
+        self.assertEqual(verify_response.status_code, status.HTTP_200_OK)
+
+        user = UserModel.objects.get(email="verify-me@example.com")
+        self.assertTrue(user.email_verified)
+
+    def test_password_reset_request_is_generic_for_unknown_email(self):
+        response = self.client.post(
+            reverse("auth-password-reset-request"),
+            {"email": "unknown@example.com"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["detail"], "If the email exists, a reset link has been sent.")
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_password_reset_confirm_updates_password_and_allows_login(self):
+        user = UserModel.objects.create_user(
+            email="reset-user@example.com",
+            password="OldPassword123!",
+            role=User.Role.CUSTOMER,
+        )
+        token = generate_password_reset_token(user)
+
+        reset_response = self.client.post(
+            reverse("auth-password-reset-confirm"),
+            {"token": token, "new_password": "NewPassword123!"},
+            format="json",
+        )
+        self.assertEqual(reset_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(reset_response.data["detail"], "Password reset successful. Please log in.")
+
+        user.refresh_from_db()
+        self.assertTrue(user.check_password("NewPassword123!"))
+
+        login_response = self.client.post(
+            reverse("auth-login"),
+            {"email": "reset-user@example.com", "password": "NewPassword123!"},
+            format="json",
+        )
+        self.assertEqual(login_response.status_code, status.HTTP_200_OK)
 
 
 class AccountsSecurityThrottleTests(APITestCase):

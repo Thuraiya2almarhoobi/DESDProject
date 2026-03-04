@@ -147,6 +147,35 @@ FRONTEND_DIST_DIR = BASE_DIR / "DESD" / "dist"
 
 AUTH_USER_MODEL = "accounts.User"
 
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+
+JWT_ACCESS_TOKEN_MINUTES = int(os.getenv("JWT_ACCESS_TOKEN_MINUTES", "15"))
+JWT_DEFAULT_REFRESH_DAYS = int(os.getenv("JWT_DEFAULT_REFRESH_DAYS", "1"))
+JWT_REMEMBER_ME_REFRESH_DAYS = int(os.getenv("JWT_REMEMBER_ME_REFRESH_DAYS", "30"))
+JWT_DEFAULT_REFRESH_LIFETIME = timedelta(days=JWT_DEFAULT_REFRESH_DAYS)
+JWT_REMEMBER_ME_REFRESH_LIFETIME = timedelta(days=JWT_REMEMBER_ME_REFRESH_DAYS)
+
+EMAIL_VERIFICATION_TOKEN_MAX_AGE = int(os.getenv("EMAIL_VERIFICATION_TOKEN_MAX_AGE", "86400"))
+PASSWORD_RESET_TOKEN_MAX_AGE = int(os.getenv("PASSWORD_RESET_TOKEN_MAX_AGE", "1800"))
+
+SMTP_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+CONSOLE_BACKEND = "django.core.mail.backends.console.EmailBackend"
+REQUESTED_EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", CONSOLE_BACKEND)
+
+EMAIL_HOST = os.getenv("EMAIL_HOST", "")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "true").lower() in {"1", "true", "yes", "on"}
+EMAIL_USE_SSL = os.getenv("EMAIL_USE_SSL", "false").lower() in {"1", "true", "yes", "on"}
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "noreply@localfood.test")
+
+smtp_config_present = bool(EMAIL_HOST and EMAIL_HOST_USER and EMAIL_HOST_PASSWORD)
+if REQUESTED_EMAIL_BACKEND == SMTP_BACKEND and not smtp_config_present:
+    EMAIL_BACKEND = CONSOLE_BACKEND
+else:
+    EMAIL_BACKEND = REQUESTED_EMAIL_BACKEND
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         (
@@ -175,8 +204,8 @@ REST_FRAMEWORK = {
 
 if HAS_SIMPLEJWT:
     SIMPLE_JWT = {
-        "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
-        "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+        "ACCESS_TOKEN_LIFETIME": timedelta(minutes=JWT_ACCESS_TOKEN_MINUTES),
+        "REFRESH_TOKEN_LIFETIME": JWT_DEFAULT_REFRESH_LIFETIME,
         "AUTH_HEADER_TYPES": ("Bearer",),
         "UPDATE_LAST_LOGIN": True,
     }

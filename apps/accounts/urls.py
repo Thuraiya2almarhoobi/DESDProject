@@ -22,10 +22,13 @@ from .views import (
     CustomerRegistrationView,
     LoginView,
     MeView,
+    PasswordResetConfirmView,
+    PasswordResetRequestView,
     ProducerOnlyView,
     ProducerRegistrationView,
     RestaurantOnlyView,
     RestaurantRegistrationView,
+    VerifyEmailView,
 )
 
 urlpatterns = [
@@ -33,6 +36,9 @@ urlpatterns = [
     path("auth/register/producer/", ProducerRegistrationView.as_view(), name="register-producer"),
     path("auth/register/community/", CommunityRegistrationView.as_view(), name="register-community"),
     path("auth/register/restaurant/", RestaurantRegistrationView.as_view(), name="register-restaurant"),
+    path("auth/verify-email/", VerifyEmailView.as_view(), name="auth-verify-email"),
+    path("auth/password-reset/request/", PasswordResetRequestView.as_view(), name="auth-password-reset-request"),
+    path("auth/password-reset/confirm/", PasswordResetConfirmView.as_view(), name="auth-password-reset-confirm"),
     path("auth/login/", LoginView.as_view(), name="auth-login"),
     path("auth/refresh/", TokenRefreshView.as_view(), name="auth-refresh"),
     path("me/", MeView.as_view(), name="accounts-me"),

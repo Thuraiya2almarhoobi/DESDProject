@@ -72,6 +72,8 @@ class User(AbstractBaseUser, PermissionsMixin):
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
     is_superuser = models.BooleanField(default=False)
+    email_verified = models.BooleanField(default=False)
+    email_verification_sent_at = models.DateTimeField(null=True, blank=True)
     date_joined = models.DateTimeField(default=timezone.now)
 
     objects = UserManager()
@@ -215,3 +217,25 @@ class RestaurantProfile(models.Model):
 
     def __str__(self) -> str:
         return self.business_name
+
+
+class LoginAttempt(models.Model):
+    email = models.EmailField()
+    user = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="login_attempts",
+    )
+    ip_address = models.CharField(max_length=64, blank=True)
+    user_agent = models.CharField(max_length=512, blank=True)
+    success = models.BooleanField(default=False)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    reason = models.CharField(max_length=100, blank=True)
+
+    class Meta:
+        ordering = ("-timestamp",)
+
+    def __str__(self) -> str:
+        return f"{self.email} | success={self.success} | {self.timestamp.isoformat()}"

@@ -21,6 +21,7 @@ type AuthResult =
   | {
       success: true;
       user: User;
+      message?: string;
     }
   | {
       success: false;
@@ -32,7 +33,7 @@ interface AuthContextType {
   profile: Record<string, unknown> | null;
   addresses: MePayload['addresses'];
   loading: boolean;
-  login: (email: string, password: string) => Promise<AuthResult>;
+  login: (email: string, password: string, rememberMe: boolean) => Promise<AuthResult>;
   registerCustomer: (payload: CustomerRegisterPayload) => Promise<AuthResult>;
   registerProducer: (payload: ProducerRegisterPayload) => Promise<AuthResult>;
   registerCommunity: (payload: CommunityRegisterPayload) => Promise<AuthResult>;
@@ -152,7 +153,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [applyMePayload]);
 
   const runAuthFlow = useCallback(
-    async (authAction: () => Promise<{ user: { id: number; email: string; role: UserRole } }>): Promise<AuthResult> => {
+    async (
+      authAction: () => Promise<{ user: { id: number; email: string; role: UserRole }; detail?: string }>
+    ): Promise<AuthResult> => {
       try {
         const authPayload = await authAction();
         const me = await getMeRequest().catch(() => null);
@@ -162,7 +165,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!me) {
           persistUser(nextUser);
         }
-        return { success: true, user: nextUser };
+        return { success: true, user: nextUser, message: authPayload.detail };
       } catch (error) {
         clearAuthStorage();
         setBasicAuthToken(null);
@@ -176,8 +179,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const login = useCallback(
-    async (email: string, password: string): Promise<AuthResult> => {
-      const result = await runAuthFlow(() => loginRequest(email, password));
+    async (email: string, password: string, rememberMe: boolean): Promise<AuthResult> => {
+      const result = await runAuthFlow(() => loginRequest(email, password, rememberMe));
       if (result.success) {
         setBasicAuthToken(btoa(`${email}:${password}`));
       }
@@ -244,6 +247,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const bootstrap = async () => {
       try {
         if (!getAccessToken()) {
+          persistUser(null);
           return;
         }
         await getMe();

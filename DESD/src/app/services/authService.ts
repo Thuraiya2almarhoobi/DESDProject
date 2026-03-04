@@ -11,12 +11,14 @@ export interface AuthUserPayload {
   id: number;
   email: string;
   role: UserRole;
+  email_verified: boolean;
 }
 
 export interface AuthTokensPayload {
   access: string;
   refresh: string;
   user: AuthUserPayload;
+  detail?: string;
 }
 
 export interface MePayload {
@@ -157,12 +159,11 @@ async function requestJson<T>(
   return payload as T;
 }
 
-function persistTokens(payload: AuthTokensPayload): void {
-  setAuthTokens(payload.access, payload.refresh);
-  setStoredRole(payload.user.role);
-}
-
-async function postAuthPayload<TPayload>(url: string, payload: TPayload): Promise<AuthTokensPayload> {
+async function postAuthPayload<TPayload>(
+  url: string,
+  payload: TPayload,
+  rememberMe = true,
+): Promise<AuthTokensPayload> {
   const response = await requestJson<AuthTokensPayload>(
     url,
     {
@@ -171,7 +172,8 @@ async function postAuthPayload<TPayload>(url: string, payload: TPayload): Promis
     },
     false,
   );
-  persistTokens(response);
+  setAuthTokens(response.access, response.refresh, rememberMe);
+  setStoredRole(response.user.role, rememberMe);
   return response;
 }
 
@@ -183,8 +185,8 @@ export function logout(): void {
   clearAuthStorage();
 }
 
-export async function login(email: string, password: string): Promise<AuthTokensPayload> {
-  return postAuthPayload('/accounts/auth/login/', { email, password });
+export async function login(email: string, password: string, rememberMe = false): Promise<AuthTokensPayload> {
+  return postAuthPayload('/accounts/auth/login/', { email, password, remember_me: rememberMe }, rememberMe);
 }
 
 export async function registerCustomer(payload: CustomerRegisterPayload): Promise<AuthTokensPayload> {
@@ -205,4 +207,37 @@ export async function registerRestaurant(payload: RestaurantRegisterPayload): Pr
 
 export async function getMe(): Promise<MePayload> {
   return requestJson<MePayload>('/accounts/me/', { method: 'GET' }, true);
+}
+
+export async function verifyEmail(token: string): Promise<{ detail: string }> {
+  return requestJson<{ detail: string }>(
+    '/accounts/auth/verify-email/',
+    {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    },
+    false,
+  );
+}
+
+export async function requestPasswordReset(email: string): Promise<{ detail: string }> {
+  return requestJson<{ detail: string }>(
+    '/accounts/auth/password-reset/request/',
+    {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    },
+    false,
+  );
+}
+
+export async function confirmPasswordReset(token: string, newPassword: string): Promise<{ detail: string }> {
+  return requestJson<{ detail: string }>(
+    '/accounts/auth/password-reset/confirm/',
+    {
+      method: 'POST',
+      body: JSON.stringify({ token, new_password: newPassword }),
+    },
+    false,
+  );
 }
