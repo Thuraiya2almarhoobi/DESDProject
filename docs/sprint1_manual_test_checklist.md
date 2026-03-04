@@ -7,7 +7,7 @@ Status legend:
 
 ## TC-004 Category browsing [Critical]
 - Scenario: Customer browses by category with real API data.
-- Preconditions: Backend seeded with `python3 manage.py seed_catalog_demo`.
+- Preconditions: Backend seeded with `python3 manage.py seed_demo_data`.
 - Steps:
   1. Login as `customer@example.com`.
   2. Open `/marketplace`.

@@ -3,10 +3,19 @@ services:
     build: .
     ports:
       - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
     environment:
       DJANGO_DEBUG: "${DJANGO_DEBUG:-true}"
       DJANGO_ALLOWED_HOSTS: "${DJANGO_ALLOWED_HOSTS:-127.0.0.1,localhost,0.0.0.0}"
       FRONTEND_URL: "${FRONTEND_URL:-http://localhost:5173}"
+      DJANGO_DB_ENGINE: "django.db.backends.postgresql"
+      DJANGO_DB_HOST: "db"
+      DJANGO_DB_PORT: "5432"
+      DJANGO_DB_NAME: "${POSTGRES_DB:-bristol_marketplace}"
+      DJANGO_DB_USER: "${POSTGRES_USER:-postgres}"
+      DJANGO_DB_PASSWORD: "${POSTGRES_PASSWORD:-postgres}"
       EMAIL_BACKEND: "${EMAIL_BACKEND:-django.core.mail.backends.console.EmailBackend}"
       EMAIL_HOST: "${EMAIL_HOST:-}"
       EMAIL_PORT: "${EMAIL_PORT:-587}"
@@ -15,3 +24,29 @@ services:
       EMAIL_USE_TLS: "${EMAIL_USE_TLS:-true}"
       EMAIL_USE_SSL: "${EMAIL_USE_SSL:-false}"
       DEFAULT_FROM_EMAIL: "${DEFAULT_FROM_EMAIL:-noreply@localfood.test}"
+    command: >
+      sh -c "
+      until python manage.py migrate; do
+        echo 'Database unavailable - retrying in 2s...';
+        sleep 2;
+      done &&
+      python manage.py seed_demo_data &&
+      python manage.py runserver 0.0.0.0:8000
+      "
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB:-bristol_marketplace}"
+      POSTGRES_USER: "${POSTGRES_USER:-postgres}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-postgres}"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  postgres_data:

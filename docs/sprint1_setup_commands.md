@@ -2,8 +2,9 @@
 
 ## Backend (Django + DRF)
 ```bash
+# Requires PostgreSQL running (see Docker section below)
 python3 manage.py migrate
-python3 manage.py seed_catalog_demo
+python3 manage.py seed_demo_data
 python3 manage.py runserver
 ```
 
@@ -19,10 +20,15 @@ Notes:
 - Vite proxy forwards `/api` to `http://localhost:8000`.
 - Mock catalog fallback is opt-in only (`VITE_USE_MOCK_PRODUCTS=true`).
 
-## Docker (integrated build + serve from Django)
+## Docker (web + PostgreSQL containers)
 ```bash
 docker compose up --build
 ```
+
+Notes:
+- `web` container runs migrations and seeds demo data on startup.
+- `db` container runs PostgreSQL 16 and persists data in a Docker volume.
+- After startup, open: `http://127.0.0.1:8000/`
 
 ## Tests
 ```bash

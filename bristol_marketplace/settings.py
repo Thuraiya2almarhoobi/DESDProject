@@ -97,15 +97,14 @@ WSGI_APPLICATION = 'bristol_marketplace.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
-DEFAULT_DB_PATH = BASE_DIR / "db.sqlite3"
-SPRINT_DB_PATH = BASE_DIR / "db_sprint1.sqlite3"
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': os.getenv(
-            "DJANGO_DB_NAME",
-            str(SPRINT_DB_PATH if SPRINT_DB_PATH.exists() else DEFAULT_DB_PATH),
-        ),
+    "default": {
+        "ENGINE": os.getenv("DJANGO_DB_ENGINE", "django.db.backends.postgresql"),
+        "NAME": os.getenv("DJANGO_DB_NAME", "bristol_marketplace"),
+        "USER": os.getenv("DJANGO_DB_USER", "postgres"),
+        "PASSWORD": os.getenv("DJANGO_DB_PASSWORD", "postgres"),
+        "HOST": os.getenv("DJANGO_DB_HOST", "db"),
+        "PORT": os.getenv("DJANGO_DB_PORT", "5432"),
     }
 }
 

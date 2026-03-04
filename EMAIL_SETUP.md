@@ -14,6 +14,11 @@ DJANGO_DEBUG=true
 DJANGO_ALLOWED_HOSTS=127.0.0.1,localhost,0.0.0.0
 FRONTEND_URL=http://localhost:5173
 
+# PostgreSQL (docker-compose db service)
+POSTGRES_DB=bristol_marketplace
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres
+
 # Real email mode
 EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
 EMAIL_HOST=smtp.gmail.com
