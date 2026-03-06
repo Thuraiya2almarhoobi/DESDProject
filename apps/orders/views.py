@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal, InvalidOperation
 
 from django.http import HttpResponse
@@ -265,6 +266,38 @@ class OrderHistoryAPIView(APIView):
 
     def get(self, request):
         queryset = Order.objects.filter(customer=request.user).prefetch_related("sub_orders__producer")
+
+        producer_id = request.query_params.get("producer_id")
+        if producer_id:
+            queryset = queryset.filter(sub_orders__producer_id=producer_id)
+
+        producer_name = request.query_params.get("producer_name")
+        if producer_name:
+            queryset = queryset.filter(sub_orders__producer__business_name__iexact=producer_name.strip())
+
+        from_date_raw = request.query_params.get("from_date")
+        if from_date_raw:
+            try:
+                from_date = date.fromisoformat(from_date_raw)
+            except ValueError:
+                return Response(
+                    {"detail": "from_date must be YYYY-MM-DD."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            queryset = queryset.filter(created_at__date__gte=from_date)
+
+        to_date_raw = request.query_params.get("to_date")
+        if to_date_raw:
+            try:
+                to_date = date.fromisoformat(to_date_raw)
+            except ValueError:
+                return Response(
+                    {"detail": "to_date must be YYYY-MM-DD."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            queryset = queryset.filter(created_at__date__lte=to_date)
+
+        queryset = queryset.distinct()
         serializer = OrderSummarySerializer(queryset, many=True)
         return Response(serializer.data)
 

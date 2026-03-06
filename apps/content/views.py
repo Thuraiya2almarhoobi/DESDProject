@@ -181,6 +181,32 @@ class ProductRecipesAPIView(APIView):
         return Response(RecipeSerializer(recipes, many=True, context={"request": request}).data)
 
 
+class ProducerOwnedProductsAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        producer = _get_request_producer(request.user)
+        if not producer:
+            return Response(
+                {"detail": "Only producers can view producer-linked products."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        products = Product.objects.filter(producer=producer).order_by("name")
+        payload = [
+            {
+                "id": product.id,
+                "name": product.name,
+                "unit": product.unit,
+                "price": product.price,
+                "is_available": product.is_available,
+                "stock_quantity": product.stock_quantity,
+            }
+            for product in products
+        ]
+        return Response(payload)
+
+
 class ToggleSavedRecipeAPIView(APIView):
     permission_classes = [IsAuthenticated]
 

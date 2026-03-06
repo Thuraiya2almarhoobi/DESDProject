@@ -264,6 +264,7 @@ export function ProducerDashboardPage() {
     { label: 'Update stock', icon: RefreshCw, path: '/producer/inventory', variant: 'outline' as const },
     { label: 'View orders', icon: ShoppingBag, path: '/producer/orders', variant: 'outline' as const },
     { label: 'Create surplus deal', icon: Tag, path: '/producer/inventory', variant: 'outline' as const },
+    { label: 'Share recipe/story', icon: Sparkles, path: '/content/feed', variant: 'outline' as const },
   ];
 
   return (
@@ -331,7 +332,7 @@ export function ProducerDashboardPage() {
 
             <section>
               <h2 className="text-lg font-semibold mb-4">Quick actions</h2>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                 {primaryActions.map((action) => {
                   const Icon = action.icon;
                   return (

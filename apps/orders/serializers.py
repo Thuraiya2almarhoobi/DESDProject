@@ -112,6 +112,8 @@ class OrderItemSerializer(serializers.ModelSerializer):
 
 class OrderSummarySerializer(serializers.ModelSerializer):
     producer_names = serializers.SerializerMethodField()
+    delivery_date_from = serializers.SerializerMethodField()
+    delivery_date_to = serializers.SerializerMethodField()
 
     class Meta:
         model = Order
@@ -125,10 +127,27 @@ class OrderSummarySerializer(serializers.ModelSerializer):
             "commission_amount",
             "total_amount",
             "producer_names",
+            "delivery_date_from",
+            "delivery_date_to",
         ]
 
     def get_producer_names(self, obj: Order) -> list[str]:
         return list(obj.sub_orders.select_related("producer").values_list("producer__business_name", flat=True))
+
+    def _delivery_dates(self, obj: Order) -> list:
+        return list(obj.sub_orders.values_list("delivery_date", flat=True))
+
+    def get_delivery_date_from(self, obj: Order):
+        dates = self._delivery_dates(obj)
+        if not dates:
+            return None
+        return min(dates)
+
+    def get_delivery_date_to(self, obj: Order):
+        dates = self._delivery_dates(obj)
+        if not dates:
+            return None
+        return max(dates)
 
 
 class OrderDetailSerializer(serializers.ModelSerializer):

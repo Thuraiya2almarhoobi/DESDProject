@@ -6,7 +6,7 @@ import { Product } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 import { ApiProduct, apiJson, mapApiProductToProduct } from '../lib/api';
-import { Button } from '../components/ui/button';
+import { Button, buttonVariants } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Checkbox } from '../components/ui/checkbox';
 import { Label } from '../components/ui/label';
@@ -531,21 +531,28 @@ export function MarketplacePage() {
               
               {/* Account Menu (D - compact) */}
               <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button 
-                    variant="ghost" 
-                    size="sm"
-                    className="focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
-                  >
-                    <User className="size-4" />
-                  </Button>
+                <DropdownMenuTrigger
+                  type="button"
+                  aria-label="Open account menu"
+                  className={`${buttonVariants({ variant: 'ghost', size: 'sm' })} focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2`}
+                >
+                  <User className="size-4" />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuLabel>Hello, {customerName}</DropdownMenuLabel>
                   <DropdownMenuSeparator />
+                  <DropdownMenuLabel>Account</DropdownMenuLabel>
+                  <DropdownMenuItem onClick={() => navigate('/account')}>
+                    Account Information
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate('/settings')}>
+                    Settings
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => navigate('/orders/history')}>
                     Order History
                   </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel>Explore</DropdownMenuLabel>
                   <DropdownMenuItem onClick={() => navigate('/map')}>
                     Producers Near Me
                   </DropdownMenuItem>

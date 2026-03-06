@@ -67,7 +67,7 @@ export function ProductDetailPage() {
 
         const producersNear = await apiJson<{
           producers: ProducerDistanceRow[];
-        }>(`/api/geo/producers-near-me/?postcode=${encodeURIComponent(profile.postcode || '')}&radius_miles=200`);
+        }>(`/api/geo/producers-near-me/?postcode=${encodeURIComponent(profile.postcode || '')}&radius_miles=20000`);
 
         const producerRow = producersNear.producers.find((row) => row.producer_id === target.producer.id);
         const mappedProduct = mapApiProductToProduct(target, producerRow?.distance_miles);
@@ -299,6 +299,16 @@ export function ProductDetailPage() {
                       <li key={recipe.id} className="border rounded-md p-3 bg-white">
                         <p className="font-medium">{recipe.title}</p>
                         <p className="text-sm text-gray-600 mt-1">{recipe.description || 'No description provided.'}</p>
+                        <div className="mt-3 grid md:grid-cols-2 gap-3 text-sm">
+                          <div>
+                            <p className="font-medium text-gray-800 mb-1">Ingredients</p>
+                            <p className="text-gray-700 whitespace-pre-line">{recipe.ingredients}</p>
+                          </div>
+                          <div>
+                            <p className="font-medium text-gray-800 mb-1">Instructions</p>
+                            <p className="text-gray-700 whitespace-pre-line">{recipe.instructions}</p>
+                          </div>
+                        </div>
                       </li>
                     ))}
                   </ul>

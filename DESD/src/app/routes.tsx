@@ -15,6 +15,8 @@ import { CheckoutPage } from './pages/CheckoutPage';
 import { OrderHistoryPage } from './pages/OrderHistoryPage';
 import { MapPage } from './pages/MapPage';
 import { ContentFeedPage } from './pages/ContentFeedPage';
+import { AccountPage } from './pages/AccountPage';
+import { SettingsPage } from './pages/SettingsPage';
 import { ProducerDashboardPage } from './pages/producer/ProducerDashboardPage';
 import { ProducerOrdersPage } from './pages/producer/ProducerOrdersPage';
 import { ProducerInventoryPage } from './pages/producer/ProducerInventoryPage';
@@ -94,6 +96,22 @@ export const router = createBrowserRouter([
     ),
   },
   {
+    path: '/account',
+    element: (
+      <ProtectedRoute allowedRoles={['CUSTOMER']}>
+        <AccountPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/settings',
+    element: (
+      <ProtectedRoute allowedRoles={['CUSTOMER']}>
+        <SettingsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
     path: '/map',
     element: (
       <ProtectedRoute allowedRoles={['CUSTOMER']}>
@@ -104,7 +122,7 @@ export const router = createBrowserRouter([
   {
     path: '/content/feed',
     element: (
-      <ProtectedRoute allowedRoles={['CUSTOMER']}>
+      <ProtectedRoute allowedRoles={['CUSTOMER', 'PRODUCER']}>
         <ContentFeedPage />
       </ProtectedRoute>
     ),

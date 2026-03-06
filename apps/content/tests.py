@@ -73,3 +73,21 @@ class ContentApiTests(APITestCase):
         save_res = self.customer_client.post(f"/api/content/recipes/{recipe.id}/save/")
         self.assertEqual(save_res.status_code, status.HTTP_200_OK)
         self.assertTrue(save_res.data["saved"])
+
+    def test_producer_can_create_story_and_fetch_own_products_for_recipe_linking(self):
+        story_res = self.producer_client.post(
+            "/api/content/stories/",
+            {
+                "title": "Harvest Season Update",
+                "body": "We finished this week's carrot harvest and updated cold storage guidance.",
+                "seasonal_tag": "Autumn",
+                "is_published": True,
+            },
+            format="json",
+        )
+        self.assertEqual(story_res.status_code, status.HTTP_201_CREATED)
+
+        producer_products_res = self.producer_client.get("/api/content/producer/products/")
+        self.assertEqual(producer_products_res.status_code, status.HTTP_200_OK)
+        self.assertGreaterEqual(len(producer_products_res.data), 1)
+        self.assertEqual(producer_products_res.data[0]["id"], self.product.id)

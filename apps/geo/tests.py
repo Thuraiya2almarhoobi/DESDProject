@@ -46,4 +46,8 @@ class GeoApiTests(APITestCase):
         res = self.client.get("/api/geo/food-miles/cart/")
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.assertIn("total_food_miles", res.data)
+        self.assertIn("producer_totals", res.data)
+        self.assertIn("items", res.data)
+        self.assertGreaterEqual(len(res.data["producer_totals"]), 1)
+        self.assertGreaterEqual(len(res.data["items"]), 1)
         self.assertGreaterEqual(Decimal(str(res.data["total_food_miles"])), Decimal("0.00"))

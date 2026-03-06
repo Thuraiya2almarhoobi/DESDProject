@@ -183,12 +183,13 @@ class OrdersCriticalFlowTests(APITestCase):
 
     def test_order_history_receipt_and_reorder(self):
         self._add_to_cart(self.product_a1, "1")
+        delivery_date = (timezone.localdate() + timedelta(days=2)).isoformat()
         checkout_res = self.client.post(
             "/api/orders/checkout/",
             {
                 "delivery_address": "45 Park Street, Bristol",
                 "customer_postcode": "BS1 5JG",
-                "delivery_date": (timezone.localdate() + timedelta(days=2)).isoformat(),
+                "delivery_date": delivery_date,
                 "payment_method": "test_card",
                 "payment_token": "tok_visa",
             },
@@ -200,6 +201,15 @@ class OrdersCriticalFlowTests(APITestCase):
         history_res = self.client.get("/api/orders/history/")
         self.assertEqual(history_res.status_code, status.HTTP_200_OK)
         self.assertGreaterEqual(len(history_res.data), 1)
+        self.assertEqual(history_res.data[0]["delivery_date_from"], delivery_date)
+        self.assertEqual(history_res.data[0]["delivery_date_to"], delivery_date)
+
+        filter_res = self.client.get(
+            "/api/orders/history/",
+            {"producer_name": "Bristol Valley Farm", "from_date": timezone.localdate().isoformat()},
+        )
+        self.assertEqual(filter_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(filter_res.data), 1)
 
         receipt_res = self.client.get(f"/api/orders/history/{order_id}/receipt/")
         self.assertEqual(receipt_res.status_code, status.HTTP_200_OK)

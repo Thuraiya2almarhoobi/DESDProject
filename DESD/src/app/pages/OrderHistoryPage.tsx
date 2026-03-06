@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ArrowLeft, Download, RotateCcw, ReceiptText } from 'lucide-react';
 import { format } from 'date-fns';
@@ -8,6 +8,9 @@ import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Separator } from '../components/ui/separator';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 
 function maskPaymentReference(reference: string): string {
   if (!reference || reference.length < 6) {
@@ -23,16 +26,50 @@ export function OrderHistoryPage() {
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [activeOrderId, setActiveOrderId] = useState<number | null>(null);
+  const [producerNameFilter, setProducerNameFilter] = useState('all');
+  const [fromDateFilter, setFromDateFilter] = useState('');
+  const [toDateFilter, setToDateFilter] = useState('');
+  const [producerOptions, setProducerOptions] = useState<string[]>([]);
+
+  const hasActiveFilters = producerNameFilter !== 'all' || Boolean(fromDateFilter) || Boolean(toDateFilter);
+
+  const queryString = useMemo(() => {
+    const query = new URLSearchParams();
+    if (producerNameFilter !== 'all') {
+      query.set('producer_name', producerNameFilter);
+    }
+    if (fromDateFilter) {
+      query.set('from_date', fromDateFilter);
+    }
+    if (toDateFilter) {
+      query.set('to_date', toDateFilter);
+    }
+    const value = query.toString();
+    return value ? `?${value}` : '';
+  }, [producerNameFilter, fromDateFilter, toDateFilter]);
 
   useEffect(() => {
     let mounted = true;
 
-    const loadHistory = async () => {
+    const loadHistoryAndFilters = async () => {
       setLoading(true);
       try {
-        const history = await apiJson<ApiOrderSummary[]>('/api/orders/history/');
+        const [allHistory, filteredHistory] = await Promise.all([
+          apiJson<ApiOrderSummary[]>('/api/orders/history/'),
+          apiJson<ApiOrderSummary[]>(`/api/orders/history/${queryString}`),
+        ]);
+
         if (mounted) {
-          setOrders(history);
+          setOrders(filteredHistory);
+          const names = Array.from(
+            new Set(allHistory.flatMap((order) => order.producer_names).filter(Boolean)),
+          ).sort((a, b) => a.localeCompare(b));
+          setProducerOptions(names);
+
+          if (activeOrderId && !filteredHistory.some((order) => order.id === activeOrderId)) {
+            setActiveOrderId(null);
+            setSelectedOrder(null);
+          }
         }
       } catch (error) {
         if (mounted) {
@@ -45,12 +82,12 @@ export function OrderHistoryPage() {
       }
     };
 
-    void loadHistory();
+    void loadHistoryAndFilters();
 
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [queryString]);
 
   const openOrder = async (orderId: number) => {
     if (activeOrderId === orderId) {
@@ -108,6 +145,16 @@ export function OrderHistoryPage() {
     }
   };
 
+  const renderDeliveryWindow = (order: ApiOrderSummary): string => {
+    if (!order.delivery_date_from) {
+      return 'N/A';
+    }
+    if (!order.delivery_date_to || order.delivery_date_to === order.delivery_date_from) {
+      return format(new Date(order.delivery_date_from), 'MMM d, yyyy');
+    }
+    return `${format(new Date(order.delivery_date_from), 'MMM d')} - ${format(new Date(order.delivery_date_to), 'MMM d, yyyy')}`;
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-[oklch(0.98_0.01_145)] to-[oklch(0.96_0.02_150)]">
       <header className="bg-white/80 backdrop-blur-sm border-b border-[oklch(0.88_0.02_145)] shadow-sm">
@@ -126,6 +173,64 @@ export function OrderHistoryPage() {
           <p className="text-sm text-gray-600 mt-1">View receipts, inspect order breakdowns, and reorder quickly.</p>
         </div>
 
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg">Filter Orders</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid md:grid-cols-4 gap-4">
+              <div>
+                <Label htmlFor="order-filter-producer">Producer</Label>
+                <Select value={producerNameFilter} onValueChange={setProducerNameFilter}>
+                  <SelectTrigger id="order-filter-producer">
+                    <SelectValue placeholder="All producers" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All producers</SelectItem>
+                    {producerOptions.map((producerName) => (
+                      <SelectItem key={producerName} value={producerName}>
+                        {producerName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="order-filter-from-date">From Date</Label>
+                <Input
+                  id="order-filter-from-date"
+                  type="date"
+                  value={fromDateFilter}
+                  onChange={(event) => setFromDateFilter(event.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="order-filter-to-date">To Date</Label>
+                <Input
+                  id="order-filter-to-date"
+                  type="date"
+                  value={toDateFilter}
+                  onChange={(event) => setToDateFilter(event.target.value)}
+                />
+              </div>
+              <div className="flex items-end">
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    setProducerNameFilter('all');
+                    setFromDateFilter('');
+                    setToDateFilter('');
+                  }}
+                  disabled={!hasActiveFilters}
+                >
+                  Clear Filters
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         {loading ? (
           <Card>
             <CardContent className="py-10 text-center text-gray-600">Loading your previous orders...</CardContent>
@@ -134,8 +239,23 @@ export function OrderHistoryPage() {
           <Card>
             <CardContent className="py-10 text-center">
               <ReceiptText className="size-10 mx-auto text-gray-400 mb-3" />
-              <p className="text-gray-700 mb-4">No orders yet.</p>
-              <Button onClick={() => navigate('/marketplace')}>Browse Products</Button>
+              <p className="text-gray-700 mb-4">
+                {hasActiveFilters ? 'No orders matched your filters.' : 'No orders yet.'}
+              </p>
+              {hasActiveFilters ? (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setProducerNameFilter('all');
+                    setFromDateFilter('');
+                    setToDateFilter('');
+                  }}
+                >
+                  Reset Filters
+                </Button>
+              ) : (
+                <Button onClick={() => navigate('/marketplace')}>Browse Products</Button>
+              )}
             </CardContent>
           </Card>
         ) : (
@@ -162,8 +282,8 @@ export function OrderHistoryPage() {
                     <p className="font-medium">{order.producer_names.join(', ')}</p>
                   </div>
                   <div>
-                    <p className="text-gray-500">Subtotal</p>
-                    <p className="font-medium">£{Number(order.subtotal_amount).toFixed(2)}</p>
+                    <p className="text-gray-500">Delivery Date</p>
+                    <p className="font-medium">{renderDeliveryWindow(order)}</p>
                   </div>
                   <div>
                     <p className="text-gray-500">Total Paid</p>

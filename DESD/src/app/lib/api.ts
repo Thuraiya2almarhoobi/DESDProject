@@ -74,6 +74,8 @@ export interface ApiOrderSummary {
   status: string;
   payment_status: string;
   created_at: string;
+  delivery_date_from: string | null;
+  delivery_date_to: string | null;
   subtotal_amount: string;
   commission_amount: string;
   total_amount: string;

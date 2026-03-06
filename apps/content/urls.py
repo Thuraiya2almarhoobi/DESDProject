@@ -4,6 +4,7 @@ from .views import (
     ContentFeedAPIView,
     FarmStoryDetailAPIView,
     FarmStoryListCreateAPIView,
+    ProducerOwnedProductsAPIView,
     ProductRecipesAPIView,
     RecipeDetailAPIView,
     RecipeListCreateAPIView,
@@ -12,6 +13,7 @@ from .views import (
 
 urlpatterns = [
     path("feed/", ContentFeedAPIView.as_view(), name="content-feed"),
+    path("producer/products/", ProducerOwnedProductsAPIView.as_view(), name="content-producer-products"),
     path("recipes/", RecipeListCreateAPIView.as_view(), name="content-recipes"),
     path("recipes/<int:recipe_id>/", RecipeDetailAPIView.as_view(), name="content-recipe-detail"),
     path("recipes/<int:recipe_id>/save/", ToggleSavedRecipeAPIView.as_view(), name="content-recipe-save"),

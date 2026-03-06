@@ -13,6 +13,7 @@ interface ProductMetaProps {
 export function ProductMeta({ producerName, producerLocation, harvestDate, foodMiles, seasonalDates, compact = false }: ProductMetaProps) {
   const harvestDateObj = new Date(harvestDate);
   const harvestedThisWeek = isThisWeek(harvestDateObj);
+  const foodMilesLabel = Number.isFinite(foodMiles) ? foodMiles.toFixed(2) : '0.00';
   
   if (compact) {
     // Compact version for cards
@@ -20,7 +21,7 @@ export function ProductMeta({ producerName, producerLocation, harvestDate, foodM
       <div className="space-y-1 text-xs text-gray-600">
         <div className="flex items-center gap-1">
           <MapPin className="size-3" />
-          <span>{producerLocation} • {foodMiles} miles</span>
+          <span>{producerLocation} • Food Miles: {foodMilesLabel} miles • Go Green</span>
         </div>
         <div className="flex items-center gap-1">
           <Calendar className="size-3" />
@@ -52,7 +53,7 @@ export function ProductMeta({ producerName, producerLocation, harvestDate, foodM
       </div>
       <div className="flex items-center gap-1.5">
         <Truck className="size-4" />
-        <span>{foodMiles} miles</span>
+        <span>Food Miles: {foodMilesLabel} miles • Go Green</span>
       </div>
     </div>
   );

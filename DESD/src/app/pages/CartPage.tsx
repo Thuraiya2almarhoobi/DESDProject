@@ -12,6 +12,7 @@ export function CartPage() {
   const { items, updateQuantity, removeFromCart, getCartByProducer, getGrandTotal } = useCart();
   const [totalFoodMiles, setTotalFoodMiles] = useState(0);
   const [producerFoodMiles, setProducerFoodMiles] = useState<Record<string, number>>({});
+  const [productFoodMiles, setProductFoodMiles] = useState<Record<string, number>>({});
 
   const cartByProducer = getCartByProducer();
   const grandTotal = getGrandTotal();
@@ -31,6 +32,7 @@ export function CartPage() {
         const payload = await apiJson<{
           total_food_miles: string;
           producer_totals: Array<{ producer_id: number; distance_miles: string }>;
+          items: Array<{ product_id: number; distance_miles: string }>;
         }>('/api/geo/food-miles/cart/');
 
         if (!mounted) {
@@ -43,10 +45,17 @@ export function CartPage() {
           byProducer[String(row.producer_id)] = Number(row.distance_miles || 0);
         });
         setProducerFoodMiles(byProducer);
+
+        const byProduct: Record<string, number> = {};
+        payload.items.forEach((row) => {
+          byProduct[String(row.product_id)] = Number(row.distance_miles || 0);
+        });
+        setProductFoodMiles(byProduct);
       } catch {
         if (mounted) {
           setTotalFoodMiles(0);
           setProducerFoodMiles({});
+          setProductFoodMiles({});
         }
       }
     };
@@ -137,6 +146,11 @@ export function CartPage() {
                           <p className="text-sm text-gray-600 mb-2">
                             £{item.product.price.toFixed(2)} per {item.product.unit}
                           </p>
+                          {productFoodMiles[item.product.id] !== undefined && (
+                            <p className="text-xs text-gray-500 mb-2">
+                              Food miles: {productFoodMiles[item.product.id].toFixed(2)} miles
+                            </p>
+                          )}
                           
                           {/* Quantity Controls */}
                           <div className="flex items-center gap-2">
@@ -224,8 +238,8 @@ export function CartPage() {
                 </div>
 
                 <div className="flex justify-between text-sm text-gray-600">
-                  <span>Total Food Miles</span>
-                  <span>{totalFoodMiles.toFixed(2)} miles</span>
+                  <span>Food Miles</span>
+                  <span>{totalFoodMiles.toFixed(2)} miles • Go Green</span>
                 </div>
 
                 <Separator />
