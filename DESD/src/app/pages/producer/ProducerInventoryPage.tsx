@@ -18,7 +18,6 @@ import { Product, AvailabilityType } from '../../types';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
-import { Checkbox } from '../../components/ui/checkbox';
 import { Input } from '../../components/ui/input';
 import { Switch } from '../../components/ui/switch';
 import { Label } from '../../components/ui/label';
@@ -34,111 +33,6 @@ import {
   fetchProducerProductsFromApi,
   patchProducerProductInApi,
 } from '../../services/productApi';
-
-<<<<<<< Updated upstream
-=======
-type HealthFilter = 'all' | 'low-stock' | 'out-of-stock' | 'season-ending';
-
-interface ProductDraft {
-  stock: string;
-  availability: AvailabilityType;
-  harvestDate: string;
-  isSurplus: boolean;
-  surplusDiscountPercent: string;
-}
-
-interface NewProductForm {
-  name: string;
-  category: string;
-  description: string;
-  price: string;
-  unit: ProductUnit;
-  availability: AvailabilityType;
-  stock: string;
-  allergens: string[];
-  harvestDate: string;
-  imageUrl: string;
-  isSurplus: boolean;
-  surplusDiscountPercent: string;
-}
-
-const UNIT_OPTIONS: ProductUnit[] = ['kg', 'litre', 'dozen', 'each'];
-const ALLERGEN_OPTIONS = [
-  'Celery (including stalks, leaves, seeds, and root)',
-  'Cereals containing gluten (such as wheat, rye, barley, and oats)',
-  'Crustaceans (such as prawns, crabs, and lobsters)',
-  'Eggs',
-  'Fish',
-  'Lupin (flour and seeds)',
-  'Milk (including lactose)',
-  'Molluscs (such as mussels, oysters, and squid)',
-  'Mustard',
-  'Peanuts',
-  'Sesame seeds',
-  'Soybeans',
-  'Sulphur dioxide and sulphites (at concentrations above 10 parts per million)',
-  'Tree nuts (almonds, hazelnuts, walnuts, cashews, pecans, brazil nuts, pistachios, macadamia nuts)',
-] as const;
-
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function initialNewProductForm(): NewProductForm {
-  return {
-    name: '',
-    category: 'Vegetables',
-    description: '',
-    price: '',
-    unit: 'kg',
-    availability: 'in-season',
-    stock: '0',
-    allergens: [],
-    harvestDate: todayIso(),
-    imageUrl: '',
-    isSurplus: false,
-    surplusDiscountPercent: '20',
-  };
-}
-
-function toDraft(product: Product): ProductDraft {
-  return {
-    stock: String(product.stock),
-    availability: product.availability,
-    harvestDate: product.harvestDate || todayIso(),
-    isSurplus: Boolean(product.isSurplus),
-    surplusDiscountPercent: String(product.surplusDiscount ?? 20),
-  };
-}
-
-function isSeasonEndingSoon(product: Product): boolean {
-  if (product.availability !== 'in-season' || !product.harvestDate) {
-    return false;
-  }
-  const parsed = parseISO(product.harvestDate);
-  if (!isValid(parsed)) {
-    return false;
-  }
-  const days = differenceInCalendarDays(parsed, new Date());
-  return days >= 0 && days <= 14;
-}
-
-function formatHarvestDate(value: string): string {
-  const parsed = parseISO(value);
-  if (!isValid(parsed)) {
-    return value;
-  }
-  return format(parsed, 'MMM d, yyyy');
-}
-
-function toggleSelectedAllergen(selected: string[], allergen: string, checked: boolean): string[] {
-  if (checked) {
-    return selected.includes(allergen) ? selected : [...selected, allergen];
-  }
-  return selected.filter((item) => item !== allergen);
-}
-
->>>>>>> Stashed changes
 export function ProducerInventoryPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -325,19 +219,10 @@ export function ProducerInventoryPage() {
           price: Number(newProduct.price),
           unit: newProduct.unit as Product['unit'],
           availability: newProduct.availability,
-<<<<<<< Updated upstream
           stock: Number(newProduct.stock),
           allergens: newProduct.allergens,
           harvestDate: newProduct.harvestDate,
           imageUrl: newProduct.imageUrl,
-=======
-          stock,
-          allergens: newProduct.allergens,
-          harvestDate: newProduct.harvestDate || todayIso(),
-          imageUrl: newProduct.imageUrl.trim(),
-          isSurplus: newProduct.isSurplus,
-          surplusDiscountPercent: parsedDiscount,
->>>>>>> Stashed changes
         },
         demoUserEmail,
       );
@@ -824,162 +709,11 @@ export function ProducerInventoryPage() {
                 placeholder="Organic Free Range Eggs"
               />
             </div>
-<<<<<<< Updated upstream
             <div className="space-y-2">
               <Label htmlFor="product-category">Category *</Label>
               <Select
                 value={newProduct.category}
                 onValueChange={(value) => setNewProduct((prev) => ({ ...prev, category: value }))}
-=======
-
-            <div className="grid md:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="new-price">Price (GBP)</Label>
-                <Input
-                  id="new-price"
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  value={newProduct.price}
-                  onChange={(event) => setNewProduct((previous) => ({ ...previous, price: event.target.value }))}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="new-unit">Unit</Label>
-                <Select
-                  value={newProduct.unit}
-                  onValueChange={(value) => setNewProduct((previous) => ({ ...previous, unit: value as ProductUnit }))}
-                >
-                  <SelectTrigger id="new-unit">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {UNIT_OPTIONS.map((unit) => (
-                      <SelectItem key={unit} value={unit}>
-                        {unit}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="new-stock">Stock Quantity</Label>
-                <Input
-                  id="new-stock"
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={newProduct.stock}
-                  onChange={(event) => setNewProduct((previous) => ({ ...previous, stock: event.target.value }))}
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="new-availability">Availability</Label>
-                <Select
-                  value={newProduct.availability}
-                  onValueChange={(value) => setNewProduct((previous) => ({ ...previous, availability: value as AvailabilityType }))}
-                >
-                  <SelectTrigger id="new-availability">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="in-season">In season</SelectItem>
-                    <SelectItem value="year-round">Year-round</SelectItem>
-                    <SelectItem value="unavailable">Unavailable</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="new-harvest-date">Harvest Date</Label>
-                <Input
-                  id="new-harvest-date"
-                  type="date"
-                  value={newProduct.harvestDate}
-                  onChange={(event) => setNewProduct((previous) => ({ ...previous, harvestDate: event.target.value }))}
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Allergens Present</Label>
-                <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
-                  <p className="mb-3 text-sm text-slate-600">
-                    Select every allergen present in this product. Leave all unchecked if none apply.
-                  </p>
-                  <div className="grid max-h-56 gap-3 overflow-y-auto pr-1">
-                    {ALLERGEN_OPTIONS.map((allergen) => {
-                      const inputId = `new-allergen-${allergen}`;
-                      return (
-                        <label key={allergen} htmlFor={inputId} className="flex cursor-pointer items-start gap-3 rounded-sm">
-                          <Checkbox
-                            id={inputId}
-                            checked={newProduct.allergens.includes(allergen)}
-                            onCheckedChange={(checked) =>
-                              setNewProduct((previous) => ({
-                                ...previous,
-                                allergens: toggleSelectedAllergen(previous.allergens, allergen, checked === true),
-                              }))
-                            }
-                            className="mt-0.5"
-                          />
-                          <span className="text-sm leading-5 text-slate-700">{allergen}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="new-image">Image URL (optional)</Label>
-                <Input
-                  id="new-image"
-                  value={newProduct.imageUrl}
-                  onChange={(event) => setNewProduct((previous) => ({ ...previous, imageUrl: event.target.value }))}
-                  placeholder="https://..."
-                />
-              </div>
-            </div>
-
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="flex items-center gap-2 pt-6">
-                <Switch
-                  id="new-is-surplus"
-                  checked={newProduct.isSurplus}
-                  onCheckedChange={(checked) => setNewProduct((previous) => ({ ...previous, isSurplus: checked }))}
-                />
-                <Label htmlFor="new-is-surplus">Mark as surplus deal</Label>
-              </div>
-              {newProduct.isSurplus && (
-                <div className="space-y-2">
-                  <Label htmlFor="new-discount">Surplus Discount % (10-50)</Label>
-                  <Input
-                    id="new-discount"
-                    type="number"
-                    min="10"
-                    max="50"
-                    value={newProduct.surplusDiscountPercent}
-                    onChange={(event) =>
-                      setNewProduct((previous) => ({ ...previous, surplusDiscountPercent: event.target.value }))
-                    }
-                  />
-                </div>
-              )}
-            </div>
-
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setCreateDialogOpen(false)}
-                disabled={creatingProduct}
->>>>>>> Stashed changes
               >
                 <SelectTrigger id="product-category">
                   <SelectValue />
