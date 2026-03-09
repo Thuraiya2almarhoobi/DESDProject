@@ -7,9 +7,66 @@ from django.shortcuts import get_object_or_404
 from rest_framework import generics, permissions, response, status
 from rest_framework.views import APIView
 
+from apps.orders.models import Order
+
 from .models import WeeklySettlement
-from .serializers import WeeklySettlementSerializer
-from .services import process_weekly_settlements
+from .serializers import StripeCheckoutSessionRequestSerializer, WeeklySettlementSerializer
+from .services import (
+    create_stripe_checkout_session_for_order,
+    handle_stripe_webhook_event,
+    process_weekly_settlements,
+    verify_and_construct_stripe_event,
+)
+
+
+class StripeCheckoutSessionCreateAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        serializer = StripeCheckoutSessionRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        order = get_object_or_404(
+            Order.objects.prefetch_related("items"),
+            pk=serializer.validated_data["order_id"],
+            customer=request.user,
+        )
+
+        try:
+            checkout_session = create_stripe_checkout_session_for_order(order)
+        except ValueError as exc:
+            return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        return response.Response(
+            {
+                "order_id": order.id,
+                "checkout_session_id": checkout_session.session_id,
+                "checkout_url": checkout_session.checkout_url,
+                "publishable_key": checkout_session.publishable_key,
+                "test_mode": checkout_session.test_mode,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class StripeWebhookAPIView(APIView):
+    permission_classes = [permissions.AllowAny]
+    authentication_classes: list = []
+
+    def post(self, request):
+        signature = request.headers.get("Stripe-Signature", "")
+        if not signature:
+            return response.Response(
+                {"detail": "Missing Stripe-Signature header."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            event = verify_and_construct_stripe_event(request.body, signature)
+            result = handle_stripe_webhook_event(event)
+        except ValueError as exc:
+            return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        return response.Response(result, status=status.HTTP_200_OK)
 
 
 class WeeklySettlementListAPIView(generics.ListAPIView):

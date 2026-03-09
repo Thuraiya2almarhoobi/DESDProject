@@ -8,6 +8,10 @@ from rest_framework import serializers
 from .models import SettlementOrderLine, WeeklySettlement
 
 
+class StripeCheckoutSessionRequestSerializer(serializers.Serializer):
+    order_id = serializers.IntegerField(min_value=1)
+
+
 class SettlementOrderLineSerializer(serializers.ModelSerializer):
     order_number = serializers.CharField(source="order.order_number", read_only=True)
     delivery_date = serializers.DateTimeField(source="order.delivery_date", read_only=True)
