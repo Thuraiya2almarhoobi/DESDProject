@@ -4,6 +4,7 @@ import { ArrowLeft, BookOpenText, Leaf, Newspaper, Star } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { ApiFeedEntry, ApiRecipe, ApiStory, apiJson } from '../lib/api';
+import { useSafeBack } from '../lib/navigation';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
@@ -70,6 +71,7 @@ export function ContentFeedPage() {
   const { user } = useAuth();
   const isProducer = user?.role === 'PRODUCER';
   const isCustomer = user?.role === 'CUSTOMER';
+  const goBack = useSafeBack(isProducer ? '/producer/dashboard' : '/marketplace');
 
   const [feed, setFeed] = useState<ApiFeedEntry[]>([]);
   const [filter, setFilter] = useState<FeedFilter>('all');
@@ -244,7 +246,7 @@ export function ContentFeedPage() {
     <div className="min-h-screen bg-gradient-to-br from-[oklch(0.98_0.01_145)] to-[oklch(0.96_0.02_150)]">
       <header className="bg-white/80 backdrop-blur-sm border-b border-[oklch(0.88_0.02_145)] shadow-sm">
         <div className="max-w-6xl mx-auto px-4 py-4 flex justify-between items-center">
-          <Button variant="ghost" onClick={() => navigate(isProducer ? '/producer/dashboard' : '/marketplace')}>
+          <Button variant="ghost" onClick={goBack}>
             <ArrowLeft className="size-4 mr-2" />
             Back
           </Button>

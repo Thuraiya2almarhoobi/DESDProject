@@ -4,6 +4,7 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   ReactNode,
 } from 'react';
@@ -14,13 +15,21 @@ import { useAuth } from './AuthContext';
 
 interface CartContextType {
   items: CartItem[];
+  selectedCartItemIds: string[];
+  selectedItems: CartItem[];
   addToCart: (product: Product, quantity: number) => void;
   removeFromCart: (productId: string) => void;
   updateQuantity: (productId: string, quantity: number) => void;
   clearCart: () => void;
   getCartByProducer: () => CartByProducer[];
+  getSelectedCartByProducer: () => CartByProducer[];
   getTotalItems: () => number;
   getGrandTotal: () => number;
+  getSelectedGrandTotal: () => number;
+  isCartItemSelected: (cartItemId: string) => boolean;
+  setCartItemSelection: (cartItemIds: string[], checked: boolean) => void;
+  selectAllCartItems: () => void;
+  clearCartSelection: () => void;
   undoLastAdd: () => void;
   lastAddedItem: { product: Product; quantity: number } | null;
   refreshCart: () => Promise<void>;
@@ -78,10 +87,44 @@ function mapApiCartToItems(cart: ApiCart | null): CartItem[] {
 
   return cart.groups.flatMap((group) =>
     group.items.map((item) => ({
+      cartItemId: String(item.cart_item_id),
       product: mapApiCartItemToProduct(group, item),
       quantity: toNumber(item.quantity),
     })),
   );
+}
+
+function buildCartByProducer(cart: ApiCart | null, selectedCartItemIds?: string[]): CartByProducer[] {
+  if (!cart) {
+    return [];
+  }
+
+  const selectedSet = selectedCartItemIds ? new Set(selectedCartItemIds) : null;
+
+  return cart.groups
+    .map((group) => {
+      const items = group.items
+        .filter((item) => !selectedSet || selectedSet.has(String(item.cart_item_id)))
+        .map((item) => ({
+          cartItemId: String(item.cart_item_id),
+          product: mapApiCartItemToProduct(group, item),
+          quantity: toNumber(item.quantity),
+        }));
+
+      if (items.length === 0) {
+        return null;
+      }
+
+      const subtotal = items.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
+      return {
+        producerId: String(group.producer_id),
+        producerName: group.producer_name,
+        deliveryLeadTime: group.lead_time_hours,
+        items,
+        subtotal,
+      };
+    })
+    .filter((group): group is CartByProducer => Boolean(group));
 }
 
 function findApiCartItem(cart: ApiCart | null, productId: string): ApiCartItem | null {
@@ -110,12 +153,25 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [cart, setCart] = useState<ApiCart | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [lastAddedItem, setLastAddedItem] = useState<{ product: Product; quantity: number } | null>(null);
+  const [selectedCartItemIds, setSelectedCartItemIds] = useState<string[]>([]);
+  const previousCartItemIdsRef = useRef<string[]>([]);
 
   const items = useMemo(() => mapApiCartToItems(cart), [cart]);
+  const cartByProducer = useMemo(() => buildCartByProducer(cart), [cart]);
+  const selectedCartByProducer = useMemo(
+    () => buildCartByProducer(cart, selectedCartItemIds),
+    [cart, selectedCartItemIds],
+  );
+  const selectedItems = useMemo(
+    () => selectedCartByProducer.flatMap((group) => group.items),
+    [selectedCartByProducer],
+  );
 
   const refreshCart = useCallback(async () => {
     if (!user) {
       setCart(null);
+      setSelectedCartItemIds([]);
+      previousCartItemIdsRef.current = [];
       return;
     }
 
@@ -135,6 +191,21 @@ export function CartProvider({ children }: { children: ReactNode }) {
     void refreshCart();
   }, [refreshCart]);
 
+  useEffect(() => {
+    const validIds = items.map((item) => item.cartItemId).filter((value): value is string => Boolean(value));
+    const previousIds = previousCartItemIdsRef.current;
+
+    setSelectedCartItemIds((previous) => {
+      const validSet = new Set(validIds);
+      const kept = previous.filter((id) => validSet.has(id));
+      const keptSet = new Set(kept);
+      const newIds = validIds.filter((id) => !previousIds.includes(id) && !keptSet.has(id));
+      return [...kept, ...newIds];
+    });
+
+    previousCartItemIdsRef.current = validIds;
+  }, [items]);
+
   const addToCart = (product: Product, quantity: number) => {
     const productId = Number(product.id);
     if (!Number.isInteger(productId)) {
@@ -149,6 +220,20 @@ export function CartProvider({ children }: { children: ReactNode }) {
           body: JSON.stringify({ product_id: productId, quantity }),
         });
         setCart(result.cart);
+        const updatedGroups = buildCartByProducer(result.cart);
+        const matchingCartItemId = updatedGroups
+          .flatMap((group) => group.items)
+          .find((item) => item.product.id === product.id)?.cartItemId;
+        if (matchingCartItemId) {
+          setSelectedCartItemIds((previous) => {
+            const next = new Set(previous);
+            next.add(matchingCartItemId);
+            return updatedGroups
+              .flatMap((group) => group.items)
+              .map((item) => item.cartItemId)
+              .filter((cartItemId): cartItemId is string => Boolean(cartItemId) && next.has(cartItemId));
+          });
+        }
         setLastAddedItem({ product, quantity });
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unable to add item to cart.';
@@ -231,20 +316,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
   };
 
   const getCartByProducer = (): CartByProducer[] => {
-    if (!cart) {
-      return [];
-    }
+    return cartByProducer;
+  };
 
-    return cart.groups.map((group) => ({
-      producerId: String(group.producer_id),
-      producerName: group.producer_name,
-      deliveryLeadTime: group.lead_time_hours,
-      items: group.items.map((item) => ({
-        product: mapApiCartItemToProduct(group, item),
-        quantity: toNumber(item.quantity),
-      })),
-      subtotal: toNumber(group.subtotal),
-    }));
+  const getSelectedCartByProducer = (): CartByProducer[] => {
+    return selectedCartByProducer;
   };
 
   const getTotalItems = () => {
@@ -253,6 +329,43 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const getGrandTotal = () => {
     return toNumber(cart?.subtotal || 0);
+  };
+
+  const getSelectedGrandTotal = () => {
+    return selectedCartByProducer.reduce((sum, group) => sum + group.subtotal, 0);
+  };
+
+  const isCartItemSelected = (cartItemId: string) => {
+    return selectedCartItemIds.includes(cartItemId);
+  };
+
+  const setCartItemSelection = (cartItemIds: string[], checked: boolean) => {
+    setSelectedCartItemIds((previous) => {
+      const next = new Set(previous);
+      cartItemIds.forEach((cartItemId) => {
+        if (checked) {
+          next.add(cartItemId);
+        } else {
+          next.delete(cartItemId);
+        }
+      });
+
+      return items
+        .map((item) => item.cartItemId)
+        .filter((cartItemId): cartItemId is string => Boolean(cartItemId) && next.has(cartItemId));
+    });
+  };
+
+  const selectAllCartItems = () => {
+    setSelectedCartItemIds(
+      items
+        .map((item) => item.cartItemId)
+        .filter((cartItemId): cartItemId is string => Boolean(cartItemId)),
+    );
+  };
+
+  const clearCartSelection = () => {
+    setSelectedCartItemIds([]);
   };
 
   const undoLastAdd = () => {
@@ -281,13 +394,21 @@ export function CartProvider({ children }: { children: ReactNode }) {
     <CartContext.Provider
       value={{
         items,
+        selectedCartItemIds,
+        selectedItems,
         addToCart,
         removeFromCart,
         updateQuantity,
         clearCart,
         getCartByProducer,
+        getSelectedCartByProducer,
         getTotalItems,
         getGrandTotal,
+        getSelectedGrandTotal,
+        isCartItemSelected,
+        setCartItemSelection,
+        selectAllCartItems,
+        clearCartSelection,
         undoLastAdd,
         lastAddedItem,
         refreshCart,

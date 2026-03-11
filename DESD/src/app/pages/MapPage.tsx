@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ArrowLeft, MapPin, Route } from 'lucide-react';
 import { apiJson } from '../lib/api';
+import { getGoogleMapsEmbedUrl, getGoogleMapsSearchUrl } from '../lib/googleMaps';
+import { useSafeBack } from '../lib/navigation';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Input } from '../components/ui/input';
@@ -40,6 +42,7 @@ interface CartMilesPayload {
 
 export function MapPage() {
   const navigate = useNavigate();
+  const goBack = useSafeBack('/marketplace');
   const [postcode, setPostcode] = useState('');
   const [radius, setRadius] = useState('20');
   const [loading, setLoading] = useState(true);
@@ -84,7 +87,7 @@ export function MapPage() {
     <div className="min-h-screen bg-gradient-to-br from-[oklch(0.98_0.01_145)] to-[oklch(0.96_0.02_150)]">
       <header className="bg-white/80 backdrop-blur-sm border-b border-[oklch(0.88_0.02_145)] shadow-sm">
         <div className="max-w-6xl mx-auto px-4 py-4 flex justify-between items-center">
-          <Button variant="ghost" onClick={() => navigate('/marketplace')}>
+          <Button variant="ghost" onClick={goBack}>
             <ArrowLeft className="size-4 mr-2" />
             Back to Marketplace
           </Button>
@@ -153,16 +156,37 @@ export function MapPage() {
                       </div>
 
                       <div className="aspect-[2/1] rounded-md overflow-hidden bg-gray-100">
-                        <img
-                          src={`https://staticmap.openstreetmap.de/staticmap.php?center=${producer.coordinates.lat},${producer.coordinates.lng}&zoom=11&size=700x320&markers=${producer.coordinates.lat},${producer.coordinates.lng},green`}
-                          alt={`Map preview for ${producer.producer_name}`}
-                          className="w-full h-full object-cover"
-                        />
+                        {getGoogleMapsEmbedUrl(producer.coordinates, 11) ? (
+                          <iframe
+                            title={`Map preview for ${producer.producer_name}`}
+                            src={getGoogleMapsEmbedUrl(producer.coordinates, 11) || undefined}
+                            className="h-full w-full border-0"
+                            loading="lazy"
+                            referrerPolicy="no-referrer-when-downgrade"
+                            allowFullScreen
+                          />
+                        ) : (
+                          <div className="flex h-full items-center justify-center px-6 text-center text-sm text-gray-600">
+                            Google Maps preview is unavailable for this producer.
+                          </div>
+                        )}
                       </div>
 
-                      <div className="text-xs text-gray-600 flex items-center gap-2">
-                        <MapPin className="size-3" />
-                        Lat {producer.coordinates.lat}, Lng {producer.coordinates.lng}
+                      <div className="flex items-center justify-between gap-3 text-xs text-gray-600">
+                        <div className="flex items-center gap-2">
+                          <MapPin className="size-3" />
+                          Lat {producer.coordinates.lat}, Lng {producer.coordinates.lng}
+                        </div>
+                        {getGoogleMapsSearchUrl(producer.coordinates) && (
+                          <a
+                            href={getGoogleMapsSearchUrl(producer.coordinates) || undefined}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-medium text-green-700 underline"
+                          >
+                            Open in Google Maps
+                          </a>
+                        )}
                       </div>
                     </CardContent>
                   </Card>

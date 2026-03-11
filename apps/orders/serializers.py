@@ -74,6 +74,11 @@ class CheckoutRequestSerializer(serializers.Serializer):
     customer_postcode = serializers.CharField(max_length=12)
     payment_method = serializers.CharField(max_length=50, default="test_card")
     payment_token = serializers.CharField(max_length=120, required=False, allow_blank=True)
+    selected_cart_item_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1),
+        required=False,
+        allow_empty=False,
+    )
     delivery_date = serializers.DateField(required=False)
     producer_delivery_dates = serializers.DictField(
         child=serializers.DateField(), required=False, help_text="Mapping producer_id -> YYYY-MM-DD"
@@ -141,13 +146,13 @@ class OrderSummarySerializer(serializers.ModelSerializer):
         dates = self._delivery_dates(obj)
         if not dates:
             return None
-        return min(dates)
+        return min(dates).isoformat()
 
     def get_delivery_date_to(self, obj: Order):
         dates = self._delivery_dates(obj)
         if not dates:
             return None
-        return max(dates)
+        return max(dates).isoformat()
 
 
 class OrderDetailSerializer(serializers.ModelSerializer):

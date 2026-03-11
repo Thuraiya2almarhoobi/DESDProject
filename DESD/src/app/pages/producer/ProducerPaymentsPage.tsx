@@ -4,6 +4,7 @@ import { ArrowLeft, Calendar, Download, Loader2 } from 'lucide-react';
 import { format, isValid, parseISO } from 'date-fns';
 import { toast } from 'sonner';
 import { apiBlob, apiJson } from '../../lib/api';
+import { useSafeBack } from '../../lib/navigation';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
@@ -48,6 +49,7 @@ function triggerDownload(blob: Blob, filename: string): void {
 
 export function ProducerPaymentsPage() {
   const navigate = useNavigate();
+  const goBack = useSafeBack('/producer/dashboard');
   const [settlements, setSettlements] = useState<WeeklySettlementApi[]>([]);
   const [loading, setLoading] = useState(true);
   const [exportingId, setExportingId] = useState<number | null>(null);
@@ -123,7 +125,7 @@ export function ProducerPaymentsPage() {
     <div className="min-h-screen bg-gradient-to-br from-[oklch(0.98_0.01_145)] to-[oklch(0.96_0.02_150)]">
       <header className="bg-white/80 backdrop-blur-sm border-b border-[oklch(0.88_0.02_145)] shadow-sm">
         <div className="max-w-6xl mx-auto px-4 py-4">
-          <Button variant="ghost" onClick={() => navigate('/producer/dashboard')}>
+          <Button variant="ghost" onClick={goBack}>
             <ArrowLeft className="size-4 mr-2" />
             Back to Dashboard
           </Button>

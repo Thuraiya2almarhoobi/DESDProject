@@ -181,6 +181,42 @@ class OrdersCriticalFlowTests(APITestCase):
         self.assertEqual(len(producer_res.data), 1)
         self.assertEqual(producer_res.data[0]["id"], sub_order_a.id)
 
+    def test_checkout_can_process_only_selected_cart_items(self):
+        self._add_to_cart(self.product_a1, "2")
+        self._add_to_cart(self.product_b1, "3")
+
+        cart_res = self.client.get("/api/orders/cart/")
+        self.assertEqual(cart_res.status_code, status.HTTP_200_OK)
+
+        selected_item_id = cart_res.data["groups"][0]["items"][0]["cart_item_id"]
+        selected_producer_id = cart_res.data["groups"][0]["producer_id"]
+
+        checkout_res = self.client.post(
+            "/api/orders/checkout/",
+            {
+                "delivery_address": "45 Park Street, Bristol",
+                "customer_postcode": "BS1 5JG",
+                "selected_cart_item_ids": [selected_item_id],
+                "delivery_date": (timezone.localdate() + timedelta(days=2)).isoformat(),
+                "producer_delivery_dates": {
+                    str(selected_producer_id): (timezone.localdate() + timedelta(days=2)).isoformat(),
+                },
+                "payment_method": "test_card",
+                "payment_token": "tok_selected",
+            },
+            format="json",
+        )
+        self.assertEqual(checkout_res.status_code, status.HTTP_201_CREATED)
+
+        order = Order.objects.get(id=checkout_res.data["order"]["id"])
+        self.assertEqual(order.sub_orders.count(), 1)
+        self.assertEqual(order.items.count(), 1)
+        self.assertEqual(order.items.first().product, self.product_a1)
+
+        cart = Cart.objects.get(customer=self.customer)
+        self.assertEqual(cart.items.count(), 1)
+        self.assertEqual(cart.items.first().product, self.product_b1)
+
     def test_order_history_receipt_and_reorder(self):
         self._add_to_cart(self.product_a1, "1")
         delivery_date = (timezone.localdate() + timedelta(days=2)).isoformat()

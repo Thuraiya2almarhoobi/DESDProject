@@ -17,6 +17,7 @@ import {
 import { differenceInCalendarDays, format, isValid, parseISO } from 'date-fns';
 import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
+import { useSafeBack } from '../../lib/navigation';
 import { AvailabilityBadge, OrganicBadge, SurplusBadge } from '../../components/ProductBadges';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
@@ -133,6 +134,7 @@ function formatHarvestDate(value: string): string {
 
 export function ProducerInventoryPage() {
   const navigate = useNavigate();
+  const goBack = useSafeBack('/producer/dashboard');
   const { user } = useAuth();
   const demoUserEmail = (user?.email || 'producer@example.com').trim().toLowerCase();
 
@@ -406,7 +408,7 @@ export function ProducerInventoryPage() {
           <div className="flex items-center justify-between">
             <Button
               variant="ghost"
-              onClick={() => navigate('/producer/dashboard')}
+              onClick={goBack}
               className="focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
             >
               <ArrowLeft className="size-4 mr-2" />

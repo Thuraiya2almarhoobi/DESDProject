@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ArrowLeft, CreditCard, CheckCircle, XCircle } from 'lucide-react';
 import { useCart } from '../contexts/CartContext';
+import { useSafeBack } from '../lib/navigation';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -28,7 +29,15 @@ function dateOrDefault(value: string | undefined, leadHours: number): string {
 
 export function CheckoutPage() {
   const navigate = useNavigate();
-  const { items, getCartByProducer, getGrandTotal, refreshCart } = useCart();
+  const goBackToCart = useSafeBack('/cart');
+  const {
+    items,
+    selectedItems,
+    selectedCartItemIds,
+    getSelectedCartByProducer,
+    getSelectedGrandTotal,
+    refreshCart,
+  } = useCart();
 
   const [step, setStep] = useState<CheckoutStep>('address');
   const [address, setAddress] = useState('');
@@ -40,8 +49,8 @@ export function CheckoutPage() {
   const [orderComplete, setOrderComplete] = useState(false);
   const [createdOrder, setCreatedOrder] = useState<ApiOrderDetail | null>(null);
 
-  const cartByProducer = getCartByProducer();
-  const grandTotal = getGrandTotal();
+  const cartByProducer = getSelectedCartByProducer();
+  const grandTotal = getSelectedGrandTotal();
   const commission = grandTotal * 0.05;
   const total = grandTotal + commission;
 
@@ -98,7 +107,7 @@ export function CheckoutPage() {
     });
   }, [cartByProducer]);
 
-  if (items.length === 0 && !orderComplete) {
+  if ((items.length === 0 || selectedItems.length === 0) && !orderComplete) {
     navigate('/cart');
     return null;
   }
@@ -126,6 +135,7 @@ export function CheckoutPage() {
         customer_postcode: postcode,
         payment_method: 'test_card',
         payment_token: 'tok_demo',
+        selected_cart_item_ids: selectedCartItemIds.map((cartItemId) => Number(cartItemId)),
       };
 
       if (cartByProducer.length === 1) {
@@ -232,9 +242,9 @@ export function CheckoutPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[oklch(0.98_0.01_145)] to-[oklch(0.96_0.02_150)]">
-      <header className="bg-white/80 backdrop-blur-sm border-b border-[oklch(0.88_0.02_145)] shadow-sm">
-        <div className="max-w-5xl mx-auto px-4 py-4">
-          <Button variant="ghost" onClick={() => navigate('/cart')}>
+        <header className="bg-white/80 backdrop-blur-sm border-b border-[oklch(0.88_0.02_145)] shadow-sm">
+          <div className="max-w-5xl mx-auto px-4 py-4">
+          <Button variant="ghost" onClick={goBackToCart}>
             <ArrowLeft className="size-4 mr-2" />
             Back to Cart
           </Button>

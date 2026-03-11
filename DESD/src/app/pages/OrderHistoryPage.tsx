@@ -1,16 +1,40 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { ArrowLeft, Download, RotateCcw, ReceiptText } from 'lucide-react';
+import {
+  ArrowLeft,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Clock3,
+  Download,
+  ReceiptText,
+  RotateCcw,
+  Route,
+  Truck,
+  XCircle,
+} from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { ApiOrderDetail, ApiOrderSummary, apiBlob, apiJson } from '../lib/api';
+import { getGoogleMapsDirectionsEmbedUrl, getGoogleMapsDirectionsUrl } from '../lib/googleMaps';
+import { useSafeBack } from '../lib/navigation';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Separator } from '../components/ui/separator';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../components/ui/collapsible';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { cn } from '../components/ui/utils';
+
+const CURRENT_ORDER_STATUSES = new Set(['pending', 'confirmed', 'ready']);
+const TRACKING_STEPS = [
+  { key: 'pending', label: 'Placed' },
+  { key: 'confirmed', label: 'Confirmed' },
+  { key: 'ready', label: 'Out for Delivery' },
+  { key: 'delivered', label: 'Delivered' },
+] as const;
 
 function maskPaymentReference(reference: string): string {
   if (!reference || reference.length < 6) {
@@ -19,17 +43,84 @@ function maskPaymentReference(reference: string): string {
   return `${reference.slice(0, 4)}***${reference.slice(-3)}`;
 }
 
+function formatStatusLabel(status: string): string {
+  if (!status) {
+    return 'Unknown';
+  }
+
+  return status
+    .replaceAll('_', ' ')
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function isCurrentOrderStatus(status: string): boolean {
+  return CURRENT_ORDER_STATUSES.has(status);
+}
+
+function getTrackingMessage(status: string): string {
+  switch (status) {
+    case 'pending':
+      return 'Order placed. The producer still needs to confirm and prepare the delivery.';
+    case 'confirmed':
+      return 'The producer has confirmed the order and is getting it ready for dispatch.';
+    case 'ready':
+      return 'The order is ready and currently in the delivery stage.';
+    case 'delivered':
+      return 'This order has been delivered successfully.';
+    case 'cancelled':
+      return 'This order was cancelled and is no longer moving through the delivery flow.';
+    default:
+      return 'Tracking information is being prepared.';
+  }
+}
+
+function getTrackingStepIndex(status: string): number {
+  switch (status) {
+    case 'pending':
+      return 0;
+    case 'confirmed':
+      return 1;
+    case 'ready':
+      return 2;
+    case 'delivered':
+      return 3;
+    default:
+      return -1;
+  }
+}
+
+function getStatusBadgeClass(status: string): string {
+  switch (status) {
+    case 'pending':
+      return 'bg-amber-100 text-amber-800 border-amber-200';
+    case 'confirmed':
+      return 'bg-blue-100 text-blue-800 border-blue-200';
+    case 'ready':
+      return 'bg-green-100 text-green-800 border-green-200';
+    case 'delivered':
+      return 'bg-emerald-100 text-emerald-800 border-emerald-200';
+    case 'cancelled':
+      return 'bg-red-100 text-red-700 border-red-200';
+    default:
+      return 'bg-gray-100 text-gray-700 border-gray-200';
+  }
+}
+
 export function OrderHistoryPage() {
   const navigate = useNavigate();
+  const goBack = useSafeBack('/marketplace');
   const [orders, setOrders] = useState<ApiOrderSummary[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<ApiOrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [activeOrderId, setActiveOrderId] = useState<number | null>(null);
+  const [activeOrderView, setActiveOrderView] = useState<'details' | 'tracking' | null>(null);
   const [producerNameFilter, setProducerNameFilter] = useState('all');
   const [fromDateFilter, setFromDateFilter] = useState('');
   const [toDateFilter, setToDateFilter] = useState('');
   const [producerOptions, setProducerOptions] = useState<string[]>([]);
+  const [currentOrdersOpen, setCurrentOrdersOpen] = useState(true);
+  const [previousOrdersOpen, setPreviousOrdersOpen] = useState(true);
 
   const hasActiveFilters = producerNameFilter !== 'all' || Boolean(fromDateFilter) || Boolean(toDateFilter);
 
@@ -68,6 +159,7 @@ export function OrderHistoryPage() {
 
           if (activeOrderId && !filteredHistory.some((order) => order.id === activeOrderId)) {
             setActiveOrderId(null);
+            setActiveOrderView(null);
             setSelectedOrder(null);
           }
         }
@@ -89,14 +181,21 @@ export function OrderHistoryPage() {
     };
   }, [queryString]);
 
-  const openOrder = async (orderId: number) => {
-    if (activeOrderId === orderId) {
+  const openOrderPanel = async (orderId: number, view: 'details' | 'tracking') => {
+    if (activeOrderId === orderId && activeOrderView === view) {
       setActiveOrderId(null);
+      setActiveOrderView(null);
       setSelectedOrder(null);
       return;
     }
 
     setActiveOrderId(orderId);
+    setActiveOrderView(view);
+
+    if (selectedOrder?.id === orderId) {
+      return;
+    }
+
     setDetailLoading(true);
     try {
       const detail = await apiJson<ApiOrderDetail>(`/api/orders/history/${orderId}/`);
@@ -104,6 +203,7 @@ export function OrderHistoryPage() {
     } catch (error) {
       toast.error('Unable to load order details.');
       setActiveOrderId(null);
+      setActiveOrderView(null);
       setSelectedOrder(null);
     } finally {
       setDetailLoading(false);
@@ -155,11 +255,278 @@ export function OrderHistoryPage() {
     return `${format(new Date(order.delivery_date_from), 'MMM d')} - ${format(new Date(order.delivery_date_to), 'MMM d, yyyy')}`;
   };
 
+  const currentOrders = useMemo(
+    () => orders.filter((order) => isCurrentOrderStatus(order.status)),
+    [orders],
+  );
+
+  const previousOrders = useMemo(
+    () => orders.filter((order) => !isCurrentOrderStatus(order.status)),
+    [orders],
+  );
+
+  const renderTrackingMap = (order: ApiOrderDetail, subOrder: ApiOrderDetail['sub_orders'][number]) => {
+    const mapUrl = getGoogleMapsDirectionsEmbedUrl(subOrder.producer.postcode, order.customer_postcode);
+    const routeUrl = getGoogleMapsDirectionsUrl(subOrder.producer.postcode, order.customer_postcode);
+    const stepIndex = getTrackingStepIndex(subOrder.status);
+
+    return (
+      <div key={subOrder.id} className="rounded-xl border border-[oklch(0.88_0.02_145)] bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-base font-semibold">{subOrder.producer.business_name}</p>
+            <p className="text-sm text-gray-600">
+              Tracking route: {subOrder.producer.postcode} to {order.customer_postcode}
+            </p>
+          </div>
+          <Badge className={cn('border', getStatusBadgeClass(subOrder.status))}>
+            {formatStatusLabel(subOrder.status)}
+          </Badge>
+        </div>
+
+        <div className="mt-3 rounded-lg bg-[oklch(0.985_0.01_145)] p-3 text-sm text-gray-700">
+          {getTrackingMessage(subOrder.status)}
+        </div>
+
+        <div className="mt-4 grid gap-2 sm:grid-cols-4">
+          {TRACKING_STEPS.map((step, index) => {
+            const isComplete = stepIndex >= index;
+            const isCancelled = subOrder.status === 'cancelled';
+
+            return (
+              <div
+                key={`${subOrder.id}-${step.key}`}
+                className={cn(
+                  'rounded-lg border px-3 py-2 text-xs font-medium transition-colors',
+                  isCancelled
+                    ? 'border-red-100 bg-red-50 text-red-600'
+                    : isComplete
+                      ? 'border-green-200 bg-green-50 text-green-700'
+                      : 'border-gray-200 bg-gray-50 text-gray-500',
+                )}
+              >
+                {step.label}
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="mt-4 overflow-hidden rounded-xl border bg-gray-50">
+          <div className="aspect-[16/7]">
+            {mapUrl ? (
+              <iframe
+                title={`Tracking map for ${subOrder.producer.business_name}`}
+                src={mapUrl}
+                className="h-full w-full border-0"
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+                allowFullScreen
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center px-6 text-center text-sm text-gray-600">
+                Tracking map is unavailable right now, but the route details are still shown for this order.
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-600">
+          <span>Delivery target: {format(new Date(subOrder.delivery_date), 'MMM d, yyyy')}</span>
+          {routeUrl && (
+            <a
+              href={routeUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-green-700 underline"
+            >
+              Open route in Google Maps
+            </a>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderOrderCard = (order: ApiOrderSummary, sectionLabel: 'current' | 'previous') => {
+    const isCurrent = sectionLabel === 'current';
+    const isDetailsOpen = activeOrderId === order.id && activeOrderView === 'details';
+    const isTrackingOpen = activeOrderId === order.id && activeOrderView === 'tracking';
+    const isPanelOpen = activeOrderId === order.id;
+
+    return (
+      <Card key={order.id}>
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap gap-3 justify-between items-start">
+            <div>
+              <CardTitle className="text-lg">{order.order_number}</CardTitle>
+              <p className="text-sm text-gray-600">
+                Placed {format(new Date(order.created_at), 'MMM d, yyyy, h:mm a')}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge className={cn('border', getStatusBadgeClass(order.status))}>
+                {formatStatusLabel(order.status)}
+              </Badge>
+              <Badge variant="outline">{formatStatusLabel(order.payment_status)}</Badge>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid sm:grid-cols-4 gap-3 text-sm">
+            <div>
+              <p className="text-gray-500">Producers</p>
+              <p className="font-medium">{order.producer_names.join(', ')}</p>
+            </div>
+            <div>
+              <p className="text-gray-500">Delivery Date</p>
+              <p className="font-medium">{renderDeliveryWindow(order)}</p>
+            </div>
+            <div>
+              <p className="text-gray-500">{isCurrent ? 'Tracking' : 'Outcome'}</p>
+              <p className="font-medium text-gray-800">
+                {isCurrent ? 'Still in progress' : order.status === 'cancelled' ? 'Order closed' : 'Completed'}
+              </p>
+            </div>
+            <div>
+              <p className="text-gray-500">Total Paid</p>
+              <p className="font-medium text-green-700">£{Number(order.total_amount).toFixed(2)}</p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {isCurrent ? (
+              <>
+                <Button
+                  variant={isDetailsOpen ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => openOrderPanel(order.id, 'details')}
+                >
+                  {isDetailsOpen ? 'Hide Order Details' : 'Display Order Details'}
+                </Button>
+                <Button
+                  variant={isTrackingOpen ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => openOrderPanel(order.id, 'tracking')}
+                >
+                  {isTrackingOpen ? 'Hide Tracking' : 'Track Order'}
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button variant="outline" size="sm" onClick={() => openOrderPanel(order.id, 'details')}>
+                  {isDetailsOpen ? 'Hide Details' : 'View Details'}
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => downloadReceipt(order)}>
+                  <Download className="size-4 mr-2" />
+                  Receipt
+                </Button>
+                <Button size="sm" onClick={() => reorderOrder(order.id)}>
+                  <RotateCcw className="size-4 mr-2" />
+                  Reorder
+                </Button>
+              </>
+            )}
+          </div>
+
+          {isPanelOpen && (
+            <>
+              <Separator />
+              {detailLoading || !selectedOrder ? (
+                <p className="text-sm text-gray-600">Loading order details...</p>
+              ) : (
+                <>
+                  {activeOrderView === 'details' && (
+                    <div className="space-y-5">
+                      <div className="grid sm:grid-cols-3 gap-4 text-sm">
+                        <div>
+                          <p className="text-gray-500">Delivery Address</p>
+                          <p className="font-medium">{selectedOrder.delivery_address}</p>
+                          <p className="text-gray-600">{selectedOrder.customer_postcode}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500">Payment Reference</p>
+                          <p className="font-medium">{maskPaymentReference(selectedOrder.payment_reference)}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500">{isCurrent ? 'Order Status' : 'Final Status'}</p>
+                          <p className="font-medium">{getTrackingMessage(selectedOrder.status)}</p>
+                        </div>
+                      </div>
+
+                      <div>
+                        <p className="mb-2 text-sm font-medium">Items</p>
+                        <div className="space-y-2">
+                          {selectedOrder.items.map((item) => (
+                            <div key={item.id} className="flex justify-between items-start rounded-md border bg-gray-50 p-3">
+                              <div>
+                                <p className="font-medium">{item.product_name}</p>
+                                <p className="text-xs text-gray-600">
+                                  {item.producer_name} • {item.quantity} {item.unit} × £{Number(item.unit_price).toFixed(2)}
+                                </p>
+                              </div>
+                              <p className="font-medium">£{Number(item.line_total).toFixed(2)}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <p className="text-sm font-medium mb-2">Producer Sub-orders</p>
+                        <div className="space-y-2">
+                          {selectedOrder.sub_orders.map((subOrder) => (
+                            <div key={subOrder.id} className="border-l-4 border-green-500 pl-3">
+                              <p className="font-medium">{subOrder.producer.business_name}</p>
+                              <p className="text-xs text-gray-600">
+                                Delivery {format(new Date(subOrder.delivery_date), 'MMM d, yyyy')} • Status {formatStatusLabel(subOrder.status)}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {activeOrderView === 'tracking' && isCurrent && (
+                    <div className="space-y-5">
+                      <div className="rounded-xl border border-[oklch(0.88_0.02_145)] bg-[oklch(0.985_0.01_145)] p-4">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Truck className="size-4 text-green-700" />
+                          <p className="text-sm font-medium text-green-900">Current order tracking</p>
+                        </div>
+                        <p className="mt-2 text-sm text-gray-700">{getTrackingMessage(selectedOrder.status)}</p>
+                      </div>
+
+                      <div>
+                        <div className="mb-3 flex items-center gap-2">
+                          <Route className="size-4 text-green-700" />
+                          <p className="text-sm font-medium">Producer Route Tracking</p>
+                        </div>
+                        <div className="space-y-4">
+                          {selectedOrder.sub_orders.map((subOrder) => renderTrackingMap(selectedOrder, subOrder))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {activeOrderView === 'tracking' && !isCurrent && (
+                    <div className="rounded-xl border border-[oklch(0.88_0.02_145)] bg-gray-50 p-4 text-sm text-gray-600">
+                      Tracking is only available for current orders.
+                    </div>
+                  )}
+                </>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-[oklch(0.98_0.01_145)] to-[oklch(0.96_0.02_150)]">
       <header className="bg-white/80 backdrop-blur-sm border-b border-[oklch(0.88_0.02_145)] shadow-sm">
         <div className="max-w-6xl mx-auto px-4 py-4 flex justify-between items-center">
-          <Button variant="ghost" onClick={() => navigate('/marketplace')}>
+          <Button variant="ghost" onClick={goBack}>
             <ArrowLeft className="size-4 mr-2" />
             Back to Marketplace
           </Button>
@@ -170,7 +537,7 @@ export function OrderHistoryPage() {
       <main className="max-w-6xl mx-auto px-4 py-8 space-y-6">
         <div>
           <h1 className="text-3xl font-semibold">Order History</h1>
-          <p className="text-sm text-gray-600 mt-1">View receipts, inspect order breakdowns, and reorder quickly.</p>
+          <p className="text-sm text-gray-600 mt-1">Track current orders, review completed ones, open receipts, and reorder quickly.</p>
         </div>
 
         <Card>
@@ -233,7 +600,7 @@ export function OrderHistoryPage() {
 
         {loading ? (
           <Card>
-            <CardContent className="py-10 text-center text-gray-600">Loading your previous orders...</CardContent>
+            <CardContent className="py-10 text-center text-gray-600">Loading your orders...</CardContent>
           </Card>
         ) : orders.length === 0 ? (
           <Card>
@@ -259,108 +626,96 @@ export function OrderHistoryPage() {
             </CardContent>
           </Card>
         ) : (
-          orders.map((order) => (
-            <Card key={order.id}>
-              <CardHeader className="pb-3">
-                <div className="flex flex-wrap gap-3 justify-between items-start">
-                  <div>
-                    <CardTitle className="text-lg">{order.order_number}</CardTitle>
-                    <p className="text-sm text-gray-600">
-                      Placed {format(new Date(order.created_at), 'MMM d, yyyy, h:mm a')}
-                    </p>
+          <div className="space-y-4">
+            <Card className="border-[oklch(0.85_0.05_150)] bg-[linear-gradient(135deg,rgba(237,248,240,0.9),rgba(255,255,255,0.96))]">
+              <CardContent className="grid gap-4 p-5 md:grid-cols-3">
+                <div className="rounded-xl bg-white/80 p-4 shadow-sm">
+                  <div className="flex items-center gap-2 text-green-800">
+                    <Clock3 className="size-4" />
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em]">Current Orders</p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="secondary">{order.status}</Badge>
-                    <Badge variant="outline">{order.payment_status}</Badge>
-                  </div>
+                  <p className="mt-2 text-3xl font-semibold">{currentOrders.length}</p>
+                  <p className="text-sm text-gray-600">Still moving through the delivery flow.</p>
                 </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid sm:grid-cols-3 gap-3 text-sm">
-                  <div>
-                    <p className="text-gray-500">Producers</p>
-                    <p className="font-medium">{order.producer_names.join(', ')}</p>
+                <div className="rounded-xl bg-white/80 p-4 shadow-sm">
+                  <div className="flex items-center gap-2 text-emerald-800">
+                    <CheckCircle2 className="size-4" />
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em]">Previous Orders</p>
                   </div>
-                  <div>
-                    <p className="text-gray-500">Delivery Date</p>
-                    <p className="font-medium">{renderDeliveryWindow(order)}</p>
-                  </div>
-                  <div>
-                    <p className="text-gray-500">Total Paid</p>
-                    <p className="font-medium text-green-700">£{Number(order.total_amount).toFixed(2)}</p>
-                  </div>
+                  <p className="mt-2 text-3xl font-semibold">{previousOrders.length}</p>
+                  <p className="text-sm text-gray-600">Delivered or closed order records.</p>
                 </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <Button variant="outline" size="sm" onClick={() => openOrder(order.id)}>
-                    {activeOrderId === order.id ? 'Hide Details' : 'View Details'}
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => downloadReceipt(order)}>
-                    <Download className="size-4 mr-2" />
-                    Receipt
-                  </Button>
-                  <Button size="sm" onClick={() => reorderOrder(order.id)}>
-                    <RotateCcw className="size-4 mr-2" />
-                    Reorder
-                  </Button>
+                <div className="rounded-xl bg-white/80 p-4 shadow-sm">
+                  <div className="flex items-center gap-2 text-blue-800">
+                    <Route className="size-4" />
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em]">Tracking View</p>
+                  </div>
+                  <p className="mt-2 text-sm font-medium text-gray-900">Open any order to view producer-by-producer route maps.</p>
+                  <p className="mt-1 text-sm text-gray-600">Current orders show live progress state, previous orders keep route history visible.</p>
                 </div>
-
-                {activeOrderId === order.id && (
-                  <>
-                    <Separator />
-                    {detailLoading || !selectedOrder ? (
-                      <p className="text-sm text-gray-600">Loading order details...</p>
-                    ) : (
-                      <div className="space-y-4">
-                        <div className="grid sm:grid-cols-2 gap-4 text-sm">
-                          <div>
-                            <p className="text-gray-500">Delivery Address</p>
-                            <p className="font-medium">{selectedOrder.delivery_address}</p>
-                            <p className="text-gray-600">{selectedOrder.customer_postcode}</p>
-                          </div>
-                          <div>
-                            <p className="text-gray-500">Payment Reference</p>
-                            <p className="font-medium">{maskPaymentReference(selectedOrder.payment_reference)}</p>
-                          </div>
-                        </div>
-
-                        <div>
-                          <p className="text-sm font-medium mb-2">Items</p>
-                          <div className="space-y-2">
-                            {selectedOrder.items.map((item) => (
-                              <div key={item.id} className="flex justify-between items-start border rounded-md p-3 bg-gray-50">
-                                <div>
-                                  <p className="font-medium">{item.product_name}</p>
-                                  <p className="text-xs text-gray-600">
-                                    {item.producer_name} • {item.quantity} {item.unit} × £{Number(item.unit_price).toFixed(2)}
-                                  </p>
-                                </div>
-                                <p className="font-medium">£{Number(item.line_total).toFixed(2)}</p>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-
-                        <div>
-                          <p className="text-sm font-medium mb-2">Producer Sub-orders</p>
-                          <div className="space-y-2">
-                            {selectedOrder.sub_orders.map((subOrder) => (
-                              <div key={subOrder.id} className="border-l-4 border-green-500 pl-3">
-                                <p className="font-medium">{subOrder.producer.business_name}</p>
-                                <p className="text-xs text-gray-600">
-                                  Delivery {format(new Date(subOrder.delivery_date), 'MMM d, yyyy')} • Status {subOrder.status}
-                                </p>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
               </CardContent>
             </Card>
-          ))
+
+            <Collapsible open={currentOrdersOpen} onOpenChange={setCurrentOrdersOpen}>
+              <Card>
+                <CardHeader className="pb-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <CardTitle className="text-xl">Current Orders</CardTitle>
+                      <p className="text-sm text-gray-600">Orders that are still pending, confirmed, or out for delivery.</p>
+                    </div>
+                    <CollapsibleTrigger asChild>
+                      <Button variant="outline" size="sm">
+                        {currentOrdersOpen ? <ChevronUp className="size-4 mr-2" /> : <ChevronDown className="size-4 mr-2" />}
+                        {currentOrdersOpen ? 'Hide Section' : 'Show Section'}
+                      </Button>
+                    </CollapsibleTrigger>
+                  </div>
+                </CardHeader>
+                <CollapsibleContent>
+                  <CardContent className="space-y-4">
+                    {currentOrders.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-[oklch(0.85_0.05_150)] bg-[oklch(0.985_0.01_145)] px-4 py-8 text-center text-sm text-gray-600">
+                        No current orders right now.
+                      </div>
+                    ) : (
+                      currentOrders.map((order) => renderOrderCard(order, 'current'))
+                    )}
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
+
+            <Collapsible open={previousOrdersOpen} onOpenChange={setPreviousOrdersOpen}>
+              <Card>
+                <CardHeader className="pb-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <CardTitle className="text-xl">Previous Orders</CardTitle>
+                      <p className="text-sm text-gray-600">Delivered or cancelled orders kept for receipts, history, and reorders.</p>
+                    </div>
+                    <CollapsibleTrigger asChild>
+                      <Button variant="outline" size="sm">
+                        {previousOrdersOpen ? <ChevronUp className="size-4 mr-2" /> : <ChevronDown className="size-4 mr-2" />}
+                        {previousOrdersOpen ? 'Hide Section' : 'Show Section'}
+                      </Button>
+                    </CollapsibleTrigger>
+                  </div>
+                </CardHeader>
+                <CollapsibleContent>
+                  <CardContent className="space-y-4">
+                    {previousOrders.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-8 text-center text-sm text-gray-600">
+                        No previous orders yet.
+                      </div>
+                    ) : (
+                      previousOrders.map((order) => renderOrderCard(order, 'previous'))
+                    )}
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
+          </div>
         )}
       </main>
     </div>

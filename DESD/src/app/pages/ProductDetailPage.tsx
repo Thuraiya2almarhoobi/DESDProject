@@ -16,6 +16,7 @@ import { Skeleton } from '../components/ui/skeleton';
 import { toast } from 'sonner';
 import { Product } from '../types';
 import { ApiProduct, ApiRecipe, apiJson, mapApiProductToProduct } from '../lib/api';
+import { useSafeBack } from '../lib/navigation';
 
 interface ProducerDistanceRow {
   producer_id: number;
@@ -30,6 +31,7 @@ interface ProducerDistanceRow {
 export function ProductDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const goBack = useSafeBack('/marketplace');
   const { addToCart } = useCart();
 
   const [product, setProduct] = useState<Product | null>(null);
@@ -152,7 +154,7 @@ export function ProductDetailPage() {
       <div className="min-h-screen bg-gradient-to-br from-[oklch(0.98_0.01_145)] to-[oklch(0.96_0.02_150)]">
         <header className="bg-white/80 backdrop-blur-sm border-b border-[oklch(0.88_0.02_145)] sticky top-0 z-10 shadow-sm">
           <div className="max-w-5xl mx-auto px-4 py-4">
-            <Button variant="ghost" onClick={() => navigate('/marketplace')}>
+            <Button variant="ghost" onClick={goBack}>
               <ArrowLeft className="size-4 mr-2" />
               Back to Marketplace
             </Button>
@@ -172,7 +174,7 @@ export function ProductDetailPage() {
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[oklch(0.98_0.01_145)] to-[oklch(0.96_0.02_150)]">
         <div className="text-center max-w-md px-4">
           <p className="text-gray-700 mb-4">{error || 'Product not found'}</p>
-          <Button onClick={() => navigate('/marketplace')}>Back to Marketplace</Button>
+          <Button onClick={goBack}>Back to Marketplace</Button>
         </div>
       </div>
     );
@@ -182,7 +184,7 @@ export function ProductDetailPage() {
     <div className="min-h-screen bg-gradient-to-br from-[oklch(0.98_0.01_145)] to-[oklch(0.96_0.02_150)]">
       <header className="bg-white/80 backdrop-blur-sm border-b border-[oklch(0.88_0.02_145)] sticky top-0 z-10 shadow-sm">
         <div className="max-w-5xl mx-auto px-4 py-4">
-          <Button variant="ghost" onClick={() => navigate('/marketplace')}>
+          <Button variant="ghost" onClick={goBack}>
             <ArrowLeft className="size-4 mr-2" />
             Back to Marketplace
           </Button>

@@ -2,6 +2,9 @@ FROM node:22-slim AS frontend-build
 
 WORKDIR /frontend
 
+ARG VITE_GOOGLE_MAPS_API_KEY
+ENV VITE_GOOGLE_MAPS_API_KEY=${VITE_GOOGLE_MAPS_API_KEY}
+
 COPY DESD/package*.json ./
 RUN npm install
 

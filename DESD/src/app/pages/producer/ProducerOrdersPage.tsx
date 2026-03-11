@@ -15,6 +15,7 @@ import {
 import { differenceInHours, format, isValid, parseISO } from 'date-fns';
 import { toast } from 'sonner';
 import { apiJson } from '../../lib/api';
+import { useSafeBack } from '../../lib/navigation';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
@@ -69,6 +70,7 @@ function isOrderUrgent(order: ProducerSubOrderApi): boolean {
 
 export function ProducerOrdersPage() {
   const navigate = useNavigate();
+  const goBack = useSafeBack('/producer/dashboard');
   const [orders, setOrders] = useState<ProducerSubOrderApi[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<ProducerOrderStatus | 'all'>('all');
@@ -159,7 +161,7 @@ export function ProducerOrdersPage() {
         <div className="max-w-6xl mx-auto px-4 py-4">
           <Button
             variant="ghost"
-            onClick={() => navigate('/producer/dashboard')}
+            onClick={goBack}
             className="focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
           >
             <ArrowLeft className="size-4 mr-2" />
