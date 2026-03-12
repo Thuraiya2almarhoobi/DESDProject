@@ -1,10 +1,11 @@
-# Sprint 1 Setup and Commands
+# Sprint 2 Setup and Commands
 
 ## Backend (Django + DRF)
 ```bash
 # Requires PostgreSQL running (see Docker section below)
 python3 manage.py migrate
 python3 manage.py seed_demo_data
+python3 manage.py seed_catalog_demo
 python3 manage.py runserver
 ```
 
@@ -26,7 +27,7 @@ docker compose up --build
 ```
 
 Notes:
-- `web` container runs migrations and seeds demo data on startup.
+- `web` container runs migrations, `seed_demo_data`, and `seed_catalog_demo` on startup.
 - `db` container runs PostgreSQL 16 and persists data in a Docker volume.
 - After startup, open: `http://127.0.0.1:8000/`
 

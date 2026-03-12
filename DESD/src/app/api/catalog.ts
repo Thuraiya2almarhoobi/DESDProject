@@ -1,4 +1,6 @@
 import { mockProducts } from "../data/mockData";
+import { getBasicAuthToken } from "../lib/api";
+import { getAccessToken } from "../lib/tokenStorage";
 import { AvailabilityType, Product, ProductReview, ProductUnit } from "../types";
 
 const API_BASE_URL =
@@ -24,11 +26,17 @@ interface ApiCategory {
 
 interface ApiReview {
   id: number;
+  user_id?: number | null;
   reviewer_name?: string;
   rating?: number;
   comment?: string;
   verified_purchase?: boolean;
   created_at?: string;
+}
+
+interface CreateReviewPayload {
+  rating: number;
+  comment: string;
 }
 
 interface ApiProduct {
@@ -161,6 +169,7 @@ function mapProduct(apiProduct: ApiProduct): Product {
 function mapReview(review: ApiReview): ProductReview {
   return {
     id: String(review.id),
+    userId: review.user_id === null || review.user_id === undefined ? undefined : String(review.user_id),
     reviewerName: review.reviewer_name || "Anonymous",
     rating: review.rating || 0,
     comment: review.comment || "",
@@ -211,12 +220,62 @@ function applyMockFilters(products: Product[], params: ProductQueryParams): Prod
   });
 }
 
-async function requestJson<T>(url: string): Promise<T> {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Request failed (${response.status})`);
+function errorMessageFromPayload(payload: unknown, fallback: string): string {
+  if (payload && typeof payload === "object") {
+    const detail = (payload as { detail?: unknown }).detail;
+    if (typeof detail === "string" && detail.trim()) {
+      return detail;
+    }
+    for (const value of Object.values(payload as Record<string, unknown>)) {
+      if (typeof value === "string" && value.trim()) {
+        return value;
+      }
+      if (Array.isArray(value) && typeof value[0] === "string" && value[0].trim()) {
+        return value[0];
+      }
+    }
   }
-  return (await response.json()) as T;
+  return fallback;
+}
+
+async function readResponseBody(response: Response): Promise<unknown> {
+  if (response.status === 204) {
+    return null;
+  }
+
+  const contentType = response.headers.get("content-type") || "";
+  if (contentType.includes("application/json")) {
+    return response.json();
+  }
+
+  return response.text();
+}
+
+async function requestJson<T>(url: string, init: RequestInit = {}): Promise<T> {
+  const headers = new Headers(init.headers);
+  if (init.body && !headers.has("Content-Type") && !(init.body instanceof FormData)) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  if (!headers.has("Authorization")) {
+    const accessToken = getAccessToken();
+    const basicToken = getBasicAuthToken();
+    if (accessToken) {
+      headers.set("Authorization", `Bearer ${accessToken}`);
+    } else if (basicToken) {
+      headers.set("Authorization", `Basic ${basicToken}`);
+    }
+  }
+
+  const response = await fetch(url, {
+    ...init,
+    headers,
+  });
+  const payload = await readResponseBody(response);
+  if (!response.ok) {
+    throw new Error(errorMessageFromPayload(payload, `Request failed (${response.status})`));
+  }
+  return payload as T;
 }
 
 function buildProductsQueryString(params: ProductQueryParams): string {
@@ -279,4 +338,19 @@ export async function fetchProductReviews(productId: string): Promise<ProductRev
 
   const reviews = await requestJson<ApiReview[]>(`${API_BASE_URL}/products/${productId}/reviews`);
   return reviews.map(mapReview);
+}
+
+export async function createProductReview(
+  productId: string,
+  payload: CreateReviewPayload,
+): Promise<ProductReview> {
+  if (USE_MOCK_PRODUCTS) {
+    throw new Error("Review submission is unavailable while mock catalog data is enabled.");
+  }
+
+  const review = await requestJson<ApiReview>(`${API_BASE_URL}/products/${productId}/reviews`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  return mapReview(review);
 }

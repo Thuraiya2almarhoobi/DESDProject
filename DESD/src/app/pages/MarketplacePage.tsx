@@ -5,7 +5,8 @@ import { toast } from 'sonner';
 import { Product } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
-import { ApiProduct, apiJson, mapApiProductToProduct } from '../lib/api';
+import { fetchCategories, fetchProducts } from '../api/catalog';
+import { getDashboardPathForRole } from '../lib/roleRouting';
 import { Button, buttonVariants } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Checkbox } from '../components/ui/checkbox';
@@ -78,6 +79,7 @@ export function MarketplacePage() {
   const [viewMode, setViewMode] = useState<ViewMode>('all');
   const [excludedAllergens, setExcludedAllergens] = useState<string[]>([]);
   const [reloadKey, setReloadKey] = useState(0);
+  const isCustomer = user?.role === 'CUSTOMER';
   const customerName = (user?.name || '').trim() || 'Customer';
   const defaultAddressText = useMemo(() => {
     if (!addresses || addresses.length === 0) {
@@ -91,58 +93,68 @@ export function MarketplacePage() {
 
   const handleLogout = () => {
     logout();
-    navigate('/login');
+    navigate('/');
   };
 
   useEffect(() => {
     let mounted = true;
 
-    const loadProducts = async () => {
-      setIsLoading(true);
-      setHasError(false);
-
-      try {
-        const [profile, apiProducts] = await Promise.all([
-          apiJson<{ postcode: string }>('/api/orders/profile/'),
-          apiJson<ApiProduct[]>('/api/orders/products/?available=true'),
-        ]);
-
-        const producersNear = await apiJson<{
-          producers: Array<{ producer_id: number; distance_miles: number }>;
-        }>(`/api/geo/producers-near-me/?postcode=${encodeURIComponent(profile.postcode || '')}&radius_miles=200`);
-
-        const distanceByProducer = new Map<number, number>();
-        producersNear.producers.forEach((row) => {
-          distanceByProducer.set(row.producer_id, row.distance_miles);
-        });
-
-        const mapped = apiProducts.map((item) =>
-          mapApiProductToProduct(item, distanceByProducer.get(item.producer.id)),
-        );
-
-        if (mounted) {
-          setProducts(mapped);
-          const dynamicCategories = Array.from(new Set(mapped.map((product) => product.category))).filter(Boolean);
-          setCategories(dynamicCategories.length > 0 ? ['All', ...dynamicCategories] : fallbackCategories);
+    fetchCategories()
+      .then((apiCategories) => {
+        if (!mounted) {
+          return;
         }
-      } catch (error) {
+        if (apiCategories.length > 0) {
+          setCategories(['All', ...apiCategories]);
+        }
+      })
+      .catch(() => {
         if (mounted) {
-          setHasError(true);
           setCategories(fallbackCategories);
         }
-      } finally {
-        if (mounted) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    void loadProducts();
+      });
 
     return () => {
       mounted = false;
     };
-  }, [reloadKey]);
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    setIsLoading(true);
+    setHasError(false);
+
+    const selectedCategoryValues = selectedCategories.filter((category) => category !== 'All');
+    const { minPrice, maxPrice } = getPriceBounds(priceFilter);
+
+    fetchProducts({
+      search: debouncedSearchQuery || undefined,
+      category: selectedCategoryValues.length > 0 ? selectedCategoryValues.join(',') : undefined,
+      organic: showOnlyOrganic ? true : undefined,
+      minPrice,
+      maxPrice,
+    })
+      .then((apiProducts) => {
+        if (mounted) {
+          setProducts(apiProducts);
+        }
+      })
+      .catch(() => {
+        if (mounted) {
+          setProducts([]);
+          setHasError(true);
+        }
+      })
+      .finally(() => {
+        if (mounted) {
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [debouncedSearchQuery, selectedCategories, showOnlyOrganic, priceFilter, reloadKey]);
 
   // Auto-sort by "ending soon" when on Surplus tab (H)
   useEffect(() => {
@@ -185,33 +197,7 @@ export function MarketplacePage() {
 
   // Filter products (TC-004/005/014)
   const filteredProducts = useMemo(() => {
-    const searchTerm = debouncedSearchQuery.toLowerCase();
-    const selectedCategoryValues = selectedCategories.filter((category) => category !== 'All').map((category) => category.toLowerCase());
-    const { minPrice, maxPrice } = getPriceBounds(priceFilter);
-
     return products.filter(product => {
-      if (searchTerm) {
-        const haystack = `${product.name} ${product.description} ${product.producerName} ${product.category}`.toLowerCase();
-        if (!haystack.includes(searchTerm)) {
-          return false;
-        }
-      }
-
-      if (selectedCategoryValues.length > 0 && !selectedCategoryValues.includes(product.category.toLowerCase())) {
-        return false;
-      }
-
-      if (showOnlyOrganic && !product.isOrganic) {
-        return false;
-      }
-
-      if (minPrice !== undefined && product.price < minPrice) {
-        return false;
-      }
-      if (maxPrice !== undefined && product.price > maxPrice) {
-        return false;
-      }
-
       // View mode filter (surplus vs all)
       if (viewMode === 'surplus' && !product.isSurplus) {
         return false;
@@ -235,7 +221,7 @@ export function MarketplacePage() {
 
       return true;
     });
-  }, [products, debouncedSearchQuery, selectedCategories, showOnlyOrganic, priceFilter, showOnlyInSeason, showOnlyInStock, excludedAllergens, viewMode]);
+  }, [products, showOnlyInSeason, showOnlyInStock, excludedAllergens, viewMode]);
 
   // Sort products (H - improved clarity)
   const sortedProducts = useMemo(() => {
@@ -307,6 +293,27 @@ export function MarketplacePage() {
 
   const handleAddToCart = (product: Product, quantity: number, e: React.MouseEvent) => {
     e.stopPropagation();
+
+    if (!user) {
+      toast.error('Please sign in to add items to your cart.', {
+        action: {
+          label: 'Login',
+          onClick: () => navigate('/login'),
+        },
+      });
+      return;
+    }
+
+    if (user.role !== 'CUSTOMER') {
+      toast.error('Only customer accounts can place orders.', {
+        action: {
+          label: 'Dashboard',
+          onClick: () => navigate(getDashboardPathForRole(user.role)),
+        },
+      });
+      return;
+    }
+
     const requiresAllergenReview = product.allergens.length > 0;
     const hasReviewedAllergens =
       typeof window !== 'undefined' &&
@@ -481,6 +488,40 @@ export function MarketplacePage() {
     }
   };
 
+  const emptyStateCopy = useMemo(() => {
+    const hasCategoryFilter = !selectedCategories.includes('All');
+    const hasSearch = debouncedSearchQuery.length > 0;
+
+    if (showOnlyOrganic) {
+      return {
+        title: hasSearch ? 'No organic products found' : 'No organic products match these filters',
+        description:
+          hasCategoryFilter || hasSearch
+            ? 'Try broadening your search or category filters, or turn off Organic only.'
+            : 'Try turning off Organic only to view both organic and non-organic products.',
+      };
+    }
+
+    if (viewMode === 'surplus') {
+      return {
+        title: 'No surplus deals match these filters',
+        description: 'Try clearing one or more filters to see more discounted items.',
+      };
+    }
+
+    if (hasSearch) {
+      return {
+        title: 'No results found',
+        description: 'Try a different search term or clear some filters to see more products.',
+      };
+    }
+
+    return {
+      title: 'No products match these filters',
+      description: 'Try adjusting your filters to see more results.',
+    };
+  }, [debouncedSearchQuery, selectedCategories, showOnlyOrganic, viewMode]);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-[oklch(0.98_0.01_145)] to-[oklch(0.96_0.02_150)]">
       {/* D) Tightened Header with Account Menu */}
@@ -493,79 +534,104 @@ export function MarketplacePage() {
               </div>
               <div>
                 <h1 className="text-2xl font-semibold">Local Food Marketplace</h1>
-                <p className="text-sm text-gray-700">Signed in as {customerName}</p>
-                {defaultAddressText && (
+                <p className="text-sm text-gray-700">
+                  {!user
+                    ? 'Browse first, then sign in when you are ready to order.'
+                    : isCustomer
+                      ? `Signed in as ${customerName}`
+                      : `Browsing as ${customerName}`}
+                </p>
+                {isCustomer && defaultAddressText && (
                   <p className="text-xs text-gray-600 truncate max-w-[22rem]">Delivery address: {defaultAddressText}</p>
                 )}
               </div>
             </div>
             
             <div className="flex items-center gap-2">
-              {/* Search on desktop (D - reduce noise) */}
-              
-              {/* Cart Button */}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => navigate('/cart')}
-                className="relative focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
-              >
-                <ShoppingCart className="size-4 sm:mr-2" />
-                <span className="hidden sm:inline">Cart</span>
-                {getTotalItems() > 0 && (
-                  <Badge className="ml-2 px-1.5 min-w-5 h-5 flex items-center justify-center">
-                    {getTotalItems()}
-                  </Badge>
-                )}
-              </Button>
-
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleLogout}
-                className="focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
-              >
-                <LogOut className="size-4 sm:mr-2" />
-                <span className="hidden sm:inline">Sign Out</span>
-              </Button>
-              
-              {/* Account Menu (D - compact) */}
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  type="button"
-                  aria-label="Open account menu"
-                  className={`${buttonVariants({ variant: 'ghost', size: 'sm' })} focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2`}
+              {isCustomer && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigate('/cart')}
+                  className="relative focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
                 >
-                  <User className="size-4" />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuLabel>Hello, {customerName}</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuLabel>Account</DropdownMenuLabel>
-                  <DropdownMenuItem onClick={() => navigate('/account')}>
-                    Account Information
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => navigate('/settings')}>
-                    Settings
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => navigate('/orders/history')}>
-                    Order History
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuLabel>Explore</DropdownMenuLabel>
-                  <DropdownMenuItem onClick={() => navigate('/map')}>
-                    Producers Near Me
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => navigate('/content/feed')}>
-                    Recipes & Stories
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleLogout} className="text-red-600">
-                    <LogOut className="size-4 mr-2" />
-                    Logout
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                  <ShoppingCart className="size-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Cart</span>
+                  {getTotalItems() > 0 && (
+                    <Badge className="ml-2 px-1.5 min-w-5 h-5 flex items-center justify-center">
+                      {getTotalItems()}
+                    </Badge>
+                  )}
+                </Button>
+              )}
+
+              {user ? (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleLogout}
+                    className="focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
+                  >
+                    <LogOut className="size-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Sign Out</span>
+                  </Button>
+
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      type="button"
+                      aria-label="Open account menu"
+                      className={`${buttonVariants({ variant: 'ghost', size: 'sm' })} focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2`}
+                    >
+                      <User className="size-4" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuLabel>Hello, {customerName}</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      {isCustomer ? (
+                        <>
+                          <DropdownMenuLabel>Account</DropdownMenuLabel>
+                          <DropdownMenuItem onClick={() => navigate('/account')}>
+                            Account Information
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => navigate('/settings')}>
+                            Settings
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => navigate('/orders/history')}>
+                            Order History
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuLabel>Explore</DropdownMenuLabel>
+                          <DropdownMenuItem onClick={() => navigate('/map')}>
+                            Producers Near Me
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => navigate('/content/feed')}>
+                            Recipes & Stories
+                          </DropdownMenuItem>
+                        </>
+                      ) : (
+                        <DropdownMenuItem onClick={() => navigate(getDashboardPathForRole(user.role))}>
+                          Go to Dashboard
+                        </DropdownMenuItem>
+                      )}
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={handleLogout} className="text-red-600">
+                        <LogOut className="size-4 mr-2" />
+                        Logout
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </>
+              ) : (
+                <Button
+                  size="sm"
+                  onClick={() => navigate('/login')}
+                  className="focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
+                >
+                  <User className="size-4 mr-2" />
+                  Login
+                </Button>
+              )}
             </div>
           </div>
 
@@ -869,9 +935,14 @@ export function MarketplacePage() {
               <Card>
                 <CardContent className="py-12 text-center">
                   <div className="space-y-4">
-                    <p className="text-gray-700 font-medium">No results found</p>
-                    <p className="text-sm text-gray-500">Try adjusting your filters to see more results</p>
+                    <p className="text-gray-700 font-medium">{emptyStateCopy.title}</p>
+                    <p className="text-sm text-gray-500">{emptyStateCopy.description}</p>
                     <div className="flex flex-wrap gap-2 justify-center">
+                      {showOnlyOrganic && (
+                        <Button onClick={() => setShowOnlyOrganic(false)} variant="outline" size="sm">
+                          Show all products
+                        </Button>
+                      )}
                       {excludedAllergens.length > 0 && (
                         <Button onClick={clearAllergens} variant="outline" size="sm">
                           Clear allergens

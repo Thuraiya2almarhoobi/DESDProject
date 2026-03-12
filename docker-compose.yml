@@ -31,6 +31,7 @@ services:
         sleep 2;
       done &&
       python manage.py seed_demo_data &&
+      python manage.py seed_catalog_demo &&
       python manage.py runserver 0.0.0.0:8000
       "
 

@@ -4,6 +4,7 @@ from decimal import Decimal
 
 from rest_framework.test import APITestCase
 
+from apps.accounts.models import CustomerProfile, User
 from apps.catalog.models import Category, Producer, Product
 from apps.community.models import ProductReview
 
@@ -78,6 +79,25 @@ class ProductApiTests(APITestCase):
             verified_purchase=False,
         )
 
+        self.customer_user = User.objects.create_user(
+            email="reviewer@example.com",
+            password="DemoPass123!",
+            role=User.Role.CUSTOMER,
+            email_verified=True,
+        )
+        CustomerProfile.objects.create(
+            user=self.customer_user,
+            full_name="Reviewing Customer",
+            phone="07123456789",
+        )
+
+        self.producer_user = User.objects.create_user(
+            email="producer-review@example.com",
+            password="DemoPass123!",
+            role=User.Role.PRODUCER,
+            email_verified=True,
+        )
+
     def test_products_support_category_filter_by_slug(self):
         response = self.client.get("/api/products", {"category": "vegetables"})
         self.assertEqual(response.status_code, 200)
@@ -92,7 +112,7 @@ class ProductApiTests(APITestCase):
 
     def test_products_support_search_by_name_description_and_producer(self):
         producer_response = self.client.get("/api/products", {"search": "green valley"})
-        self.assertEqual(producer_response.status_code, 200)
+        self.assertEqual(producer_response.status_code, 200)                                
         self.assertEqual(len(producer_response.data), 1)
         self.assertEqual(producer_response.data[0]["name"], "Organic Tomatoes")
 
@@ -115,6 +135,17 @@ class ProductApiTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data), 1)
         self.assertEqual(response.data[0]["name"], "Organic Tomatoes")
+
+    def test_products_support_organic_boolean_filter_values(self):
+        organic_response = self.client.get("/api/products", {"organic": "true"})
+        self.assertEqual(organic_response.status_code, 200)
+        self.assertEqual(len(organic_response.data), 1)
+        self.assertEqual(organic_response.data[0]["name"], "Organic Tomatoes")
+
+        non_organic_response = self.client.get("/api/products", {"organic": "false"})
+        self.assertEqual(non_organic_response.status_code, 200)
+        self.assertEqual(len(non_organic_response.data), 1)
+        self.assertEqual(non_organic_response.data[0]["name"], "Fresh Whole Milk")
 
     def test_products_support_price_filters(self):
         response = self.client.get("/api/products", {"max_price": "3.00"})
@@ -147,3 +178,42 @@ class ProductApiTests(APITestCase):
         self.assertEqual(len(response.data), 2)
         self.assertIn("reviewer_name", response.data[0])
         self.assertIn("rating", response.data[0])
+        self.assertIn("verified_purchase", response.data[0])
+
+    def test_customer_can_submit_product_review_once(self):
+        self.client.force_authenticate(user=self.customer_user)
+        response = self.client.post(
+            f"/api/products/{self.milk.id}/reviews",
+            {"rating": 5, "comment": "Very fresh and creamy."},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["reviewer_name"], "Reviewing Customer")
+        self.assertEqual(response.data["rating"], 5)
+        self.assertFalse(response.data["verified_purchase"])
+        self.assertEqual(response.data["user_id"], self.customer_user.id)
+
+        duplicate = self.client.post(
+            f"/api/products/{self.milk.id}/reviews",
+            {"rating": 4, "comment": "Second attempt."},
+            format="json",
+        )
+        self.assertEqual(duplicate.status_code, 400)
+        self.assertIn("already reviewed", str(duplicate.data).lower())
+
+    def test_non_customer_cannot_submit_review(self):
+        self.client.force_authenticate(user=self.producer_user)
+        response = self.client.post(
+            f"/api/products/{self.tomatoes.id}/reviews",
+            {"rating": 5, "comment": "Should fail."},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_anonymous_user_cannot_submit_review(self):
+        response = self.client.post(
+            f"/api/products/{self.tomatoes.id}/reviews",
+            {"rating": 5, "comment": "Should fail."},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 401)

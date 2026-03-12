@@ -28,7 +28,7 @@ import { RestaurantDashboardPage } from './pages/restaurant/RestaurantDashboardP
 export const router = createBrowserRouter([
   {
     path: '/',
-    element: <Navigate to="/login" replace />,
+    element: <MarketplacePage />,
   },
   {
     path: '/login',
@@ -57,19 +57,11 @@ export const router = createBrowserRouter([
   // Customer routes
   {
     path: '/marketplace',
-    element: (
-      <ProtectedRoute allowedRoles={['CUSTOMER']}>
-        <MarketplacePage />
-      </ProtectedRoute>
-    ),
+    element: <MarketplacePage />,
   },
   {
     path: '/product/:id',
-    element: (
-      <ProtectedRoute allowedRoles={['CUSTOMER']}>
-        <ProductDetailPage />
-      </ProtectedRoute>
-    ),
+    element: <ProductDetailPage />,
   },
   {
     path: '/cart',
@@ -190,6 +182,6 @@ export const router = createBrowserRouter([
   // 404
   {
     path: '*',
-    element: <Navigate to="/login" replace />,
+    element: <Navigate to="/" replace />,
   },
 ]);

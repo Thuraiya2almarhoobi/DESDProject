@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from apps.accounts.models import User
 from apps.community.models import ProductReview
 from .models import Category, Product
 
@@ -78,13 +79,58 @@ class ProductSerializer(serializers.ModelSerializer):
 
 
 class ProductReviewSerializer(serializers.ModelSerializer):
+    user_id = serializers.IntegerField(source="user.id", read_only=True)
+
     class Meta:
         model = ProductReview
         fields = [
             "id",
+            "user_id",
             "reviewer_name",
             "rating",
             "comment",
             "verified_purchase",
             "created_at",
         ]
+
+
+class ProductReviewCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProductReview
+        fields = ["rating", "comment"]
+
+    def validate(self, attrs):
+        request = self.context["request"]
+        product = self.context["product"]
+        user = request.user
+
+        if not user or not user.is_authenticated:
+            raise serializers.ValidationError({"detail": "Authentication credentials were not provided."})
+
+        if user.role != User.Role.CUSTOMER:
+            raise serializers.ValidationError({"detail": "Only customers can submit reviews."})
+
+        if ProductReview.objects.filter(product=product, user=user).exists():
+            raise serializers.ValidationError({"detail": "You have already reviewed this product."})
+
+        return attrs
+
+    def create(self, validated_data):
+        request = self.context["request"]
+        product = self.context["product"]
+        user = request.user
+        customer_profile = getattr(user, "customer_profile", None)
+        reviewer_name = ""
+        if customer_profile and getattr(customer_profile, "full_name", ""):
+            reviewer_name = customer_profile.full_name.strip()
+        if not reviewer_name:
+            reviewer_name = user.email.split("@")[0]
+
+        return ProductReview.objects.create(
+            product=product,
+            user=user,
+            reviewer_name=reviewer_name,
+            rating=validated_data["rating"],
+            comment=validated_data.get("comment", "").strip(),
+            verified_purchase=False,
+        )

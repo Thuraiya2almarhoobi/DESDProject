@@ -100,6 +100,9 @@ export function LoginPage() {
             <Button type="button" variant="outline" className="w-full" onClick={() => navigate('/register')}>
               Create Account
             </Button>
+            <Button type="button" variant="ghost" className="w-full" onClick={() => navigate('/')}>
+              Browse Marketplace First
+            </Button>
 
             <div className="mt-6 p-4 bg-gradient-to-br from-[oklch(0.96_0.02_145)] to-[oklch(0.94_0.03_142)] rounded-lg text-sm space-y-2 border border-[oklch(0.88_0.02_145)]">
               <p className="font-medium text-[oklch(0.45_0.12_155)]">Demo Accounts:</p>
