@@ -32,3 +32,7 @@ Thumbs.db
 # **Do NOT ignore migrations unless your lecturer tells you to**
 # */migrations/*
 # !*/migrations/__init__.py
+desd-images.tar
+
+desd-images.tar
+DESD/dist/
