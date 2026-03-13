@@ -553,8 +553,6 @@ export function MarketplacePage() {
                 {isCustomer && defaultAddressText && (
                   <p className="text-xs text-gray-600 truncate max-w-[22rem]">Delivery address: {defaultAddressText}</p>
                 )}
-                  <p className="text-xs text-gray-600 truncate max-w-[22rem]">Delivery address: {defaultAddressText}</p>
-                )}
               </div>
             </div>
             

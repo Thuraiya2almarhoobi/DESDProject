@@ -60,7 +60,6 @@ export const router = createBrowserRouter([
   {
     path: '/portal/admin',
     element: <StakeholderPortalPage role="ADMIN" />,
-  }
   },
   {
     path: '/login',
@@ -269,3 +268,4 @@ export const router = createBrowserRouter([
     element: <Navigate to="/" replace />,
   },
 ]);
+
