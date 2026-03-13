@@ -15,6 +15,7 @@ import { AllergenBlock } from '../components/AllergenBlock';
 import { FarmLocationMap } from '../components/FarmLocationMap';
 import { Input } from '../components/ui/input';
 import { Separator } from '../components/ui/separator';
+import { Skeleton } from '../components/ui/skeleton';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../components/ui/accordion';
 import { toast } from 'sonner';
 import { Product, ProductReview } from '../types';
@@ -709,4 +710,5 @@ export function ProductDetailPage() {
     </div>
   );
 }
+
 
