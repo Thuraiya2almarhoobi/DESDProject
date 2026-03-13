@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+﻿import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
   AlertCircle,
@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   Calendar,
   CheckCircle2,
+  ChevronDown,
   Edit,
   Eye,
   HelpCircle,
@@ -22,6 +23,7 @@ import { AvailabilityBadge, OrganicBadge, SurplusBadge } from '../../components/
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
+import { Checkbox } from '../../components/ui/checkbox';
 import { Input } from '../../components/ui/input';
 import { Switch } from '../../components/ui/switch';
 import { Label } from '../../components/ui/label';
@@ -46,6 +48,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../../components/ui/dialog';
+import { Popover, PopoverContent, PopoverTrigger } from '../../components/ui/popover';
+import { ScrollArea } from '../../components/ui/scroll-area';
 import { Separator } from '../../components/ui/separator';
 import { AvailabilityType, Product, ProductUnit } from '../../types';
 import {
@@ -72,7 +76,7 @@ interface NewProductForm {
   unit: ProductUnit;
   availability: AvailabilityType;
   stock: string;
-  allergens: string;
+  allergens: string[];
   harvestDate: string;
   imageUrl: string;
   isSurplus: boolean;
@@ -80,6 +84,39 @@ interface NewProductForm {
 }
 
 const UNIT_OPTIONS: ProductUnit[] = ['kg', 'litre', 'dozen', 'each'];
+const ALLERGEN_OPTIONS = [
+  'Celery',
+  'Cereals containing gluten (such as wheat, rye, barley, and oats)',
+  'Crustaceans (such as prawns, crabs, and lobsters)',
+  'Eggs',
+  'Fish',
+  'Lupin',
+  'Milk',
+  'Molluscs (such as mussels and oysters)',
+  'Mustard',
+  'Peanuts',
+  'Sesame',
+  'Soybeans',
+  'Sulphur dioxide and sulphites (at concentrations of more than 10 parts per million)',
+  'Tree nuts (almonds, hazelnuts, walnuts, brazil nuts, cashews, pecans, pistachios, and macadamia nuts)',
+] as const;
+
+function toggleSelectedAllergen(selected: string[], allergen: string, checked: boolean): string[] {
+  if (checked) {
+    return selected.includes(allergen) ? selected : [...selected, allergen];
+  }
+  return selected.filter((item) => item !== allergen);
+}
+
+function getSelectedAllergenSummary(allergens: string[]): string {
+  if (allergens.length === 0) {
+    return 'Select allergens';
+  }
+  if (allergens.length <= 2) {
+    return allergens.join(', ');
+  }
+  return `${allergens.length} allergens selected`;
+}
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
@@ -94,7 +131,7 @@ function initialNewProductForm(): NewProductForm {
     unit: 'kg',
     availability: 'in-season',
     stock: '0',
-    allergens: '',
+    allergens: [],
     harvestDate: todayIso(),
     imageUrl: '',
     isSurplus: false,
@@ -131,7 +168,6 @@ function formatHarvestDate(value: string): string {
   }
   return format(parsed, 'MMM d, yyyy');
 }
-
 export function ProducerInventoryPage() {
   const navigate = useNavigate();
   const goBack = useSafeBack('/producer/dashboard');
@@ -380,7 +416,7 @@ export function ProducerInventoryPage() {
           unit: newProduct.unit,
           availability: newProduct.availability,
           stock,
-          allergens: newProduct.allergens.trim(),
+          allergens: newProduct.allergens,
           harvestDate: newProduct.harvestDate || todayIso(),
           imageUrl: newProduct.imageUrl.trim(),
           isSurplus: newProduct.isSurplus,
@@ -656,7 +692,7 @@ export function ProducerInventoryPage() {
                     <div className="grid md:grid-cols-4 gap-4">
                       <div>
                         <p className="text-sm text-gray-600">Price</p>
-                        <p className="font-semibold">£{product.price.toFixed(2)}/{product.unit}</p>
+                        <p className="font-semibold">Â£{product.price.toFixed(2)}/{product.unit}</p>
                       </div>
                       <div>
                         <p className="text-sm text-gray-600">Category</p>
@@ -790,7 +826,7 @@ export function ProducerInventoryPage() {
       </main>
 
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-        <DialogContent className="sm:max-w-2xl">
+        <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add New Product</DialogTitle>
             <DialogDescription>
@@ -902,17 +938,65 @@ export function ProducerInventoryPage() {
                   required
                 />
               </div>
-            </div>
-
-            <div className="grid md:grid-cols-2 gap-4">
+            </div>            <div className="grid md:grid-cols-2 gap-4 items-start">
               <div className="space-y-2">
                 <Label htmlFor="new-allergens">Allergen Information</Label>
-                <Input
-                  id="new-allergens"
-                  value={newProduct.allergens}
-                  onChange={(event) => setNewProduct((previous) => ({ ...previous, allergens: event.target.value }))}
-                  placeholder="e.g., Milk, Nuts"
-                />
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      id="new-allergens"
+                      type="button"
+                      variant="outline"
+                      className="w-full items-start justify-between gap-3 text-left font-normal whitespace-normal"
+                    >
+                      <span>{getSelectedAllergenSummary(newProduct.allergens)}</span>
+                      <ChevronDown className="size-4 shrink-0 opacity-60" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" className="w-[min(32rem,calc(100vw-3rem))] p-0">
+                    <div className="border-b px-4 py-3">
+                      <p className="text-sm font-medium text-slate-900">UK allergen checklist</p>
+                      <p className="text-sm text-slate-600">Tick every allergen present in this product. Leave all unchecked if none apply.</p>
+                    </div>
+                    <ScrollArea className="h-64">
+                      <div className="space-y-1 p-2">
+                        {ALLERGEN_OPTIONS.map((allergen, index) => {
+                          const checkboxId = `new-allergen-${index}`;
+                          return (
+                            <label
+                              key={allergen}
+                              htmlFor={checkboxId}
+                              className="flex cursor-pointer items-start gap-3 rounded-md px-3 py-2 hover:bg-slate-50"
+                            >
+                              <Checkbox
+                                id={checkboxId}
+                                checked={newProduct.allergens.includes(allergen)}
+                                onCheckedChange={(checked) =>
+                                  setNewProduct((previous) => ({
+                                    ...previous,
+                                    allergens: toggleSelectedAllergen(previous.allergens, allergen, checked === true),
+                                  }))
+                                }
+                                className="mt-0.5"
+                              />
+                              <span className="text-sm leading-5 text-slate-700">{allergen}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </ScrollArea>
+                  </PopoverContent>
+                </Popover>
+                <p className="text-sm text-gray-500">Choose from the 14 UK law allergens instead of typing them manually.</p>
+                {newProduct.allergens.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {newProduct.allergens.map((allergen) => (
+                      <Badge key={allergen} variant="secondary" className="max-w-full whitespace-normal">
+                        {allergen}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="new-image">Image URL (optional)</Label>
@@ -977,3 +1061,5 @@ export function ProducerInventoryPage() {
     </div>
   );
 }
+
+

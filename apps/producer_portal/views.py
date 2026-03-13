@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from decimal import Decimal, ROUND_CEILING
+
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, permissions, response, status
 from rest_framework.views import APIView
 
-from .models import ProducerOrder, ProducerProduct, ProductAvailability
+from .models import OrderStatus, ProducerOrder, ProducerProduct, ProductAvailability
 from .serializers import (
     ProducerOrderSerializer,
     ProducerOrderStatusUpdateSerializer,
@@ -119,6 +122,36 @@ def _delete_synced_orders_product(producer_product: ProducerProduct) -> None:
         product_name=producer_product.name,
     )
 
+
+def _producer_order_stock_units(quantity: Decimal) -> int:
+    whole_units = quantity.to_integral_value()
+    if quantity == whole_units:
+        return int(whole_units)
+    return int(quantity.to_integral_value(rounding=ROUND_CEILING))
+
+
+def _deduct_stock_for_producer_order(order: ProducerOrder) -> None:
+    for item in order.items.select_related("product"):
+        quantity_to_deduct = _producer_order_stock_units(item.quantity)
+        if quantity_to_deduct <= 0:
+            continue
+
+        producer_product = None
+        if item.product_id:
+            producer_product = ProducerProduct.objects.select_for_update().filter(pk=item.product_id).first()
+        if producer_product is None:
+            producer_product = (
+                ProducerProduct.objects.select_for_update()
+                .filter(producer=order.producer, name=item.product_name)
+                .order_by("-updated_at", "-id")
+                .first()
+            )
+        if producer_product is None:
+            continue
+
+        producer_product.stock_quantity = max(0, producer_product.stock_quantity - quantity_to_deduct)
+        producer_product.save(update_fields=["stock_quantity", "updated_at"])
+        _sync_orders_product(producer_product)
 
 class PublicMarketplaceProductsAPIView(generics.ListAPIView):
     serializer_class = ProducerProductSerializer
@@ -241,13 +274,20 @@ class ProducerOrderStatusUpdateAPIView(generics.UpdateAPIView):
     http_method_names = ["patch"]
 
     def get_queryset(self):
-        return ProducerOrder.objects.filter(producer=self.request.user)
+        return ProducerOrder.objects.filter(producer=self.request.user).prefetch_related("items", "items__product")
 
+    @transaction.atomic
     def patch(self, request, *args, **kwargs):
         partial = kwargs.pop("partial", True)
         instance = self.get_object()
+        previous_status = instance.status
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
-        payload = ProducerOrderSerializer(instance).data
+        updated = serializer.save()
+        if previous_status != OrderStatus.DELIVERED and updated.status == OrderStatus.DELIVERED:
+            _deduct_stock_for_producer_order(updated)
+            updated.refresh_from_db()
+        payload = ProducerOrderSerializer(updated).data
         return response.Response(payload, status=status.HTTP_200_OK)
+
+

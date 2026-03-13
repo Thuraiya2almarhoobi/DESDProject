@@ -6,6 +6,8 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
+from apps.producer_portal.models import ProducerProduct, ProductAvailability
+
 from .models import Cart, CustomerProfile, Order, Producer, Product
 
 
@@ -259,6 +261,18 @@ class OrdersCriticalFlowTests(APITestCase):
         self.assertEqual(len(reorder_res.data["unavailable_items"]), 1)
 
     def test_producer_can_update_sub_order_status_with_transition_rules(self):
+        ProducerProduct.objects.create(
+            producer=self.producer_user_a,
+            name=self.product_a1.name,
+            description="Producer inventory mirror",
+            category=self.product_a1.category,
+            unit=self.product_a1.unit,
+            price=self.product_a1.price,
+            stock_quantity=10,
+            availability=ProductAvailability.IN_SEASON,
+            harvest_date=timezone.localdate(),
+        )
+
         self._add_to_cart(self.product_a1, "2")
         checkout_res = self.client.post(
             "/api/orders/checkout/",
@@ -316,4 +330,22 @@ class OrdersCriticalFlowTests(APITestCase):
         self.assertEqual(delivered_res.data["status"], Order.Status.DELIVERED)
 
         order.refresh_from_db()
+        producer_product = ProducerProduct.objects.get(
+            producer=self.producer_user_a,
+            name=self.product_a1.name,
+            unit=self.product_a1.unit,
+        )
         self.assertEqual(order.status, Order.Status.DELIVERED)
+        self.assertEqual(producer_product.stock_quantity, 8)
+
+        delivered_again_res = producer_client.patch(
+            f"/api/orders/producer/sub-orders/{sub_order.id}/status/",
+            {"status": Order.Status.DELIVERED},
+            format="json",
+        )
+        self.assertEqual(delivered_again_res.status_code, status.HTTP_200_OK)
+
+        producer_product.refresh_from_db()
+        self.assertEqual(producer_product.stock_quantity, 8)
+
+

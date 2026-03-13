@@ -246,3 +246,76 @@ class ProducerPortalCriticalTestCases(APITestCase):
                 name="Synced Beetroot Renamed",
             ).exists()
         )
+    def test_delivered_producer_order_reduces_inventory_only_when_completed(self):
+        payload = {
+            "name": "Inventory Reduction Potatoes",
+            "category": "Vegetables",
+            "description": "Stock deduction verification",
+            "price": "2.00",
+            "unit": "kg",
+            "availability": ProductAvailability.YEAR_ROUND,
+            "stock_quantity": 100,
+            "allergen_information": "",
+            "harvest_date": timezone.localdate().isoformat(),
+        }
+        create_response = self.client.post("/api/producer/products/", payload, format="json")
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+
+        product = ProducerProduct.objects.get(id=create_response.data["id"])
+        orders_producer = OrdersProducer.objects.get(user=self.producer)
+        synced_orders_product = OrdersProduct.objects.get(
+            producer=orders_producer,
+            name=payload["name"],
+        )
+
+        order = self._create_order(
+            self.producer,
+            "ORD-DELIVER-STOCK-1",
+            delivery_offset_hours=72,
+            customer_name="Inventory Customer",
+        )
+        ProducerOrderItem.objects.create(
+            order=order,
+            product=product,
+            product_name=product.name,
+            quantity=Decimal("5.00"),
+            unit_price=Decimal("2.00"),
+        )
+
+        for next_status in [OrderStatus.CONFIRMED, OrderStatus.PREPARING, OrderStatus.READY]:
+            response_ = self.client.patch(
+                f"/api/producer/orders/{order.id}/status/",
+                {"status": next_status},
+                format="json",
+            )
+            self.assertEqual(response_.status_code, status.HTTP_200_OK)
+            product.refresh_from_db()
+            synced_orders_product.refresh_from_db()
+            self.assertEqual(product.stock_quantity, 100)
+            self.assertEqual(synced_orders_product.stock_quantity, Decimal("100.00"))
+
+        delivered_response = self.client.patch(
+            f"/api/producer/orders/{order.id}/status/",
+            {"status": OrderStatus.DELIVERED},
+            format="json",
+        )
+        self.assertEqual(delivered_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(delivered_response.data["status"], OrderStatus.DELIVERED)
+
+        product.refresh_from_db()
+        synced_orders_product.refresh_from_db()
+        order.refresh_from_db()
+        self.assertEqual(order.status, OrderStatus.DELIVERED)
+        self.assertEqual(product.stock_quantity, 95)
+        self.assertEqual(synced_orders_product.stock_quantity, Decimal("95.00"))
+
+        delivered_again_response = self.client.patch(
+            f"/api/producer/orders/{order.id}/status/",
+            {"status": OrderStatus.DELIVERED},
+            format="json",
+        )
+        self.assertEqual(delivered_again_response.status_code, status.HTTP_200_OK)
+        product.refresh_from_db()
+        self.assertEqual(product.stock_quantity, 95)
+
+

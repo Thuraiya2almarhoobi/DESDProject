@@ -1,4 +1,4 @@
-import { Product, AvailabilityType } from '../types';
+﻿import { Product, AvailabilityType } from '../types';
 
 type BackendAvailability = 'in_season' | 'year_round' | 'unavailable';
 
@@ -15,7 +15,7 @@ interface BackendProduct {
   unit: Product['unit'];
   availability: BackendAvailability;
   stock_quantity: number;
-  allergen_information: string;
+  allergen_information: string | string[];
   harvest_date: string;
   image_url: string;
   is_surplus: boolean;
@@ -30,7 +30,7 @@ interface ProducerCreatePayload {
   unit: Product['unit'];
   availability: AvailabilityType;
   stock: number;
-  allergens?: string;
+  allergens?: string[];
   harvestDate: string;
   imageUrl?: string;
   isSurplus?: boolean;
@@ -60,7 +60,10 @@ function toFrontendAvailability(availability: BackendAvailability): Availability
   return 'unavailable';
 }
 
-function parseAllergens(raw: string): string[] {
+function parseAllergens(raw: string | string[]): string[] {
+  if (Array.isArray(raw)) {
+    return raw.map((item) => item.trim()).filter(Boolean);
+  }
   if (!raw.trim()) {
     return [];
   }
@@ -68,6 +71,13 @@ function parseAllergens(raw: string): string[] {
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function serializeAllergens(allergens?: string[]): string {
+  if (!allergens || allergens.length === 0) {
+    return '';
+  }
+  return allergens.join(', ');
 }
 
 export function backendProductToFrontend(product: BackendProduct): Product {
@@ -138,7 +148,7 @@ export async function createProducerProductInApi(
     unit: payload.unit,
     availability: toBackendAvailability(payload.availability),
     stock_quantity: payload.stock,
-    allergen_information: payload.allergens ?? '',
+    allergen_information: serializeAllergens(payload.allergens),
     harvest_date: payload.harvestDate,
     image_url: payload.imageUrl ?? '',
     is_surplus: Boolean(payload.isSurplus),
@@ -170,7 +180,7 @@ export async function patchProducerProductInApi(
   if (partialPayload.unit !== undefined) body.unit = partialPayload.unit;
   if (partialPayload.availability !== undefined) body.availability = toBackendAvailability(partialPayload.availability);
   if (partialPayload.stock !== undefined) body.stock_quantity = partialPayload.stock;
-  if (partialPayload.allergens !== undefined) body.allergen_information = partialPayload.allergens;
+  if (partialPayload.allergens !== undefined) body.allergen_information = serializeAllergens(partialPayload.allergens);
   if (partialPayload.harvestDate !== undefined) body.harvest_date = partialPayload.harvestDate;
   if (partialPayload.imageUrl !== undefined) body.image_url = partialPayload.imageUrl;
   if (partialPayload.isSurplus !== undefined) body.is_surplus = partialPayload.isSurplus;
@@ -192,3 +202,5 @@ export async function patchProducerProductInApi(
   const product = await parseResponse<BackendProduct>(res);
   return backendProductToFrontend(product);
 }
+
+

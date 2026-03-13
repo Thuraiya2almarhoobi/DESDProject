@@ -147,7 +147,17 @@ FRONTEND_DIST_DIR = BASE_DIR / "DESD" / "dist"
 AUTH_USER_MODEL = "accounts.User"
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
-
+STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY", "")
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
+STRIPE_SUCCESS_URL = os.getenv(
+    "STRIPE_SUCCESS_URL",
+    f"{FRONTEND_URL.rstrip('/')}/checkout/success?session_id={{CHECKOUT_SESSION_ID}}",
+)
+STRIPE_CANCEL_URL = os.getenv(
+    "STRIPE_CANCEL_URL",
+    f"{FRONTEND_URL.rstrip('/')}/checkout/cancel",
+)
 JWT_ACCESS_TOKEN_MINUTES = int(os.getenv("JWT_ACCESS_TOKEN_MINUTES", "15"))
 JWT_DEFAULT_REFRESH_DAYS = int(os.getenv("JWT_DEFAULT_REFRESH_DAYS", "1"))
 JWT_REMEMBER_ME_REFRESH_DAYS = int(os.getenv("JWT_REMEMBER_ME_REFRESH_DAYS", "30"))
@@ -237,3 +247,4 @@ LOGGING = {
         },
     },
 }
+

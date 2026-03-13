@@ -1,6 +1,7 @@
 from datetime import date
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_CEILING
 
+from django.db import transaction
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from rest_framework import status
@@ -75,6 +76,54 @@ def _sync_parent_order_status(order: Order) -> None:
     if next_status != order.status:
         order.status = next_status
         order.save(update_fields=["status", "updated_at"])
+
+
+def _producer_portal_stock_units(quantity: Decimal) -> int:
+    whole_units = quantity.to_integral_value()
+    if quantity == whole_units:
+        return int(whole_units)
+    # Producer portal inventory stores whole-number stock counts, so round up
+    # fractional delivered quantities rather than leaving stock overstated.
+    return int(quantity.to_integral_value(rounding=ROUND_CEILING))
+
+
+def _deduct_producer_portal_stock_for_delivery(sub_order: ProducerSubOrder) -> None:
+    producer_user = sub_order.producer.user
+    if producer_user is None:
+        return
+
+    from apps.producer_portal.models import ProducerProduct
+
+    for item in sub_order.items.all():
+        quantity_to_deduct = _producer_portal_stock_units(item.quantity)
+        if quantity_to_deduct <= 0:
+            continue
+
+        producer_product = (
+            ProducerProduct.objects.select_for_update()
+            .filter(
+                producer=producer_user,
+                name=item.product_name,
+                unit=item.unit,
+            )
+            .order_by("-updated_at", "-id")
+            .first()
+        )
+        if producer_product is None:
+            producer_product = (
+                ProducerProduct.objects.select_for_update()
+                .filter(
+                    producer=producer_user,
+                    name=item.product_name,
+                )
+                .order_by("-updated_at", "-id")
+                .first()
+            )
+        if producer_product is None:
+            continue
+
+        producer_product.stock_quantity = max(0, producer_product.stock_quantity - quantity_to_deduct)
+        producer_product.save(update_fields=["stock_quantity", "updated_at"])
 
 
 def _producer_sub_order_payload(sub_order: ProducerSubOrder) -> dict:
@@ -393,10 +442,11 @@ class ProducerSubOrderListAPIView(APIView):
 class ProducerSubOrderStatusUpdateAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @transaction.atomic
     def patch(self, request, sub_order_id: int):
         producer = get_object_or_404(Producer, user=request.user, is_active=True)
         sub_order = get_object_or_404(
-            ProducerSubOrder.objects.select_related("order", "producer").prefetch_related("items"),
+            ProducerSubOrder.objects.select_for_update().select_related("order", "producer").prefetch_related("items"),
             id=sub_order_id,
             producer=producer,
         )
@@ -414,7 +464,12 @@ class ProducerSubOrderStatusUpdateAPIView(APIView):
                 )
             sub_order.status = next_status
             sub_order.save(update_fields=["status", "updated_at"])
+            if next_status == Order.Status.DELIVERED:
+                _deduct_producer_portal_stock_for_delivery(sub_order)
             _sync_parent_order_status(sub_order.order)
             sub_order.refresh_from_db()
 
         return Response(_producer_sub_order_payload(sub_order), status=status.HTTP_200_OK)
+
+
+
