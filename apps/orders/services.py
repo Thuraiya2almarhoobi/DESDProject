@@ -257,7 +257,8 @@ def checkout_cart(user, payload: dict) -> Order:
     if unique_selected_ids is None:
         cart.items.all().delete()
     else:
-        cart.items.filter(id__in=unique_selected_ids).delete()    return order
+        cart.items.filter(id__in=unique_selected_ids).delete()
+    return order
 
 
 @transaction.atomic
@@ -300,4 +301,5 @@ def reorder_order_to_cart(user, order: Order) -> dict:
         "unavailable_items": unavailable,
         "cart": build_cart_payload(cart),
     }
+
 
