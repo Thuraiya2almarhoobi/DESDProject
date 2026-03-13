@@ -2,14 +2,17 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ArrowLeft, Trash2, Plus, Minus, ShoppingBag } from 'lucide-react';
 import { useCart } from '../contexts/CartContext';
+import { useAuth } from '../contexts/AuthContext';
 import { apiJson } from '../lib/api';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Input } from '../components/ui/input';
 import { Separator } from '../components/ui/separator';
 
 export function CartPage() {
   const navigate = useNavigate();
   const { items, updateQuantity, removeFromCart, getCartByProducer, getGrandTotal } = useCart();
+  const { user } = useAuth();
   const [totalFoodMiles, setTotalFoodMiles] = useState(0);
   const [producerFoodMiles, setProducerFoodMiles] = useState<Record<string, number>>({});
   const [productFoodMiles, setProductFoodMiles] = useState<Record<string, number>>({});
@@ -17,6 +20,7 @@ export function CartPage() {
   const cartByProducer = getCartByProducer();
   const grandTotal = getGrandTotal();
   const commission = grandTotal * 0.05;
+  const isBulkRole = user?.role === 'COMMUNITY' || user?.role === 'RESTAURANT';
 
   useEffect(() => {
     let mounted = true;
@@ -111,7 +115,18 @@ export function CartPage() {
 
       {/* Cart Content */}
       <main className="max-w-5xl mx-auto px-4 py-8">
-        <h1 className="text-3xl font-semibold mb-8">Shopping Cart</h1>
+        <h1 className="text-3xl font-semibold mb-3">
+          {user?.role === 'COMMUNITY'
+            ? 'Community Bulk Cart'
+            : user?.role === 'RESTAURANT'
+            ? 'Restaurant Order Cart'
+            : 'Shopping Cart'}
+        </h1>
+        {isBulkRole && (
+          <p className="text-sm text-gray-600 mb-8">
+            Bulk mode enabled: you can type quantities directly or use +/- quick controls.
+          </p>
+        )}
 
         <div className="grid lg:grid-cols-3 gap-8">
           {/* Cart Items - Grouped by Producer (TC-006/007) */}
@@ -162,9 +177,27 @@ export function CartPage() {
                             >
                               <Minus className="size-3" />
                             </Button>
-                            <span className="w-12 text-center text-sm">
-                              {item.quantity} {item.product.unit}
-                            </span>
+                            {isBulkRole ? (
+                              <Input
+                                type="number"
+                                min="1"
+                                max={item.product.stock}
+                                step="1"
+                                className="w-20 h-8 text-center"
+                                value={item.quantity}
+                                onChange={(event) => {
+                                  const next = Number(event.target.value);
+                                  if (!Number.isFinite(next)) {
+                                    return;
+                                  }
+                                  updateQuantity(item.product.id, next);
+                                }}
+                              />
+                            ) : (
+                              <span className="w-12 text-center text-sm">
+                                {item.quantity}
+                              </span>
+                            )}
                             <Button
                               variant="outline"
                               size="icon"
@@ -174,6 +207,26 @@ export function CartPage() {
                             >
                               <Plus className="size-3" />
                             </Button>
+                            {isBulkRole && (
+                              <>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => updateQuantity(item.product.id, Math.max(1, item.quantity - 10))}
+                                >
+                                  -10
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() =>
+                                    updateQuantity(item.product.id, Math.min(item.product.stock, item.quantity + 10))
+                                  }
+                                >
+                                  +10
+                                </Button>
+                              </>
+                            )}
                           </div>
                         </div>
 

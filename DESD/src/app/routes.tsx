@@ -1,7 +1,9 @@
 import { createBrowserRouter, Navigate } from 'react-router';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { RoleProtectedRoute } from './components/RoleProtectedRoute';
 
 // Pages
+import { LandingPage } from './pages/LandingPage';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { VerifyEmailPage } from './pages/VerifyEmailPage';
@@ -23,20 +25,85 @@ import { ProducerInventoryPage } from './pages/producer/ProducerInventoryPage';
 import { ProducerPaymentsPage } from './pages/producer/ProducerPaymentsPage';
 import { AdminCommissionPage } from './pages/admin/AdminCommissionPage';
 import { CommunityDashboardPage } from './pages/community/CommunityDashboardPage';
+import { RoleLoginPage } from './pages/portal/RoleLoginPage';
+import { PortalSelectPage } from './pages/portal/PortalSelectPage';
+import { RoleRegisterPage } from './pages/portal/RoleRegisterPage';
+import { StakeholderPortalPage } from './pages/portal/StakeholderPortalPage';
 import { RestaurantDashboardPage } from './pages/restaurant/RestaurantDashboardPage';
+import { RestaurantRecurringOrdersPage } from './pages/restaurant/RestaurantRecurringOrdersPage';
 
 export const router = createBrowserRouter([
   {
     path: '/',
-    element: <Navigate to="/login" replace />,
+    element: <LandingPage />,
+  },
+  {
+    path: '/select-portal',
+    element: <PortalSelectPage />,
+  },
+  {
+    path: '/portal/customer',
+    element: <StakeholderPortalPage role="CUSTOMER" />,
+  },
+  {
+    path: '/portal/producer',
+    element: <StakeholderPortalPage role="PRODUCER" />,
+  },
+  {
+    path: '/portal/community',
+    element: <StakeholderPortalPage role="COMMUNITY" />,
+  },
+  {
+    path: '/portal/restaurant',
+    element: <StakeholderPortalPage role="RESTAURANT" />,
+  },
+  {
+    path: '/portal/admin',
+    element: <StakeholderPortalPage role="ADMIN" />,
   },
   {
     path: '/login',
     element: <LoginPage />,
   },
   {
+    path: '/login/customer',
+    element: <RoleLoginPage role="CUSTOMER" />,
+  },
+  {
+    path: '/login/producer',
+    element: <RoleLoginPage role="PRODUCER" />,
+  },
+  {
+    path: '/login/community',
+    element: <RoleLoginPage role="COMMUNITY" />,
+  },
+  {
+    path: '/login/restaurant',
+    element: <RoleLoginPage role="RESTAURANT" />,
+  },
+  {
+    path: '/login/admin',
+    element: <RoleLoginPage role="ADMIN" />,
+  },
+  {
     path: '/register',
     element: <RegisterPage />,
+  },
+  {
+    path: '/register/customer',
+    element: <RoleRegisterPage role="CUSTOMER" />,
+  },
+  {
+    path: '/register/producer',
+    element: <RoleRegisterPage role="PRODUCER" />,
+  },
+  {
+    path: '/register/community',
+    element: <RoleRegisterPage role="COMMUNITY" />,
+  },
+  {
+    path: '/register/restaurant',
+    element: <RoleRegisterPage role="RESTAURANT" />,
   },
   {
     path: '/verify-email',
@@ -58,7 +125,7 @@ export const router = createBrowserRouter([
   {
     path: '/marketplace',
     element: (
-      <ProtectedRoute allowedRoles={['CUSTOMER']}>
+      <ProtectedRoute allowedRoles={['CUSTOMER', 'COMMUNITY', 'RESTAURANT']}>
         <MarketplacePage />
       </ProtectedRoute>
     ),
@@ -66,7 +133,7 @@ export const router = createBrowserRouter([
   {
     path: '/product/:id',
     element: (
-      <ProtectedRoute allowedRoles={['CUSTOMER']}>
+      <ProtectedRoute allowedRoles={['CUSTOMER', 'COMMUNITY', 'RESTAURANT']}>
         <ProductDetailPage />
       </ProtectedRoute>
     ),
@@ -74,7 +141,7 @@ export const router = createBrowserRouter([
   {
     path: '/cart',
     element: (
-      <ProtectedRoute allowedRoles={['CUSTOMER']}>
+      <ProtectedRoute allowedRoles={['CUSTOMER', 'COMMUNITY', 'RESTAURANT']}>
         <CartPage />
       </ProtectedRoute>
     ),
@@ -82,7 +149,7 @@ export const router = createBrowserRouter([
   {
     path: '/checkout',
     element: (
-      <ProtectedRoute allowedRoles={['CUSTOMER']}>
+      <ProtectedRoute allowedRoles={['CUSTOMER', 'COMMUNITY', 'RESTAURANT']}>
         <CheckoutPage />
       </ProtectedRoute>
     ),
@@ -90,7 +157,7 @@ export const router = createBrowserRouter([
   {
     path: '/orders/history',
     element: (
-      <ProtectedRoute allowedRoles={['CUSTOMER']}>
+      <ProtectedRoute allowedRoles={['CUSTOMER', 'COMMUNITY', 'RESTAURANT']}>
         <OrderHistoryPage />
       </ProtectedRoute>
     ),
@@ -131,65 +198,73 @@ export const router = createBrowserRouter([
   {
     path: '/producer/dashboard',
     element: (
-      <ProtectedRoute allowedRoles={['PRODUCER']}>
+      <RoleProtectedRoute requiredRole="PRODUCER">
         <ProducerDashboardPage />
-      </ProtectedRoute>
+      </RoleProtectedRoute>
     ),
   },
   {
     path: '/producer/orders',
     element: (
-      <ProtectedRoute allowedRoles={['PRODUCER']}>
+      <RoleProtectedRoute requiredRole="PRODUCER">
         <ProducerOrdersPage />
-      </ProtectedRoute>
+      </RoleProtectedRoute>
     ),
   },
   {
     path: '/producer/inventory',
     element: (
-      <ProtectedRoute allowedRoles={['PRODUCER']}>
+      <RoleProtectedRoute requiredRole="PRODUCER">
         <ProducerInventoryPage />
-      </ProtectedRoute>
+      </RoleProtectedRoute>
     ),
   },
   {
     path: '/producer/payments',
     element: (
-      <ProtectedRoute allowedRoles={['PRODUCER']}>
+      <RoleProtectedRoute requiredRole="PRODUCER">
         <ProducerPaymentsPage />
-      </ProtectedRoute>
+      </RoleProtectedRoute>
     ),
   },
   // Community routes
   {
     path: '/community/dashboard',
     element: (
-      <ProtectedRoute allowedRoles={['COMMUNITY']}>
+      <RoleProtectedRoute requiredRole="COMMUNITY">
         <CommunityDashboardPage />
-      </ProtectedRoute>
+      </RoleProtectedRoute>
     ),
   },
   // Restaurant routes
   {
     path: '/restaurant/dashboard',
     element: (
-      <ProtectedRoute allowedRoles={['RESTAURANT']}>
+      <RoleProtectedRoute requiredRole="RESTAURANT">
         <RestaurantDashboardPage />
-      </ProtectedRoute>
+      </RoleProtectedRoute>
+    ),
+  },
+  {
+    path: '/restaurant/recurring-orders',
+    element: (
+      <RoleProtectedRoute requiredRole="RESTAURANT">
+        <RestaurantRecurringOrdersPage />
+      </RoleProtectedRoute>
     ),
   },
   // Admin routes
   {
     path: '/admin/commission',
     element: (
-      <ProtectedRoute allowedRoles={['ADMIN']}>
+      <RoleProtectedRoute requiredRole="ADMIN">
         <AdminCommissionPage />
-      </ProtectedRoute>
+      </RoleProtectedRoute>
     ),
   },
   // 404
   {
     path: '*',
-    element: <Navigate to="/login" replace />,
+    element: <Navigate to="/" replace />,
   },
 ]);

@@ -11,6 +11,11 @@ from .models import (
     ProducerNotification,
     ProducerSubOrder,
     Product,
+    RecurringOrderInstanceOverride,
+    RecurringOrderInstanceOverrideItem,
+    RecurringOrderTemplate,
+    RecurringOrderTemplateItem,
+    UserNotification,
 )
 
 
@@ -52,7 +57,15 @@ class OrderItemInline(admin.TabularInline):
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
-    list_display = ("order_number", "customer", "status", "payment_status", "total_amount", "created_at")
+    list_display = (
+        "order_number",
+        "customer",
+        "status",
+        "payment_status",
+        "is_recurring_instance",
+        "total_amount",
+        "created_at",
+    )
     list_filter = ("status", "payment_status", "created_at")
     search_fields = ("order_number", "customer__email")
     inlines = [OrderItemInline]
@@ -74,3 +87,43 @@ class PaymentTransactionAdmin(admin.ModelAdmin):
 class ProducerNotificationAdmin(admin.ModelAdmin):
     list_display = ("producer", "sub_order", "is_read", "created_at")
     list_filter = ("is_read", "created_at")
+
+
+class RecurringOrderTemplateItemInline(admin.TabularInline):
+    model = RecurringOrderTemplateItem
+    extra = 0
+
+
+@admin.register(RecurringOrderTemplate)
+class RecurringOrderTemplateAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "restaurant",
+        "frequency",
+        "next_order_date",
+        "is_paused",
+        "is_cancelled",
+        "last_generated_at",
+    )
+    list_filter = ("frequency", "is_paused", "is_cancelled")
+    search_fields = ("restaurant__email",)
+    inlines = [RecurringOrderTemplateItemInline]
+
+
+class RecurringOrderInstanceOverrideItemInline(admin.TabularInline):
+    model = RecurringOrderInstanceOverrideItem
+    extra = 0
+
+
+@admin.register(RecurringOrderInstanceOverride)
+class RecurringOrderInstanceOverrideAdmin(admin.ModelAdmin):
+    list_display = ("template", "scheduled_order_date", "created_by", "created_at")
+    list_filter = ("scheduled_order_date",)
+    inlines = [RecurringOrderInstanceOverrideItemInline]
+
+
+@admin.register(UserNotification)
+class UserNotificationAdmin(admin.ModelAdmin):
+    list_display = ("user", "category", "is_read", "created_at")
+    list_filter = ("category", "is_read", "created_at")
+    search_fields = ("user__email", "message")

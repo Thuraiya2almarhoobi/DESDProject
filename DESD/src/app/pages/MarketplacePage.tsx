@@ -79,6 +79,9 @@ export function MarketplacePage() {
   const [excludedAllergens, setExcludedAllergens] = useState<string[]>([]);
   const [reloadKey, setReloadKey] = useState(0);
   const customerName = (user?.name || '').trim() || 'Customer';
+  const isCommunityMode = user?.role === 'COMMUNITY';
+  const isRestaurantMode = user?.role === 'RESTAURANT';
+  const isBulkMode = isCommunityMode || isRestaurantMode;
   const defaultAddressText = useMemo(() => {
     if (!addresses || addresses.length === 0) {
       return '';
@@ -494,6 +497,12 @@ export function MarketplacePage() {
               <div>
                 <h1 className="text-2xl font-semibold">Local Food Marketplace</h1>
                 <p className="text-sm text-gray-700">Signed in as {customerName}</p>
+                {isCommunityMode && (
+                  <p className="text-xs text-gray-600">Role: COMMUNITY | Bulk multi-producer ordering interface</p>
+                )}
+                {isRestaurantMode && (
+                  <p className="text-xs text-gray-600">Role: RESTAURANT | Recurring-order marketplace interface</p>
+                )}
                 {defaultAddressText && (
                   <p className="text-xs text-gray-600 truncate max-w-[22rem]">Delivery address: {defaultAddressText}</p>
                 )}
@@ -891,6 +900,7 @@ export function MarketplacePage() {
                     key={product.id} 
                     product={product} 
                     handleAddToCart={handleAddToCart} 
+                    isBulkMode={isBulkMode}
                   />
                 ))}
               </div>
@@ -905,17 +915,19 @@ export function MarketplacePage() {
 // B) Product card with quantity stepper
 function ProductCard({ 
   product, 
-  handleAddToCart 
+  handleAddToCart,
+  isBulkMode,
 }: { 
   product: Product; 
   handleAddToCart: (product: Product, quantity: number, e: React.MouseEvent) => void;
+  isBulkMode: boolean;
 }) {
   const navigate = useNavigate();
   const [quantity, setQuantity] = useState(1);
 
   const isAvailable = product.availability !== 'unavailable' && product.stock > 0;
   const hasAllergens = product.allergens && product.allergens.length > 0;
-  const maxQuantity = Math.min(product.stock, 99);
+  const maxQuantity = Math.max(1, Math.floor(product.stock));
 
   const incrementQuantity = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -929,6 +941,15 @@ function ProductCard({
     if (quantity > 1) {
       setQuantity(q => q - 1);
     }
+  };
+
+  const updateQuantity = (event: React.ChangeEvent<HTMLInputElement>) => {
+    event.stopPropagation();
+    const next = Number(event.target.value);
+    if (!Number.isFinite(next)) {
+      return;
+    }
+    setQuantity(Math.max(1, Math.min(maxQuantity, Math.floor(next))));
   };
 
   return (
@@ -1023,9 +1044,23 @@ function ProductCard({
               >
                 <Minus className="size-3" />
               </Button>
-              <div className="px-3 py-1 text-sm font-medium min-w-[3rem] text-center">
-                {quantity}
-              </div>
+              {isBulkMode ? (
+                <Input
+                  type="number"
+                  min="1"
+                  max={String(maxQuantity)}
+                  step="1"
+                  value={quantity}
+                  onClick={(event) => event.stopPropagation()}
+                  onChange={updateQuantity}
+                  className="w-16 h-8 rounded-none border-0 text-center shadow-none"
+                  aria-label="Enter quantity"
+                />
+              ) : (
+                <div className="px-3 py-1 text-sm font-medium min-w-[3rem] text-center">
+                  {quantity}
+                </div>
+              )}
               <Button
                 variant="ghost"
                 size="icon"

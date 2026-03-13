@@ -39,3 +39,21 @@
 3. Open product with no reviews to show empty state.
 4. Show disabled `Write review (coming soon)` placeholder.
 5. Call out dependency: verified-purchase submission requires order/delivery integration in another lane.
+
+## 8. TC-017 Community Bulk Order
+1. Login as a community user and open Community Dashboard.
+2. Start a bulk order in marketplace, add large quantities from multiple producers.
+3. In checkout, set per-producer delivery dates and special delivery instructions.
+4. Confirm order response shows producer contacts and supplier breakdown.
+
+## 9. TC-018 Restaurant Recurring Orders
+1. Login as a restaurant user and create an initial multi-producer checkout.
+2. Enable “Make this a recurring order” and set frequency/order day/delivery day.
+3. Open Restaurant Recurring Orders page; modify next instance quantities.
+4. Run recurring generation from UI or `python manage.py generate_recurring_orders`.
+
+## 10. TC-025 Admin Commission Reporting
+1. Login as admin and open Network Commission / Financial Reports.
+2. Filter by date range (2+ weeks), producer, and status.
+3. Validate totals and per-order producer payout breakdown.
+4. Click an order for drilldown and export the CSV report.

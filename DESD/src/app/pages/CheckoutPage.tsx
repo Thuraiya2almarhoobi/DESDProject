@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ArrowLeft, CreditCard, CheckCircle, XCircle } from 'lucide-react';
 import { useCart } from '../contexts/CartContext';
+import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -29,12 +30,19 @@ function dateOrDefault(value: string | undefined, leadHours: number): string {
 export function CheckoutPage() {
   const navigate = useNavigate();
   const { items, getCartByProducer, getGrandTotal, refreshCart } = useCart();
+  const { user } = useAuth();
 
   const [step, setStep] = useState<CheckoutStep>('address');
   const [address, setAddress] = useState('');
   const [city, setCity] = useState('');
   const [postcode, setPostcode] = useState('');
   const [deliveryDates, setDeliveryDates] = useState<Record<string, string>>({});
+  const [specialInstructions, setSpecialInstructions] = useState('');
+  const [makeRecurring, setMakeRecurring] = useState(false);
+  const [recurringFrequency, setRecurringFrequency] = useState<'weekly' | 'fortnightly'>('weekly');
+  const [orderDay, setOrderDay] = useState(0);
+  const [deliveryDay, setDeliveryDay] = useState(2);
+  const [createdRecurringTemplateId, setCreatedRecurringTemplateId] = useState<number | null>(null);
   const [paymentProcessing, setPaymentProcessing] = useState(false);
   const [paymentError, setPaymentError] = useState('');
   const [orderComplete, setOrderComplete] = useState(false);
@@ -44,6 +52,9 @@ export function CheckoutPage() {
   const grandTotal = getGrandTotal();
   const commission = grandTotal * 0.05;
   const total = grandTotal + commission;
+  const isCommunityCheckout = user?.role === 'COMMUNITY';
+  const isRestaurantCheckout = user?.role === 'RESTAURANT';
+  const weekdayOptions = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
   useEffect(() => {
     let mounted = true;
@@ -127,6 +138,9 @@ export function CheckoutPage() {
         payment_method: 'test_card',
         payment_token: 'tok_demo',
       };
+      if (specialInstructions.trim()) {
+        payload.special_instructions = specialInstructions.trim();
+      }
 
       if (cartByProducer.length === 1) {
         payload.delivery_date = deliveryDates[cartByProducer[0].producerId];
@@ -138,12 +152,37 @@ export function CheckoutPage() {
         payload.producer_delivery_dates = producerDates;
       }
 
-      const response = await apiJson<{ message: string; order: ApiOrderDetail }>('/api/orders/checkout/', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      });
+      if (isRestaurantCheckout && makeRecurring) {
+        payload.frequency = recurringFrequency;
+        payload.order_day = orderDay;
+        payload.delivery_day = deliveryDay;
 
-      setCreatedOrder(response.order);
+        const response = await apiJson<{
+          message: string;
+          template: { id: number };
+          initial_order: ApiOrderDetail;
+        }>('/api/restaurant/recurring-orders/', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+        setCreatedOrder(response.initial_order);
+        setCreatedRecurringTemplateId(response.template.id);
+      } else if (isCommunityCheckout) {
+        const response = await apiJson<{ message: string; order: ApiOrderDetail }>('/api/community/bulk-checkout/', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+        setCreatedOrder(response.order);
+        setCreatedRecurringTemplateId(null);
+      } else {
+        const response = await apiJson<{ message: string; order: ApiOrderDetail }>('/api/orders/checkout/', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+        setCreatedOrder(response.order);
+        setCreatedRecurringTemplateId(null);
+      }
+
       setOrderComplete(true);
       setStep('confirm');
       await refreshCart();
@@ -190,7 +229,13 @@ export function CheckoutPage() {
       <div className="min-h-screen bg-gradient-to-br from-[oklch(0.98_0.01_145)] to-[oklch(0.96_0.02_150)]">
         <header className="bg-white/80 backdrop-blur-sm border-b border-[oklch(0.88_0.02_145)] shadow-sm">
           <div className="max-w-3xl mx-auto px-4 py-4">
-            <h1 className="text-2xl font-semibold">Checkout</h1>
+            <h1 className="text-2xl font-semibold">
+              {isCommunityCheckout
+                ? 'Community Bulk Checkout'
+                : isRestaurantCheckout
+                ? 'Restaurant Checkout'
+                : 'Checkout'}
+            </h1>
           </div>
         </header>
 
@@ -215,12 +260,41 @@ export function CheckoutPage() {
                     <p className="text-sm text-gray-600">
                       Delivery: {format(new Date(subOrder.delivery_date), 'MMMM d, yyyy')}
                     </p>
+                    {(subOrder.producer_contact_phone || subOrder.producer_contact_email) && (
+                      <p className="text-sm text-gray-600">
+                        Contact: {subOrder.producer_contact_phone || 'n/a'}
+                        {subOrder.producer_contact_email ? ` | ${subOrder.producer_contact_email}` : ''}
+                      </p>
+                    )}
                   </div>
                 ))}
               </div>
 
+              {createdOrder.special_instructions && (
+                <div className="mt-6 max-w-md mx-auto text-left rounded-md border bg-gray-50 p-3">
+                  <p className="text-sm font-medium">Special delivery instructions</p>
+                  <p className="text-sm text-gray-700">{createdOrder.special_instructions}</p>
+                </div>
+              )}
+
+              {createdRecurringTemplateId && (
+                <div className="mt-6 max-w-md mx-auto text-left rounded-md border border-green-200 bg-green-50 p-3">
+                  <p className="text-sm font-medium text-green-900">
+                    Recurring template created (#{createdRecurringTemplateId})
+                  </p>
+                  <p className="text-sm text-green-800">
+                    You can modify next week's instance without changing the template defaults.
+                  </p>
+                </div>
+              )}
+
               <div className="mt-8 flex gap-3 justify-center">
                 <Button onClick={() => navigate('/orders/history')}>View Order History</Button>
+                {createdRecurringTemplateId && (
+                  <Button variant="outline" onClick={() => navigate('/restaurant/recurring-orders')}>
+                    Manage Recurring Orders
+                  </Button>
+                )}
                 <Button variant="outline" onClick={() => navigate('/marketplace')}>Continue Shopping</Button>
               </div>
             </CardContent>
@@ -242,7 +316,20 @@ export function CheckoutPage() {
       </header>
 
       <main className="max-w-5xl mx-auto px-4 py-8">
-        <h1 className="text-3xl font-semibold mb-8">Checkout</h1>
+        <h1 className="text-3xl font-semibold mb-2">
+          {isCommunityCheckout
+            ? 'Community Bulk Checkout'
+            : isRestaurantCheckout
+            ? 'Restaurant Checkout'
+            : 'Checkout'}
+        </h1>
+        {(isCommunityCheckout || isRestaurantCheckout) && (
+          <p className="text-sm text-gray-600 mb-8">
+            {isCommunityCheckout
+              ? 'Role: COMMUNITY | Multi-producer bulk ordering interface'
+              : 'Role: RESTAURANT | Recurring-order capable checkout interface'}
+          </p>
+        )}
 
         <StepIndicator />
 
@@ -306,6 +393,77 @@ export function CheckoutPage() {
                         </div>
                       );
                     })}
+                    {isCommunityCheckout && (
+                      <div className="border p-4 rounded-lg">
+                        <Label htmlFor="special-instructions">Special Delivery Instructions</Label>
+                        <Input
+                          id="special-instructions"
+                          value={specialInstructions}
+                          onChange={(e) => setSpecialInstructions(e.target.value)}
+                          placeholder="Delivery to kitchen entrance, contact kitchen manager"
+                        />
+                      </div>
+                    )}
+                    {isRestaurantCheckout && (
+                      <div className="border p-4 rounded-lg space-y-3">
+                        <label className="inline-flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={makeRecurring}
+                            onChange={(event) => setMakeRecurring(event.target.checked)}
+                          />
+                          <span>Make this a recurring order</span>
+                        </label>
+                        {makeRecurring && (
+                          <div className="grid md:grid-cols-3 gap-3">
+                            <div>
+                              <Label htmlFor="recurring-frequency">Frequency</Label>
+                              <select
+                                id="recurring-frequency"
+                                value={recurringFrequency}
+                                onChange={(event) =>
+                                  setRecurringFrequency(event.target.value as 'weekly' | 'fortnightly')
+                                }
+                                className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                              >
+                                <option value="weekly">Weekly</option>
+                                <option value="fortnightly">Fortnightly</option>
+                              </select>
+                            </div>
+                            <div>
+                              <Label htmlFor="order-day">Order Day</Label>
+                              <select
+                                id="order-day"
+                                value={orderDay}
+                                onChange={(event) => setOrderDay(Number(event.target.value))}
+                                className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                              >
+                                {weekdayOptions.map((label, index) => (
+                                  <option key={label} value={index}>
+                                    {label}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <Label htmlFor="delivery-day">Delivery Day</Label>
+                              <select
+                                id="delivery-day"
+                                value={deliveryDay}
+                                onChange={(event) => setDeliveryDay(Number(event.target.value))}
+                                className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                              >
+                                {weekdayOptions.map((label, index) => (
+                                  <option key={label} value={index}>
+                                    {label}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <div className="flex gap-3">
                       <Button type="button" variant="outline" onClick={() => setStep('address')}>Back</Button>
                       <Button type="submit" className="flex-1">Continue to Payment</Button>
@@ -355,7 +513,11 @@ export function CheckoutPage() {
                         Back
                       </Button>
                       <Button type="submit" className="flex-1" disabled={paymentProcessing}>
-                        {paymentProcessing ? 'Processing...' : `Pay £${total.toFixed(2)}`}
+                        {paymentProcessing
+                          ? 'Processing...'
+                          : isRestaurantCheckout && makeRecurring
+                          ? `Create Recurring Order (£${total.toFixed(2)})`
+                          : `Pay £${total.toFixed(2)}`}
                       </Button>
                     </div>
                   </form>

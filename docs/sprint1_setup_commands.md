@@ -33,6 +33,7 @@ Notes:
 ## Tests
 ```bash
 python3 manage.py test apps.catalog
+python3 manage.py test apps.orders.tests_tc_017_018_025
 ```
 
 ## API Endpoints Implemented
@@ -44,6 +45,30 @@ python3 manage.py test apps.catalog
 - Combined filters via query params (e.g. `category + organic + search`)
 - `GET /api/products/:id/reviews`
 - `GET /api/categories`
+
+## Sprint 2 Additions (TC-017 / TC-018 / TC-025)
+- Community bulk checkout alias: `POST /api/community/bulk-checkout/`
+- Community confirmation: `GET /api/community/orders/<id>/confirmation/`
+- Restaurant recurring templates:
+  - `POST /api/restaurant/recurring-orders/`
+  - `GET /api/restaurant/recurring-orders/`
+  - `GET /api/restaurant/recurring-orders/<id>/`
+  - `PATCH /api/restaurant/recurring-orders/<id>/`
+  - `PATCH /api/restaurant/recurring-orders/<id>/next-instance/`
+  - `POST /api/restaurant/recurring-orders/run/`
+- Admin commission reporting:
+  - `GET /api/admin/commission-report/?start=YYYY-MM-DD&end=YYYY-MM-DD`
+  - `GET /api/admin/commission-report/<order_id>/`
+  - `GET /api/admin/commission-report/export.csv?start=...&end=...`
+  - `GET /api/admin/commission-report/summary/monthly?year=YYYY`
+  - `GET /api/admin/commission-report/summary/ytd?year=YYYY`
+
+### Recurring Generation Command
+```bash
+python3 manage.py generate_recurring_orders
+# Optional explicit run date:
+python3 manage.py generate_recurring_orders --run-date 2026-03-09
+```
 
 ## API Field Mapping (Backend -> Frontend Product type)
 - `id` -> `id` (stringified client-side)

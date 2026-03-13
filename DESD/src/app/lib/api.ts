@@ -95,11 +95,14 @@ export interface ApiOrderItem {
 export interface ApiProducerSubOrder {
   id: number;
   producer: ApiProducer;
+  producer_contact_email?: string;
+  producer_contact_phone?: string;
   status: string;
   delivery_date: string;
   subtotal_amount: string;
   commission_amount: string;
   payout_amount: string;
+  notes?: string;
 }
 
 export interface ApiOrderDetail {
@@ -109,6 +112,7 @@ export interface ApiOrderDetail {
   payment_status: string;
   delivery_address: string;
   customer_postcode: string;
+  special_instructions?: string;
   subtotal_amount: string;
   commission_rate: string;
   commission_amount: string;
@@ -116,6 +120,8 @@ export interface ApiOrderDetail {
   total_amount: string;
   payment_method: string;
   payment_reference: string;
+  is_recurring_instance?: boolean;
+  recurring_scheduled_for?: string | null;
   created_at: string;
   sub_orders: ApiProducerSubOrder[];
   items: ApiOrderItem[];

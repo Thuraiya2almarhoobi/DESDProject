@@ -92,7 +92,9 @@ def _producer_sub_order_payload(sub_order: ProducerSubOrder) -> dict:
         "customer_email": order.customer.email,
         "delivery_address": order.delivery_address,
         "customer_postcode": order.customer_postcode,
+        "special_instructions": order.special_instructions,
         "lead_time_hours": sub_order.producer.lead_time_hours,
+        "notes": sub_order.notes,
         "order_created_at": order.created_at,
         "items": [
             {
@@ -181,6 +183,11 @@ class CartItemAddAPIView(APIView):
         product = get_object_or_404(Product.objects.select_related("producer"), pk=product_id)
         if not product.is_available or product.stock_quantity <= 0:
             return Response({"detail": "Product is unavailable."}, status=status.HTTP_400_BAD_REQUEST)
+        if quantity > product.stock_quantity:
+            return Response(
+                {"detail": "Requested quantity exceeds available stock."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         cart = get_or_create_cart(request.user)
         cart_item, created = CartItem.objects.get_or_create(
@@ -189,7 +196,10 @@ class CartItemAddAPIView(APIView):
         if not created:
             new_qty = cart_item.quantity + quantity
             if new_qty > product.stock_quantity:
-                new_qty = product.stock_quantity
+                return Response(
+                    {"detail": "Requested quantity exceeds available stock."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             cart_item.quantity = new_qty.quantize(Decimal("0.01"))
             cart_item.save(update_fields=["quantity", "updated_at"])
 

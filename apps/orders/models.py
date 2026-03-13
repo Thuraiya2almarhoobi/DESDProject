@@ -2,7 +2,8 @@ from decimal import Decimal
 from uuid import uuid4
 
 from django.conf import settings
-from django.core.validators import MinValueValidator
+from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
 
@@ -128,6 +129,15 @@ class Order(models.Model):
     customer = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="orders"
     )
+    recurring_template = models.ForeignKey(
+        "RecurringOrderTemplate",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="generated_orders",
+    )
+    recurring_scheduled_for = models.DateField(null=True, blank=True)
+    is_recurring_instance = models.BooleanField(default=False)
     order_number = models.CharField(max_length=20, unique=True, default=_generate_order_number)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
     payment_status = models.CharField(
@@ -135,6 +145,7 @@ class Order(models.Model):
     )
     delivery_address = models.TextField()
     customer_postcode = models.CharField(max_length=12)
+    special_instructions = models.TextField(blank=True)
     subtotal_amount = models.DecimalField(max_digits=12, decimal_places=2)
     commission_rate = models.DecimalField(max_digits=5, decimal_places=4, default=Decimal("0.05"))
     commission_amount = models.DecimalField(max_digits=12, decimal_places=2)
@@ -198,6 +209,123 @@ class OrderItem(models.Model):
         return f"{self.product_name} ({self.order.order_number})"
 
 
+class RecurringOrderTemplate(models.Model):
+    class Frequency(models.TextChoices):
+        WEEKLY = "weekly", "Weekly"
+        FORTNIGHTLY = "fortnightly", "Fortnightly"
+
+    restaurant = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="recurring_order_templates",
+    )
+    frequency = models.CharField(max_length=20, choices=Frequency.choices, default=Frequency.WEEKLY)
+    order_day = models.PositiveSmallIntegerField(
+        validators=[MinValueValidator(0), MaxValueValidator(6)]
+    )
+    delivery_day = models.PositiveSmallIntegerField(
+        validators=[MinValueValidator(0), MaxValueValidator(6)]
+    )
+    next_order_date = models.DateField()
+    delivery_address = models.TextField()
+    customer_postcode = models.CharField(max_length=12)
+    payment_method = models.CharField(max_length=50, default="test_card", blank=True)
+    is_paused = models.BooleanField(default=False)
+    is_cancelled = models.BooleanField(default=False)
+    last_generated_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def clean(self):
+        if getattr(self.restaurant, "role", None) != "RESTAURANT":
+            raise ValidationError("Recurring templates can only be created for RESTAURANT users.")
+
+    def __str__(self) -> str:
+        return f"RecurringTemplate({self.restaurant_id}, {self.frequency})"
+
+
+class RecurringOrderTemplateItem(models.Model):
+    template = models.ForeignKey(
+        RecurringOrderTemplate,
+        on_delete=models.CASCADE,
+        related_name="items",
+    )
+    product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name="recurring_template_items")
+    default_quantity = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.01"))],
+    )
+
+    class Meta:
+        ordering = ["id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["template", "product"], name="orders_unique_template_product"
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.template_id}:{self.product_id} ({self.default_quantity})"
+
+
+class RecurringOrderInstanceOverride(models.Model):
+    template = models.ForeignKey(
+        RecurringOrderTemplate,
+        on_delete=models.CASCADE,
+        related_name="instance_overrides",
+    )
+    scheduled_order_date = models.DateField()
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_recurring_overrides",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-scheduled_order_date", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["template", "scheduled_order_date"],
+                name="orders_unique_template_override_per_date",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.template_id}:{self.scheduled_order_date}"
+
+
+class RecurringOrderInstanceOverrideItem(models.Model):
+    override = models.ForeignKey(
+        RecurringOrderInstanceOverride,
+        on_delete=models.CASCADE,
+        related_name="items",
+    )
+    product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name="recurring_override_items")
+    quantity = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.01"))],
+    )
+
+    class Meta:
+        ordering = ["id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["override", "product"], name="orders_unique_override_product"
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.override_id}:{self.product_id} ({self.quantity})"
+
+
 class PaymentTransaction(models.Model):
     order = models.OneToOneField(Order, on_delete=models.CASCADE, related_name="payment")
     provider = models.CharField(max_length=50, default="mock")
@@ -227,3 +355,20 @@ class ProducerNotification(models.Model):
 
     def __str__(self) -> str:
         return self.message
+
+
+class UserNotification(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="user_notifications"
+    )
+    category = models.CharField(max_length=50, default="general")
+    message = models.CharField(max_length=255)
+    metadata = models.JSONField(default=dict, blank=True)
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.user_id}:{self.category}:{self.message[:40]}"

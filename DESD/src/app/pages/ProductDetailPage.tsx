@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { ArrowLeft, ShoppingCart, Plus, Minus, ChefHat, MapPin, Sprout } from 'lucide-react';
 import { useCart } from '../contexts/CartContext';
+import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Checkbox } from '../components/ui/checkbox';
@@ -10,9 +11,9 @@ import { AvailabilityBadge, OrganicBadge } from '../components/ProductBadges';
 import { ProductMeta } from '../components/ProductMeta';
 import { AllergenBlock } from '../components/AllergenBlock';
 import { FarmLocationMap } from '../components/FarmLocationMap';
+import { Input } from '../components/ui/input';
 import { Separator } from '../components/ui/separator';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../components/ui/accordion';
-import { Skeleton } from '../components/ui/skeleton';
 import { toast } from 'sonner';
 import { Product } from '../types';
 import { ApiProduct, ApiRecipe, apiJson, mapApiProductToProduct } from '../lib/api';
@@ -31,6 +32,7 @@ export function ProductDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { addToCart } = useCart();
+  const { user } = useAuth();
 
   const [product, setProduct] = useState<Product | null>(null);
   const [quantity, setQuantity] = useState(1);
@@ -40,6 +42,7 @@ export function ProductDetailPage() {
   const [producerCoordinates, setProducerCoordinates] = useState<{ lat: number; lng: number } | undefined>();
   const [producerPostcode, setProducerPostcode] = useState('');
   const [linkedRecipes, setLinkedRecipes] = useState<ApiRecipe[]>([]);
+  const [hasReviewedAllergens, setHasReviewedAllergens] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -86,6 +89,11 @@ export function ProductDetailPage() {
         setDeliveryLeadTime(target.producer.lead_time_hours);
         setProducerCoordinates(producerRow?.coordinates);
         setProducerPostcode(target.producer.postcode || producerRow?.postcode || '');
+        const hasAllergens = mappedProduct.allergens.length > 0;
+        const hasReviewed =
+          typeof window !== 'undefined' &&
+          window.localStorage.getItem(`allergen-reviewed-${mappedProduct.id}`) === 'true';
+        setHasReviewedAllergens(!hasAllergens || hasReviewed);
       } catch (loadError) {
         if (mounted) {
           setError(loadError instanceof Error ? loadError.message : 'Failed to load product');
@@ -117,9 +125,15 @@ export function ProductDetailPage() {
     }
     return Math.min(product.stock, 99);
   }, [product]);
+  const isBulkRole = user?.role === 'COMMUNITY' || user?.role === 'RESTAURANT';
+  const requiresAllergenReview = product?.allergens.length ? product.allergens.length > 0 : false;
 
   const handleAddToCart = () => {
     if (!product || !isAvailable) {
+      return;
+    }
+    if (requiresAllergenReview && !hasReviewedAllergens) {
+      toast.warning('Please review and acknowledge allergen information before adding to cart.');
       return;
     }
 
@@ -130,7 +144,7 @@ export function ProductDetailPage() {
   const handleAllergenReviewToggle = (checked: boolean) => {
     setHasReviewedAllergens(checked);
 
-    if (typeof window !== 'undefined' && requiresAllergenReview) {
+    if (typeof window !== 'undefined' && product && requiresAllergenReview) {
       window.localStorage.setItem(`allergen-reviewed-${product.id}`, checked ? 'true' : 'false');
     }
   };
@@ -233,10 +247,31 @@ export function ProductDetailPage() {
                   <Button variant="outline" size="icon" onClick={decrementQuantity} disabled={quantity <= 1}>
                     <Minus className="size-4" />
                   </Button>
-                  <div className="w-20 text-center">
-                    <span className="text-lg font-medium">{quantity}</span>
-                    <span className="text-sm text-gray-500 ml-1">{product.unit}</span>
-                  </div>
+                  {isBulkRole ? (
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        min="1"
+                        max={String(maxQuantity)}
+                        step="1"
+                        value={quantity}
+                        onChange={(event) => {
+                          const next = Number(event.target.value);
+                          if (!Number.isFinite(next)) {
+                            return;
+                          }
+                          setQuantity(Math.max(1, Math.min(maxQuantity, Math.floor(next))));
+                        }}
+                        className="w-24 text-center"
+                      />
+                      <span className="text-sm text-gray-500">{product.unit}</span>
+                    </div>
+                  ) : (
+                    <div className="w-20 text-center">
+                      <span className="text-lg font-medium">{quantity}</span>
+                      <span className="text-sm text-gray-500 ml-1">{product.unit}</span>
+                    </div>
+                  )}
                   <Button variant="outline" size="icon" onClick={incrementQuantity} disabled={quantity >= maxQuantity}>
                     <Plus className="size-4" />
                   </Button>
@@ -250,6 +285,12 @@ export function ProductDetailPage() {
             </Button>
 
             <AllergenBlock allergens={product.allergens} />
+            {requiresAllergenReview && (
+              <label className="flex items-start gap-2 text-sm text-gray-700">
+                <Checkbox checked={hasReviewedAllergens} onCheckedChange={(value) => handleAllergenReviewToggle(Boolean(value))} />
+                <span>I have reviewed allergen information for this product.</span>
+              </label>
+            )}
 
             <Separator />
 

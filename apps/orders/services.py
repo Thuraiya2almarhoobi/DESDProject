@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
+import logging
 from uuid import uuid4
 
 from django.db import transaction
@@ -16,10 +17,12 @@ from .models import (
     Producer,
     ProducerNotification,
     ProducerSubOrder,
+    UserNotification,
 )
 
 MONEY_Q = Decimal("0.01")
 COMMISSION_RATE = Decimal("0.05")
+logger = logging.getLogger("apps.orders")
 
 
 def money(value: Decimal) -> Decimal:
@@ -131,6 +134,8 @@ def checkout_cart(user, payload: dict) -> Order:
     if not groups:
         raise ValueError("Cart is empty.")
 
+    special_instructions = (payload.get("special_instructions") or "").strip()
+
     for group in groups:
         for item in group.items:
             if not item.product.is_available or item.product.stock_quantity < item.quantity:
@@ -155,6 +160,7 @@ def checkout_cart(user, payload: dict) -> Order:
         payment_reference=f"PAY-{uuid4().hex[:10].upper()}",
         payment_status=Order.PaymentStatus.PAID,
         status=Order.Status.PENDING,
+        special_instructions=special_instructions,
     )
 
     for group in groups:
@@ -168,6 +174,7 @@ def checkout_cart(user, payload: dict) -> Order:
             commission_amount=producer_commission,
             payout_amount=payout_amount,
             status=Order.Status.PENDING,
+            notes=special_instructions,
         )
 
         for item in group.items:
@@ -192,8 +199,15 @@ def checkout_cart(user, payload: dict) -> Order:
             sub_order=sub_order,
             message=(
                 f"New order {order.order_number} for {group.producer.business_name} "
-                f"(delivery {delivery_dates[group.producer.id]})"
+                f"(delivery {delivery_dates[group.producer.id]}, lead time {group.producer.lead_time_hours}h)"
             ),
+        )
+        logger.info(
+            "producer_notification_created order=%s producer=%s lead_time_hours=%s special_instructions=%s",
+            order.order_number,
+            group.producer.business_name,
+            group.producer.lead_time_hours,
+            special_instructions[:120],
         )
 
     PaymentTransaction.objects.create(
@@ -213,6 +227,18 @@ def checkout_cart(user, payload: dict) -> Order:
             "postcode": payload["customer_postcode"],
         },
     )
+
+    if getattr(user, "role", None) in {"COMMUNITY", "RESTAURANT"}:
+        UserNotification.objects.create(
+            user=user,
+            category="order_confirmation",
+            message=f"Order {order.order_number} placed successfully.",
+            metadata={
+                "order_id": order.id,
+                "producer_count": len(groups),
+                "special_instructions": special_instructions,
+            },
+        )
 
     cart.items.all().delete()
     return order
