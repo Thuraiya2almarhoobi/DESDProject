@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ArrowLeft, Save } from 'lucide-react';
 import { toast } from 'sonner';
+import { useSafeBack } from '../lib/navigation';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Input } from '../components/ui/input';
@@ -67,6 +68,7 @@ function loadSettings(): CustomerSettings {
 
 export function SettingsPage() {
   const navigate = useNavigate();
+  const goBack = useSafeBack('/marketplace');
   const [settings, setSettings] = useState<CustomerSettings>(DEFAULT_SETTINGS);
 
   useEffect(() => {
@@ -84,7 +86,7 @@ export function SettingsPage() {
     <div className="min-h-screen bg-gradient-to-br from-[oklch(0.98_0.01_145)] to-[oklch(0.96_0.02_150)]">
       <header className="bg-white/80 backdrop-blur-sm border-b border-[oklch(0.88_0.02_145)] shadow-sm">
         <div className="max-w-4xl mx-auto px-4 py-4 flex justify-between items-center">
-          <Button variant="ghost" onClick={() => navigate('/marketplace')}>
+          <Button variant="ghost" onClick={goBack}>
             <ArrowLeft className="size-4 mr-2" />
             Back to Marketplace
           </Button>

@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ArrowLeft, CreditCard, CheckCircle, XCircle } from 'lucide-react';
 import { useCart } from '../contexts/CartContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useSafeBack } from '../lib/navigation';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -29,8 +30,16 @@ function dateOrDefault(value: string | undefined, leadHours: number): string {
 
 export function CheckoutPage() {
   const navigate = useNavigate();
-  const { items, getCartByProducer, getGrandTotal, refreshCart } = useCart();
+  const goBackToCart = useSafeBack('/cart');
   const { user } = useAuth();
+  const {
+    items,
+    selectedItems,
+    selectedCartItemIds,
+    getSelectedCartByProducer,
+    getSelectedGrandTotal,
+    refreshCart,
+  } = useCart();
 
   const [step, setStep] = useState<CheckoutStep>('address');
   const [address, setAddress] = useState('');
@@ -48,8 +57,8 @@ export function CheckoutPage() {
   const [orderComplete, setOrderComplete] = useState(false);
   const [createdOrder, setCreatedOrder] = useState<ApiOrderDetail | null>(null);
 
-  const cartByProducer = getCartByProducer();
-  const grandTotal = getGrandTotal();
+  const cartByProducer = getSelectedCartByProducer();
+  const grandTotal = getSelectedGrandTotal();
   const commission = grandTotal * 0.05;
   const total = grandTotal + commission;
   const isCommunityCheckout = user?.role === 'COMMUNITY';
@@ -109,7 +118,7 @@ export function CheckoutPage() {
     });
   }, [cartByProducer]);
 
-  if (items.length === 0 && !orderComplete) {
+  if ((items.length === 0 || selectedItems.length === 0) && !orderComplete) {
     navigate('/cart');
     return null;
   }
@@ -137,6 +146,7 @@ export function CheckoutPage() {
         customer_postcode: postcode,
         payment_method: 'test_card',
         payment_token: 'tok_demo',
+        selected_cart_item_ids: selectedCartItemIds.map((cartItemId) => Number(cartItemId)),
       };
       if (specialInstructions.trim()) {
         payload.special_instructions = specialInstructions.trim();
@@ -306,9 +316,9 @@ export function CheckoutPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[oklch(0.98_0.01_145)] to-[oklch(0.96_0.02_150)]">
-      <header className="bg-white/80 backdrop-blur-sm border-b border-[oklch(0.88_0.02_145)] shadow-sm">
-        <div className="max-w-5xl mx-auto px-4 py-4">
-          <Button variant="ghost" onClick={() => navigate('/cart')}>
+        <header className="bg-white/80 backdrop-blur-sm border-b border-[oklch(0.88_0.02_145)] shadow-sm">
+          <div className="max-w-5xl mx-auto px-4 py-4">
+          <Button variant="ghost" onClick={goBackToCart}>
             <ArrowLeft className="size-4 mr-2" />
             Back to Cart
           </Button>
@@ -516,8 +526,8 @@ export function CheckoutPage() {
                         {paymentProcessing
                           ? 'Processing...'
                           : isRestaurantCheckout && makeRecurring
-                          ? `Create Recurring Order (£${total.toFixed(2)})`
-                          : `Pay £${total.toFixed(2)}`}
+                          ? `Create Recurring Order (Â£${total.toFixed(2)})`
+                          : `Pay Â£${total.toFixed(2)}`}
                       </Button>
                     </div>
                   </form>
@@ -542,7 +552,7 @@ export function CheckoutPage() {
                           Delivery: {format(new Date(deliveryDates[group.producerId]), 'MMM d')}
                         </p>
                       )}
-                      <p className="text-sm font-medium">£{group.subtotal.toFixed(2)}</p>
+                      <p className="text-sm font-medium">Â£{group.subtotal.toFixed(2)}</p>
                     </div>
                   ))}
                 </div>
@@ -552,11 +562,11 @@ export function CheckoutPage() {
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span>Subtotal</span>
-                    <span>£{grandTotal.toFixed(2)}</span>
+                    <span>Â£{grandTotal.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between text-gray-600">
                     <span>Commission (5%)</span>
-                    <span>£{commission.toFixed(2)}</span>
+                    <span>Â£{commission.toFixed(2)}</span>
                   </div>
                 </div>
 
@@ -564,7 +574,7 @@ export function CheckoutPage() {
 
                 <div className="flex justify-between text-lg font-semibold">
                   <span>Total</span>
-                  <span className="text-green-700">£{total.toFixed(2)}</span>
+                  <span className="text-green-700">Â£{total.toFixed(2)}</span>
                 </div>
 
                 {address && (

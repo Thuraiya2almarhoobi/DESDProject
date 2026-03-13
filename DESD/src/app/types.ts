@@ -62,6 +62,7 @@ export interface ProductReview {
 
 // Cart Types
 export interface CartItem {
+  cartItemId?: string;
   product: Product;
   quantity: number;
 }

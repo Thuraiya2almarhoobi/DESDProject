@@ -86,6 +86,11 @@ class CheckoutRequestSerializer(serializers.Serializer):
     special_instructions = serializers.CharField(required=False, allow_blank=True)
     payment_method = serializers.CharField(max_length=50, default="test_card")
     payment_token = serializers.CharField(max_length=120, required=False, allow_blank=True)
+    selected_cart_item_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1),
+        required=False,
+        allow_empty=False,
+    )
     delivery_date = serializers.DateField(required=False)
     producer_delivery_dates = serializers.DictField(
         child=serializers.DateField(), required=False, help_text="Mapping producer_id -> YYYY-MM-DD"

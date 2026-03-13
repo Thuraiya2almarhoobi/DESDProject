@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+﻿from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
 import logging
@@ -41,9 +41,13 @@ class CartProducerGroup:
     subtotal: Decimal
 
 
-def get_cart_groups(cart: Cart) -> list[CartProducerGroup]:
+def get_cart_groups(cart: Cart, selected_cart_item_ids: list[int] | None = None) -> list[CartProducerGroup]:
     grouped: dict[int, CartProducerGroup] = {}
-    for item in cart.items.select_related("product__producer"):
+    item_queryset = cart.items.select_related("product__producer")
+    if selected_cart_item_ids is not None:
+        item_queryset = item_queryset.filter(id__in=selected_cart_item_ids)
+
+    for item in item_queryset:
         producer = item.product.producer
         if producer.id not in grouped:
             grouped[producer.id] = CartProducerGroup(producer=producer, items=[], subtotal=Decimal("0.00"))
@@ -129,10 +133,20 @@ def _resolve_delivery_dates(groups: list[CartProducerGroup], payload: dict) -> d
 @transaction.atomic
 def checkout_cart(user, payload: dict) -> Order:
     cart = get_or_create_cart(user)
-    groups = get_cart_groups(cart)
+    selected_cart_item_ids = payload.get("selected_cart_item_ids")
+    unique_selected_ids = None
+    if selected_cart_item_ids is not None:
+        unique_selected_ids = sorted({int(item_id) for item_id in selected_cart_item_ids})
+        matching_count = cart.items.filter(id__in=unique_selected_ids).count()
+        if matching_count != len(unique_selected_ids):
+            raise ValueError("One or more selected cart items are invalid.")
+
+    groups = get_cart_groups(cart, unique_selected_ids)
 
     if not groups:
-        raise ValueError("Cart is empty.")
+        if not cart.items.exists():
+            raise ValueError("Cart is empty.")
+        raise ValueError("Select at least one cart item to checkout.")
 
     special_instructions = (payload.get("special_instructions") or "").strip()
 
@@ -240,8 +254,10 @@ def checkout_cart(user, payload: dict) -> Order:
             },
         )
 
-    cart.items.all().delete()
-    return order
+    if unique_selected_ids is None:
+        cart.items.all().delete()
+    else:
+        cart.items.filter(id__in=unique_selected_ids).delete()    return order
 
 
 @transaction.atomic
@@ -284,3 +300,4 @@ def reorder_order_to_cart(user, order: Order) -> dict:
         "unavailable_items": unavailable,
         "cart": build_cart_payload(cart),
     }
+
