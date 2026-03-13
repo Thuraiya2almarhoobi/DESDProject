@@ -1,4 +1,4 @@
-# Sprint 1 Manual Test Checklist (Catalog/Compliance/Reviews)
+# Sprint 2 Manual Test Checklist (Catalog/Compliance/Reviews)
 
 Status legend:
 - `Not Run`
@@ -34,7 +34,7 @@ Status legend:
 
 ## TC-014 Organic filter/status [Medium]
 - Scenario: Organic status visible and filterable.
-- Preconditions: Seeded data has organic + non-organic products.
+- Preconditions: Run `python3 manage.py seed_catalog_demo` (or start Docker stack with auto-seeding).
 - Steps:
   1. On marketplace, toggle `Organic only`.
   2. Combine with category and search filters.
@@ -73,15 +73,16 @@ Status legend:
 
 ## TC-024 Reviews scaffold [Medium]
 - Scenario: Product page has read-only reviews scaffold.
-- Preconditions: Seeded data includes some reviews.
+- Preconditions: Run `python3 manage.py seed_catalog_demo` (or start Docker stack with auto-seeding).
 - Steps:
   1. Open product detail page.
   2. Scroll to Reviews section.
   3. Check product with and without review records.
 - Expected result:
+  - Average rating appears when review data exists.
   - Read-only review list appears when data exists.
   - Empty state appears when no reviews exist.
   - `Write review` placeholder is present.
-  - Dependency note indicates verified-purchase submission flow is pending order/delivery integration.
+  - Dependency note indicates verified-purchase submission flow is pending order/delivery integration and is documented in `docs/tc024_verified_purchase_blocker.md`.
 - Actual result: `__________`
 - Status: `Not Run`

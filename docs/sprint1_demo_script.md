@@ -1,7 +1,7 @@
-# Sprint 1 Demo Script (Catalog + Compliance + Reviews)
+﻿# Sprint 2 Demo Script (Catalog + Compliance + Reviews)
 
 ## 1. Setup
-1. Start backend, run migrations, and seed demo catalog data.
+1. Start backend, run migrations, and seed `seed_demo_data` + `seed_catalog_demo`.
 2. Open app and login as `customer@example.com`.
 3. Navigate to Marketplace.
 
@@ -19,7 +19,7 @@
 
 ## 4. TC-014 Organic
 1. Toggle `Organic only`.
-2. Combine organic with category + search.
+2. Combine organic with category + search and confirm backend-driven list update.
 3. Open one organic product detail and show organic status/badge.
 
 ## 5. TC-015 Allergen Warnings
@@ -35,10 +35,10 @@
 
 ## 7. TC-024 Reviews Scaffold
 1. On product detail, open Reviews section.
-2. Show populated read-only reviews list.
+2. Show average rating and populated read-only reviews list.
 3. Open product with no reviews to show empty state.
 4. Show disabled `Write review (coming soon)` placeholder.
-5. Call out dependency: verified-purchase submission requires order/delivery integration in another lane.
+5. Call out dependency: verified-purchase submission requires catalog-to-delivered-order eligibility and per-user uniqueness constraints (see blocker note).
 
 ## 8. TC-017 Community Bulk Order
 1. Login as a community user and open Community Dashboard.
@@ -48,7 +48,7 @@
 
 ## 9. TC-018 Restaurant Recurring Orders
 1. Login as a restaurant user and create an initial multi-producer checkout.
-2. Enable “Make this a recurring order” and set frequency/order day/delivery day.
+2. Enable â€œMake this a recurring orderâ€ and set frequency/order day/delivery day.
 3. Open Restaurant Recurring Orders page; modify next instance quantities.
 4. Run recurring generation from UI or `python manage.py generate_recurring_orders`.
 

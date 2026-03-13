@@ -1,13 +1,19 @@
 from decimal import Decimal, InvalidOperation
 
 from django.db.models import Q
-from rest_framework import generics, viewsets
+from rest_framework import generics, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from apps.accounts.models import User
 from apps.community.models import ProductReview
 from .models import Category, Product
-from .serializers import CategorySerializer, ProductReviewSerializer, ProductSerializer
+from .serializers import (
+    CategorySerializer,
+    ProductReviewCreateSerializer,
+    ProductReviewSerializer,
+    ProductSerializer,
+)
 
 TRUE_VALUES = {"1", "true", "yes", "on"}
 FALSE_VALUES = {"0", "false", "no", "off"}
@@ -107,9 +113,31 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
 
         return queryset.distinct().order_by("name")
 
-    @action(detail=True, methods=["get"], url_path="reviews")
+    @action(detail=True, methods=["get", "post"], url_path="reviews")
     def reviews(self, request, pk=None):
         product = self.get_object()
-        reviews = ProductReview.objects.filter(product=product).order_by("-created_at")
-        serializer = ProductReviewSerializer(reviews, many=True)
-        return Response(serializer.data)
+        if request.method.lower() == "get":
+            reviews = ProductReview.objects.filter(product=product).order_by("-created_at")
+            serializer = ProductReviewSerializer(reviews, many=True)
+            return Response(serializer.data)
+
+        if not request.user or not request.user.is_authenticated:
+            return Response(
+                {"detail": "Authentication credentials were not provided."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        if request.user.role != User.Role.CUSTOMER:
+            return Response(
+                {"detail": "Only customers can submit reviews."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        serializer = ProductReviewCreateSerializer(
+            data=request.data,
+            context={"request": request, "product": product},
+        )
+        serializer.is_valid(raise_exception=True)
+        review = serializer.save()
+        response_serializer = ProductReviewSerializer(review)
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED)

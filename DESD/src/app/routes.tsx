@@ -1,4 +1,4 @@
-import { createBrowserRouter, Navigate } from 'react-router';
+﻿import { createBrowserRouter, Navigate } from 'react-router';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { RoleProtectedRoute } from './components/RoleProtectedRoute';
 
@@ -60,6 +60,7 @@ export const router = createBrowserRouter([
   {
     path: '/portal/admin',
     element: <StakeholderPortalPage role="ADMIN" />,
+  }
   },
   {
     path: '/login',
