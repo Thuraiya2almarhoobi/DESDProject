@@ -2,15 +2,19 @@ from __future__ import annotations
 
 import logging
 from datetime import timedelta
+from pathlib import Path
 from urllib.parse import unquote
+from uuid import uuid4
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core import signing
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.files.storage import default_storage
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework import generics, status
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
@@ -45,6 +49,14 @@ from .serializers import (
 
 logger = logging.getLogger("apps.accounts.auth")
 UserModel = get_user_model()
+ALLOWED_IMAGE_UPLOAD_TYPES = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+    "image/gif": ".gif",
+}
+MAX_IMAGE_UPLOAD_BYTES = 5 * 1024 * 1024
+IMAGE_UPLOAD_SCOPES = {"general", "products", "recipes", "stories"}
 
 
 class RegisterAnonThrottle(AnonRateThrottle):
@@ -360,6 +372,49 @@ class AddressDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def get_queryset(self):
         return Address.objects.filter(user=self.request.user).order_by("id")
+
+
+class ImageUploadView(APIView):
+    permission_classes = (IsAuthenticated,)
+    parser_classes = (MultiPartParser, FormParser)
+
+    def post(self, request):
+        upload = request.FILES.get("image")
+        if upload is None:
+            return Response(
+                {"detail": "No image file was provided."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if upload.content_type not in ALLOWED_IMAGE_UPLOAD_TYPES:
+            return Response(
+                {"detail": "Only JPEG, PNG, WebP, and GIF images are supported."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if upload.size > MAX_IMAGE_UPLOAD_BYTES:
+            return Response(
+                {"detail": "Image must be 5 MB or smaller."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        scope = str(request.data.get("scope", "general")).strip().lower()
+        if scope not in IMAGE_UPLOAD_SCOPES:
+            scope = "general"
+
+        suffix = Path(upload.name or "").suffix.lower() or ALLOWED_IMAGE_UPLOAD_TYPES[upload.content_type]
+        saved_path = default_storage.save(
+            f"uploads/{scope}/user-{request.user.id}/{uuid4().hex}{suffix}",
+            upload,
+        )
+        relative_url = default_storage.url(saved_path)
+        return Response(
+            {
+                "url": request.build_absolute_uri(relative_url),
+                "relative_url": relative_url,
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class CustomerOnlyView(APIView):

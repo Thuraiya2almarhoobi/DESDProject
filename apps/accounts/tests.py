@@ -1,8 +1,11 @@
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.core import mail
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from django.test import override_settings
+import shutil
+import tempfile
 import re
 from urllib.parse import unquote
 from rest_framework import status
@@ -565,3 +568,55 @@ class AccountsAddressOwnershipTests(APITestCase):
 
         self.assertFalse(self.owner_address.is_default)
         self.assertTrue(new_address.is_default)
+
+
+class AccountsImageUploadTests(APITestCase):
+    def setUp(self):
+        self.temp_media_dir = tempfile.mkdtemp()
+        self.addCleanup(lambda: shutil.rmtree(self.temp_media_dir, ignore_errors=True))
+        self.override = override_settings(MEDIA_ROOT=self.temp_media_dir, MEDIA_URL="/media/")
+        self.override.enable()
+        self.addCleanup(self.override.disable)
+
+        self.user = UserModel.objects.create_user(
+            email="uploader@example.com",
+            password="StrongPass123!",
+            role=User.Role.PRODUCER,
+        )
+        self.client.force_authenticate(self.user)
+
+    def test_authenticated_user_can_upload_image_and_receive_absolute_url(self):
+        image = SimpleUploadedFile(
+            "sample.gif",
+            (
+                b"GIF89a\x01\x00\x01\x00\x80\x00\x00"
+                b"\x00\x00\x00\xff\xff\xff!\xf9\x04\x01\x00\x00\x00\x00,"
+                b"\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;"
+            ),
+            content_type="image/gif",
+        )
+
+        response = self.client.post(
+            reverse("accounts-image-upload"),
+            {"image": image, "scope": "products"},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIn("/media/uploads/products/", response.data["url"])
+        self.assertTrue(response.data["url"].startswith("http://testserver/media/"))
+
+    def test_rejects_non_image_upload(self):
+        invalid_file = SimpleUploadedFile("notes.txt", b"not-an-image", content_type="text/plain")
+
+        response = self.client.post(
+            reverse("accounts-image-upload"),
+            {"image": invalid_file},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            response.data["detail"],
+            "Only JPEG, PNG, WebP, and GIF images are supported.",
+        )

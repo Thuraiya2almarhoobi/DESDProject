@@ -1,6 +1,7 @@
 import { ArrowRight, ShoppingBasket, Store, Truck } from 'lucide-react';
 import { Link } from 'react-router';
 
+import { SiteHeader } from '../components/SiteHeader';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
@@ -35,22 +36,9 @@ export function LandingPage() {
         <div className="absolute bottom-[-10rem] left-1/3 h-[28rem] w-[28rem] rounded-full bg-[oklch(0.89_0.05_200/.16)] blur-3xl" />
       </div>
 
-      <header className="relative z-10 border-b border-[oklch(0.88_0.02_145)] bg-white/72 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4">
-          <Link to="/" className="space-y-1">
-            <p className="text-sm font-semibold tracking-[0.2em] text-[oklch(0.44_0.05_145)] uppercase">
-              Bristol Local Food Marketplace
-            </p>
-            <p className="text-sm text-[oklch(0.36_0.03_145)]">
-              Fresh food from Bristol producers to homes, kitchens, and community buyers.
-            </p>
-          </Link>
-
-          <Button asChild variant="ghost">
-            <Link to="/portal/producer">Producer Portal</Link>
-          </Button>
-        </div>
-      </header>
+      <div className="relative z-10">
+        <SiteHeader />
+      </div>
 
       <main className="relative z-10">
         <section className="mx-auto grid max-w-7xl gap-10 px-4 py-14 lg:grid-cols-[1.02fr_0.98fr] lg:items-center lg:py-20">

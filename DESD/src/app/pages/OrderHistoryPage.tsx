@@ -18,6 +18,7 @@ import { toast } from 'sonner';
 import { ApiOrderDetail, ApiOrderSummary, apiBlob, apiJson } from '../lib/api';
 import { getGoogleMapsDirectionsEmbedUrl, getGoogleMapsDirectionsUrl } from '../lib/googleMaps';
 import { useSafeBack } from '../lib/navigation';
+import { SiteHeader } from '../components/SiteHeader';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
@@ -106,6 +107,10 @@ function getStatusBadgeClass(status: string): string {
   }
 }
 
+function formatReceiptDate(value: string): string {
+  return format(new Date(value), 'MMM d, yyyy, h:mm a');
+}
+
 export function OrderHistoryPage() {
   const navigate = useNavigate();
   const goBack = useSafeBack('/marketplace');
@@ -121,6 +126,12 @@ export function OrderHistoryPage() {
   const [producerOptions, setProducerOptions] = useState<string[]>([]);
   const [currentOrdersOpen, setCurrentOrdersOpen] = useState(true);
   const [previousOrdersOpen, setPreviousOrdersOpen] = useState(true);
+  const backToMarketplaceButton = (
+    <Button variant="ghost" onClick={goBack}>
+      <ArrowLeft className="mr-2 size-4" />
+      Back to Marketplace
+    </Button>
+  );
 
   const hasActiveFilters = producerNameFilter !== 'all' || Boolean(fromDateFilter) || Boolean(toDateFilter);
 
@@ -382,7 +393,7 @@ export function OrderHistoryPage() {
               <p className="font-medium">{renderDeliveryWindow(order)}</p>
             </div>
             <div>
-              <p className="text-gray-500">{isCurrent ? 'Tracking' : 'Outcome'}</p>
+              <p className="text-gray-500">Order Status</p>
               <p className="font-medium text-gray-800">
                 {isCurrent ? 'Still in progress' : order.status === 'cancelled' ? 'Order closed' : 'Completed'}
               </p>
@@ -410,6 +421,10 @@ export function OrderHistoryPage() {
                 >
                   {isTrackingOpen ? 'Hide Tracking' : 'Track Order'}
                 </Button>
+                <Button variant="outline" size="sm" onClick={() => downloadReceipt(order)}>
+                  <Download className="size-4 mr-2" />
+                  Download Receipt
+                </Button>
               </>
             ) : (
               <>
@@ -418,7 +433,7 @@ export function OrderHistoryPage() {
                 </Button>
                 <Button variant="outline" size="sm" onClick={() => downloadReceipt(order)}>
                   <Download className="size-4 mr-2" />
-                  Receipt
+                  Download Receipt
                 </Button>
                 <Button size="sm" onClick={() => reorderOrder(order.id)}>
                   <RotateCcw className="size-4 mr-2" />
@@ -483,6 +498,90 @@ export function OrderHistoryPage() {
                           ))}
                         </div>
                       </div>
+
+                      {selectedOrder.payment_status !== 'cancelled' && (
+                        <div className="rounded-2xl border border-[oklch(0.88_0.02_145)] bg-[oklch(0.99_0.004_145)] p-5 shadow-sm">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <ReceiptText className="size-4 text-green-700" />
+                                <p className="text-sm font-semibold uppercase tracking-[0.16em] text-green-900">
+                                  Receipt
+                                </p>
+                              </div>
+                              <p className="mt-2 text-lg font-semibold text-gray-900">
+                                {selectedOrder.order_number}
+                              </p>
+                              <p className="text-sm text-gray-600">
+                                Issued {formatReceiptDate(selectedOrder.created_at)}
+                              </p>
+                            </div>
+                            {!isCurrent && (
+                              <Button variant="outline" size="sm" onClick={() => downloadReceipt(order)}>
+                                <Download className="mr-2 size-4" />
+                                Download Receipt
+                              </Button>
+                            )}
+                          </div>
+
+                          <Separator className="my-4" />
+
+                          <div className="grid gap-4 text-sm sm:grid-cols-3">
+                            <div>
+                              <p className="text-gray-500">Payment Status</p>
+                              <p className="font-medium">{formatStatusLabel(selectedOrder.payment_status)}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-500">Payment Reference</p>
+                              <p className="font-medium">{maskPaymentReference(selectedOrder.payment_reference)}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-500">Delivery Window</p>
+                              <p className="font-medium">{renderDeliveryWindow(order)}</p>
+                            </div>
+                          </div>
+
+                          <div className="mt-4 rounded-xl border bg-white p-4">
+                            <div className="space-y-2">
+                              {selectedOrder.items.map((item) => (
+                                <div
+                                  key={`receipt-${item.id}`}
+                                  className="flex items-start justify-between gap-3 text-sm"
+                                >
+                                  <div>
+                                    <p className="font-medium text-gray-900">{item.product_name}</p>
+                                    <p className="text-gray-600">
+                                      {item.quantity} {item.unit} from {item.producer_name}
+                                    </p>
+                                  </div>
+                                  <p className="font-medium text-gray-900">£{Number(item.line_total).toFixed(2)}</p>
+                                </div>
+                              ))}
+                            </div>
+
+                            <Separator className="my-4" />
+
+                            <div className="space-y-2 text-sm">
+                              <div className="flex items-center justify-between">
+                                <span className="text-gray-600">Subtotal</span>
+                                <span className="font-medium">£{Number(selectedOrder.subtotal_amount).toFixed(2)}</span>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <span className="text-gray-600">
+                                  Commission ({Number(selectedOrder.commission_rate).toFixed(0)}%)
+                                </span>
+                                <span className="font-medium">£{Number(selectedOrder.commission_amount).toFixed(2)}</span>
+                              </div>
+                              <div className="flex items-center justify-between border-t pt-2 text-base">
+                                <span className="font-semibold text-gray-900">Total Paid</span>
+                                <span className="font-semibold text-green-700">
+                                  £{Number(selectedOrder.total_amount).toFixed(2)}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -524,25 +623,18 @@ export function OrderHistoryPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[oklch(0.98_0.01_145)] to-[oklch(0.96_0.02_150)]">
-      <header className="bg-white/80 backdrop-blur-sm border-b border-[oklch(0.88_0.02_145)] shadow-sm">
-        <div className="max-w-6xl mx-auto px-4 py-4 flex justify-between items-center">
-          <Button variant="ghost" onClick={goBack}>
-            <ArrowLeft className="size-4 mr-2" />
-            Back to Marketplace
-          </Button>
-          <Button variant="outline" onClick={() => navigate('/cart')}>Go to Cart</Button>
-        </div>
-      </header>
+      <SiteHeader />
 
       <main className="max-w-6xl mx-auto px-4 py-8 space-y-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">{backToMarketplaceButton}</div>
         <div>
           <h1 className="text-3xl font-semibold">Order History</h1>
-          <p className="text-sm text-gray-600 mt-1">Track current orders, review completed ones, open receipts, and reorder quickly.</p>
+          <p className="text-sm text-gray-600 mt-1">Review past purchases, download receipts, reorder favourites, and track current deliveries.</p>
         </div>
 
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-lg">Filter Orders</CardTitle>
+            <CardTitle className="text-lg">Filter Orders by Producer or Date Range</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid md:grid-cols-4 gap-4">

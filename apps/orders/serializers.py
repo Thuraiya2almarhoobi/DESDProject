@@ -2,6 +2,9 @@ from decimal import Decimal
 
 from rest_framework import serializers
 
+from apps.geo.services import get_postcode_coordinates, haversine_miles
+
+from .marketplace_sync import default_marketplace_image_url, matching_producer_portal_product, product_is_organic
 from .models import (
     CartItem,
     CustomerProfile,
@@ -53,6 +56,182 @@ class ProductSerializer(serializers.ModelSerializer):
             "harvest_date",
             "allergen_info",
         ]
+
+
+class MarketplaceProductSerializer(serializers.ModelSerializer):
+    producer_id = serializers.IntegerField(source="producer.id", read_only=True)
+    producer_name = serializers.CharField(source="producer.business_name", read_only=True)
+    producer_location = serializers.SerializerMethodField()
+    producer_description = serializers.SerializerMethodField()
+    producer_delivery_lead_time = serializers.IntegerField(source="producer.lead_time_hours", read_only=True)
+    producer_postcode = serializers.CharField(source="producer.postcode", read_only=True)
+    producer_latitude = serializers.SerializerMethodField()
+    producer_longitude = serializers.SerializerMethodField()
+    availability = serializers.SerializerMethodField()
+    seasonal_dates = serializers.SerializerMethodField()
+    is_organic = serializers.SerializerMethodField()
+    organic_certification = serializers.SerializerMethodField()
+    allergens = serializers.SerializerMethodField()
+    image_url = serializers.SerializerMethodField()
+    stock = serializers.SerializerMethodField()
+    food_miles = serializers.SerializerMethodField()
+    is_surplus = serializers.SerializerMethodField()
+    surplus_discount = serializers.SerializerMethodField()
+    surplus_original_price = serializers.SerializerMethodField()
+    surplus_expires_at = serializers.SerializerMethodField()
+    surplus_best_before = serializers.SerializerMethodField()
+    storage_tips = serializers.SerializerMethodField()
+    recipe_ideas = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Product
+        fields = [
+            "id",
+            "name",
+            "description",
+            "price",
+            "unit",
+            "producer_id",
+            "producer_name",
+            "producer_location",
+            "producer_description",
+            "producer_delivery_lead_time",
+            "producer_postcode",
+            "producer_latitude",
+            "producer_longitude",
+            "category",
+            "harvest_date",
+            "availability",
+            "seasonal_dates",
+            "is_organic",
+            "organic_certification",
+            "allergens",
+            "image_url",
+            "stock",
+            "food_miles",
+            "is_surplus",
+            "surplus_discount",
+            "surplus_original_price",
+            "surplus_expires_at",
+            "surplus_best_before",
+            "storage_tips",
+            "recipe_ideas",
+        ]
+
+    def _producer_product(self, obj: Product):
+        cache = self.context.setdefault("_producer_product_cache", {})
+        if obj.id not in cache:
+            cache[obj.id] = matching_producer_portal_product(obj)
+        return cache[obj.id]
+
+    def get_producer_location(self, obj: Product) -> str:
+        producer_user = getattr(obj.producer, "user", None)
+        producer_profile = getattr(producer_user, "producer_profile", None) if producer_user else None
+        address = getattr(producer_profile, "address", None) if producer_profile else None
+        if address and address.city:
+            return f"{address.city}, UK"
+        if obj.producer.postcode:
+            return obj.producer.postcode
+        return "Bristol, UK"
+
+    def get_producer_description(self, obj: Product) -> str:
+        producer_user = getattr(obj.producer, "user", None)
+        producer_profile = getattr(producer_user, "producer_profile", None) if producer_user else None
+        if producer_profile and producer_profile.farm_origin_text:
+            return producer_profile.farm_origin_text
+        return f"Fresh produce from {obj.producer.business_name}."
+
+    def get_producer_latitude(self, obj: Product) -> float | None:
+        coordinates = get_postcode_coordinates(obj.producer.postcode)
+        if not coordinates:
+            return None
+        return coordinates[0]
+
+    def get_producer_longitude(self, obj: Product) -> float | None:
+        coordinates = get_postcode_coordinates(obj.producer.postcode)
+        if not coordinates:
+            return None
+        return coordinates[1]
+
+    def get_availability(self, obj: Product) -> str:
+        if not obj.is_available or obj.stock_quantity <= Decimal("0.00"):
+            return "unavailable"
+        if obj.in_season:
+            return "in-season"
+        return "year-round"
+
+    def get_seasonal_dates(self, obj: Product) -> str:
+        return "Current season" if obj.in_season else "Year-round"
+
+    def get_is_organic(self, obj: Product) -> bool:
+        return product_is_organic(name=obj.name, description=obj.description)
+
+    def get_organic_certification(self, obj: Product) -> str:
+        return ""
+
+    def get_allergens(self, obj: Product) -> list[str]:
+        return [token.strip() for token in (obj.allergen_info or "").split(",") if token.strip()]
+
+    def get_image_url(self, obj: Product) -> str:
+        producer_product = self._producer_product(obj)
+        if producer_product and producer_product.image_url:
+            return producer_product.image_url
+        return default_marketplace_image_url(obj.id)
+
+    def get_stock(self, obj: Product) -> int:
+        return max(0, int(obj.stock_quantity))
+
+    def get_food_miles(self, obj: Product) -> float:
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        customer_profile = getattr(user, "orders_customer_profile", None) if user and user.is_authenticated else None
+        customer_postcode = customer_profile.postcode if customer_profile and customer_profile.postcode else ""
+        if not customer_postcode or not obj.producer.postcode:
+            return 0
+
+        customer_coords = get_postcode_coordinates(customer_postcode)
+        producer_coords = get_postcode_coordinates(obj.producer.postcode)
+        if not customer_coords or not producer_coords:
+            return 0
+
+        return haversine_miles(
+            customer_coords[0],
+            customer_coords[1],
+            producer_coords[0],
+            producer_coords[1],
+        )
+
+    def get_is_surplus(self, obj: Product) -> bool:
+        producer_product = self._producer_product(obj)
+        return bool(getattr(producer_product, "is_surplus", False))
+
+    def get_surplus_discount(self, obj: Product) -> int | None:
+        producer_product = self._producer_product(obj)
+        return getattr(producer_product, "surplus_discount_percent", None)
+
+    def get_surplus_original_price(self, obj: Product) -> Decimal | None:
+        discount = self.get_surplus_discount(obj)
+        if not discount or discount >= 100:
+            return None
+        return (obj.price / (Decimal("1.00") - (Decimal(str(discount)) / Decimal("100.00")))).quantize(
+            Decimal("0.01")
+        )
+
+    def get_surplus_expires_at(self, obj: Product):
+        return None
+
+    def get_surplus_best_before(self, obj: Product) -> str:
+        return ""
+
+    def get_storage_tips(self, obj: Product) -> str:
+        return "Keep refrigerated where appropriate and consume while fresh."
+
+    def get_recipe_ideas(self, obj: Product) -> list[str]:
+        return list(
+            obj.product_recipes.select_related("recipe")
+            .order_by("recipe__title")
+            .values_list("recipe__title", flat=True)
+        )
 
 
 class CustomerProfileSerializer(serializers.ModelSerializer):

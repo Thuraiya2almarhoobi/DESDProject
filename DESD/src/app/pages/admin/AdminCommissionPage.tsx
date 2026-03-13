@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Calendar, Download, LogOut } from 'lucide-react';
+import { Calendar, Download } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
-import { useAuth } from '../../contexts/AuthContext';
 import { ApiProducer, apiBlob, apiJson } from '../../lib/api';
+import { SiteHeader } from '../../components/SiteHeader';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
@@ -73,7 +73,6 @@ function toCurrency(value: string): string {
 }
 
 export function AdminCommissionPage() {
-  const { logout } = useAuth();
   const [dateFrom, setDateFrom] = useState('2026-02-23');
   const [dateTo, setDateTo] = useState('2026-03-09');
   const [producerId, setProducerId] = useState('');
@@ -169,23 +168,14 @@ export function AdminCommissionPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[oklch(0.98_0.01_145)] to-[oklch(0.96_0.02_150)]">
-      <header className="bg-white/80 backdrop-blur-sm border-b border-[oklch(0.88_0.02_145)] shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-semibold">Network Commission / Financial Reports</h1>
-              <p className="text-sm text-gray-600">5% platform commission with producer payout traceability</p>
-              <p className="text-xs text-gray-500">Role: ADMIN | Commission monitoring and reporting interface</p>
-            </div>
-            <Button variant="ghost" onClick={logout}>
-              <LogOut className="size-4 mr-2" />
-              Sign Out
-            </Button>
-          </div>
-        </div>
-      </header>
+      <SiteHeader />
 
       <main className="max-w-7xl mx-auto px-4 py-8 space-y-6">
+        <div>
+          <h1 className="text-3xl font-semibold">Network Commission / Financial Reports</h1>
+          <p className="mt-1 text-sm text-gray-600">5% platform commission with producer payout traceability</p>
+          <p className="text-xs text-gray-500">Role: ADMIN | Commission monitoring and reporting interface</p>
+        </div>
         <Card>
           <CardContent className="p-6">
             <div className="grid md:grid-cols-6 gap-4">

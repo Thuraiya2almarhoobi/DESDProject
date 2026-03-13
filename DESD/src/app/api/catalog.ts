@@ -5,6 +5,7 @@ import { AvailabilityType, Product, ProductReview, ProductUnit } from "../types"
 
 const API_BASE_URL =
   ((import.meta.env.VITE_API_BASE_URL as string | undefined) || "/api").replace(/\/+$/, "");
+const ORDERS_API_BASE_URL = `${API_BASE_URL}/orders`;
 const USE_MOCK_PRODUCTS =
   ((import.meta.env.VITE_USE_MOCK_PRODUCTS as string | undefined) || "").toLowerCase() === "true";
 const DEFAULT_IMAGE_URL =
@@ -304,7 +305,8 @@ export async function fetchProducts(params: ProductQueryParams = {}): Promise<Pr
   }
 
   const queryString = buildProductsQueryString(params);
-  const url = queryString ? `${API_BASE_URL}/products?${queryString}` : `${API_BASE_URL}/products`;
+  const baseUrl = `${ORDERS_API_BASE_URL}/products`;
+  const url = queryString ? `${baseUrl}?available=true&${queryString}` : `${baseUrl}?available=true`;
   const data = await requestJson<ApiProduct[]>(url);
   return data.map(mapProduct);
 }
@@ -318,7 +320,7 @@ export async function fetchProductById(productId: string): Promise<Product> {
     return product;
   }
 
-  const data = await requestJson<ApiProduct>(`${API_BASE_URL}/products/${productId}`);
+  const data = await requestJson<ApiProduct>(`${ORDERS_API_BASE_URL}/products/${productId}/`);
   return mapProduct(data);
 }
 
@@ -327,8 +329,8 @@ export async function fetchCategories(): Promise<string[]> {
     return Array.from(new Set(mockProducts.map((product) => product.category))).sort();
   }
 
-  const categories = await requestJson<ApiCategory[]>(`${API_BASE_URL}/categories`);
-  return categories.map((category) => category.name);
+  const products = await requestJson<ApiProduct[]>(`${ORDERS_API_BASE_URL}/products/?available=true`);
+  return Array.from(new Set(products.map((product) => product.category || "Uncategorised"))).sort();
 }
 
 export async function fetchProductReviews(productId: string): Promise<ProductReview[]> {
@@ -336,7 +338,7 @@ export async function fetchProductReviews(productId: string): Promise<ProductRev
     return [];
   }
 
-  const reviews = await requestJson<ApiReview[]>(`${API_BASE_URL}/products/${productId}/reviews`);
+  const reviews = await requestJson<ApiReview[]>(`${ORDERS_API_BASE_URL}/products/${productId}/reviews/`);
   return reviews.map(mapReview);
 }
 
@@ -348,7 +350,7 @@ export async function createProductReview(
     throw new Error("Review submission is unavailable while mock catalog data is enabled.");
   }
 
-  const review = await requestJson<ApiReview>(`${API_BASE_URL}/products/${productId}/reviews`, {
+  const review = await requestJson<ApiReview>(`${ORDERS_API_BASE_URL}/products/${productId}/reviews/`, {
     method: "POST",
     body: JSON.stringify(payload),
   });

@@ -7,10 +7,8 @@ import {
   Banknote,
   Calendar,
   Clock,
-  Eye,
   FileDown,
   Loader2,
-  LogOut,
   Package,
   Plus,
   RefreshCw,
@@ -25,6 +23,7 @@ import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
 import { apiJson } from '../../lib/api';
 import { fetchProducerProductsFromApi } from '../../services/productApi';
+import { SiteHeader } from '../../components/SiteHeader';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
@@ -89,7 +88,7 @@ function isUrgentOrder(order: ProducerSubOrderApi): boolean {
 
 export function ProducerDashboardPage() {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const producerEmail = (user?.email || 'producer@example.com').trim().toLowerCase();
 
   const [loading, setLoading] = useState(true);
@@ -218,7 +217,7 @@ export function ProducerDashboardPage() {
         path: '/producer/inventory',
         variant: 'default',
         icon: AlertTriangle,
-        action: 'Update stock',
+        action: 'Stock management',
       });
     }
 
@@ -260,29 +259,16 @@ export function ProducerDashboardPage() {
   ]);
 
   const primaryActions = [
-    { label: 'Add product', icon: Plus, path: '/producer/inventory', variant: 'default' as const },
-    { label: 'Update stock', icon: RefreshCw, path: '/producer/inventory', variant: 'outline' as const },
+    { label: 'Add product', icon: Plus, path: '/producer/inventory?create=product', variant: 'default' as const },
+    { label: 'Stock management', icon: RefreshCw, path: '/producer/inventory', variant: 'outline' as const },
     { label: 'View orders', icon: ShoppingBag, path: '/producer/orders', variant: 'outline' as const },
     { label: 'Create surplus deal', icon: Tag, path: '/producer/inventory', variant: 'outline' as const },
-    { label: 'Share recipe/story', icon: Sparkles, path: '/content/feed', variant: 'outline' as const },
+    { label: 'Content: stories & recipes', icon: Sparkles, path: '/content/feed', variant: 'outline' as const },
   ];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[oklch(0.98_0.01_145)] to-[oklch(0.96_0.02_150)]">
-      <header className="bg-white/80 backdrop-blur-sm border-b border-[oklch(0.88_0.02_145)] shadow-sm">
-        <div className="max-w-6xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-semibold">Producer Dashboard</h1>
-              <p className="text-sm text-gray-700">Signed in as {producerEmail}</p>
-            </div>
-            <Button variant="ghost" onClick={logout} className="focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2">
-              <LogOut className="size-4 mr-2" />
-              Sign Out
-            </Button>
-          </div>
-        </div>
-      </header>
+      <SiteHeader />
 
       <main className="max-w-6xl mx-auto px-4 py-8 space-y-8">
         {loading ? (
@@ -504,25 +490,6 @@ export function ProducerDashboardPage() {
               </Card>
             </section>
 
-            <section>
-              <Card className="border-blue-200 bg-blue-50/30">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                      <Eye className="size-5 text-blue-600" />
-                      <div>
-                        <p className="font-medium text-gray-900">Preview customer storefront</p>
-                        <p className="text-sm text-gray-600">Verify your products and pricing as customers see them.</p>
-                      </div>
-                    </div>
-                    <Button variant="outline" size="sm" onClick={() => navigate('/marketplace')}>
-                      <Eye className="size-4 mr-2" />
-                      Preview as customer
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </section>
           </>
         )}
       </main>

@@ -236,6 +236,21 @@ class Command(BaseCommand):
                 },
             ),
             (
+                producer_user,
+                {
+                    "name": "Potatoes",
+                    "category": "Vegetables",
+                    "description": "Locally grown potatoes suitable for bulk and household orders.",
+                    "price": Decimal("1.40"),
+                    "unit": "kg",
+                    "availability": ProductAvailability.YEAR_ROUND,
+                    "stock_quantity": 300,
+                    "allergen_information": "",
+                    "harvest_date": date.today(),
+                    "image_url": "https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=800",
+                },
+            ),
+            (
                 producer_two_user,
                 {
                     "name": "Fresh Milk",
@@ -254,7 +269,7 @@ class Command(BaseCommand):
                 producer_two_user,
                 {
                     "name": "Organic Free Range Eggs",
-                    "category": "Dairy & Eggs",
+                    "category": "Eggs",
                     "description": "Free-range eggs collected daily.",
                     "price": Decimal("3.50"),
                     "unit": "dozen",
@@ -263,6 +278,21 @@ class Command(BaseCommand):
                     "allergen_information": "Eggs",
                     "harvest_date": date.today(),
                     "image_url": "https://images.unsplash.com/photo-1518569656558-1f25e69d93d7?w=800",
+                },
+            ),
+            (
+                producer_two_user,
+                {
+                    "name": "Walnut Bread",
+                    "category": "Bakery",
+                    "description": "Artisan bread loaf with walnuts and whole wheat flour.",
+                    "price": Decimal("4.20"),
+                    "unit": "each",
+                    "availability": ProductAvailability.YEAR_ROUND,
+                    "stock_quantity": 60,
+                    "allergen_information": "Gluten, Nuts",
+                    "harvest_date": date.today(),
+                    "image_url": "https://images.unsplash.com/photo-1509440159596-0249088772ff?w=800",
                 },
             ),
         ]

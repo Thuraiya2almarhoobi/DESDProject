@@ -62,15 +62,16 @@ The application has three user roles with different access levels:
 1. Click "Proceed to Checkout"
 2. **Step 1**: Enter delivery address
 3. **Step 2**: Select delivery dates **per producer** (minimum 48 hours from now)
-4. **Step 3**: Payment (sandbox - any card details work)
+4. **Step 3**: Continue to Stripe Checkout (test mode)
 5. Verify order summary shows:
    - Per-producer sections with delivery dates
    - Subtotal
    - **5% commission line item** (very visible)
    - Total including commission
-6. Submit payment (70% chance of success for demo purposes)
-7. On success: Order confirmation with order number
-8. On failure: Clear error message, no duplicate order created
+6. Stripe opens in test mode
+7. Use test card `4242 4242 4242 4242` with any valid future expiry/CVC
+8. On success: Order confirmation shows order number and Stripe payment ID
+9. On cancel: Clear error message and reserved stock is released again
 
 ### 2. Producer Journey (Manage Products & Orders)
 

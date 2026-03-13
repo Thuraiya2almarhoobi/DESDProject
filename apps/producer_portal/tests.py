@@ -8,6 +8,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from apps.catalog.models import Product as CatalogProduct
 from apps.orders.models import Producer as OrdersProducer
 from apps.orders.models import Product as OrdersProduct
 from apps.producer_portal.models import (
@@ -212,6 +213,13 @@ class ProducerPortalCriticalTestCases(APITestCase):
                 is_available=True,
             ).exists()
         )
+        self.assertTrue(
+            CatalogProduct.objects.filter(
+                producer__name=orders_producer.business_name,
+                name="Sync Ready Beetroot",
+                stock=14,
+            ).exists()
+        )
 
         patch_response = self.client.patch(
             f"/api/producer/products/{create_response.data['id']}/",
@@ -237,12 +245,26 @@ class ProducerPortalCriticalTestCases(APITestCase):
                 is_available=False,
             ).exists()
         )
+        self.assertTrue(
+            CatalogProduct.objects.filter(
+                producer__name=orders_producer.business_name,
+                name="Synced Beetroot Renamed",
+                stock=0,
+                availability="unavailable",
+            ).exists()
+        )
 
         delete_response = self.client.delete(f"/api/producer/products/{create_response.data['id']}/")
         self.assertEqual(delete_response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(
             OrdersProduct.objects.filter(
                 producer=orders_producer,
+                name="Synced Beetroot Renamed",
+            ).exists()
+        )
+        self.assertFalse(
+            CatalogProduct.objects.filter(
+                producer__name=orders_producer.business_name,
                 name="Synced Beetroot Renamed",
             ).exists()
         )
@@ -317,5 +339,4 @@ class ProducerPortalCriticalTestCases(APITestCase):
         self.assertEqual(delivered_again_response.status_code, status.HTTP_200_OK)
         product.refresh_from_db()
         self.assertEqual(product.stock_quantity, 95)
-
 

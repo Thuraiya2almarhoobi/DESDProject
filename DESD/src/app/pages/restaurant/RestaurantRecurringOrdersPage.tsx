@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Calendar, Clock3, PauseCircle, PlayCircle, RefreshCw, Trash2, LogOut } from 'lucide-react';
+import { Calendar, Clock3, PauseCircle, PlayCircle, RefreshCw, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { useAuth } from '../../contexts/AuthContext';
 import { apiJson } from '../../lib/api';
+import { SiteHeader } from '../../components/SiteHeader';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
@@ -50,7 +50,6 @@ function weekdayName(value: number): string {
 
 export function RestaurantRecurringOrdersPage() {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
   const [templates, setTemplates] = useState<RecurringTemplatePayload[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingTemplateId, setSavingTemplateId] = useState<number | null>(null);
@@ -154,26 +153,18 @@ export function RestaurantRecurringOrdersPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[oklch(0.98_0.01_145)] to-[oklch(0.96_0.02_150)]">
-      <header className="bg-white/80 backdrop-blur-sm border-b border-[oklch(0.88_0.02_145)] shadow-sm">
-        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold">Restaurant Recurring Orders</h1>
-            <p className="text-sm text-gray-700">{user?.name}</p>
-            <p className="text-xs text-gray-600 mt-1">Role: RESTAURANT | Recurring template management interface</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => navigate('/marketplace')}>
-              Create From Marketplace
-            </Button>
-            <Button variant="ghost" onClick={logout}>
-              <LogOut className="size-4 mr-2" />
-              Sign Out
-            </Button>
-          </div>
-        </div>
-      </header>
+      <SiteHeader />
 
       <main className="max-w-6xl mx-auto px-4 py-8 space-y-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-3xl font-semibold">Restaurant Recurring Orders</h1>
+            <p className="mt-1 text-sm text-gray-600">Role: RESTAURANT | Recurring template management interface</p>
+          </div>
+          <Button variant="outline" onClick={() => navigate('/marketplace')}>
+            Create From Marketplace
+          </Button>
+        </div>
         <Card>
           <CardContent className="p-6 flex flex-wrap items-center gap-4 justify-between">
             <div>

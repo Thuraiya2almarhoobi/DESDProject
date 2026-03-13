@@ -140,6 +140,8 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [
     BASE_DIR / "DESD" / "dist",
 ]
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
 
 # Vite frontend output location used by Django template view.
 FRONTEND_DIST_DIR = BASE_DIR / "DESD" / "dist"
@@ -150,6 +152,9 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY", "")
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
+PAYMENT_SERVICE_BASE_URL = os.getenv("PAYMENT_SERVICE_BASE_URL", "http://payments:8010")
+PAYMENT_SERVICE_SHARED_SECRET = os.getenv("PAYMENT_SERVICE_SHARED_SECRET", "local-payment-service-secret")
+PAYMENT_SERVICE_TIMEOUT_SECONDS = int(os.getenv("PAYMENT_SERVICE_TIMEOUT_SECONDS", "15"))
 STRIPE_SUCCESS_URL = os.getenv(
     "STRIPE_SUCCESS_URL",
     f"{FRONTEND_URL.rstrip('/')}/checkout/success?session_id={{CHECKOUT_SESSION_ID}}",
@@ -247,4 +252,3 @@ LOGGING = {
         },
     },
 }
-

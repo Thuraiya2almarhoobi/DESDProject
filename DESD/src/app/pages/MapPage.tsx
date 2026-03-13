@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router';
 import { ArrowLeft, MapPin, Route } from 'lucide-react';
 import { apiJson } from '../lib/api';
 import { getGoogleMapsEmbedUrl, getGoogleMapsSearchUrl } from '../lib/googleMaps';
 import { useSafeBack } from '../lib/navigation';
+import { SiteHeader } from '../components/SiteHeader';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Input } from '../components/ui/input';
@@ -41,7 +41,6 @@ interface CartMilesPayload {
 }
 
 export function MapPage() {
-  const navigate = useNavigate();
   const goBack = useSafeBack('/marketplace');
   const [postcode, setPostcode] = useState('');
   const [radius, setRadius] = useState('20');
@@ -49,6 +48,12 @@ export function MapPage() {
   const [error, setError] = useState('');
   const [nearPayload, setNearPayload] = useState<ProducersNearPayload | null>(null);
   const [cartMiles, setCartMiles] = useState<CartMilesPayload | null>(null);
+  const backToMarketplaceButton = (
+    <Button variant="ghost" onClick={goBack}>
+      <ArrowLeft className="mr-2 size-4" />
+      Back to Marketplace
+    </Button>
+  );
 
   const loadData = async (overridePostcode?: string, overrideRadius?: string) => {
     setLoading(true);
@@ -85,17 +90,10 @@ export function MapPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[oklch(0.98_0.01_145)] to-[oklch(0.96_0.02_150)]">
-      <header className="bg-white/80 backdrop-blur-sm border-b border-[oklch(0.88_0.02_145)] shadow-sm">
-        <div className="max-w-6xl mx-auto px-4 py-4 flex justify-between items-center">
-          <Button variant="ghost" onClick={goBack}>
-            <ArrowLeft className="size-4 mr-2" />
-            Back to Marketplace
-          </Button>
-          <Button variant="outline" onClick={() => navigate('/cart')}>Cart</Button>
-        </div>
-      </header>
+      <SiteHeader />
 
       <main className="max-w-6xl mx-auto px-4 py-8 space-y-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">{backToMarketplaceButton}</div>
         <div>
           <h1 className="text-3xl font-semibold">Producers Near Me</h1>
           <p className="text-sm text-gray-600 mt-1">Postcode distance and cart food-miles visual for sustainability tracking.</p>

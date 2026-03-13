@@ -1,26 +1,25 @@
 ﻿import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { Search, Filter, ShoppingCart, LogOut, X, Plus, Minus, AlertCircle, AlertTriangle, User } from 'lucide-react';
+import { Filter, X, Plus, Minus, AlertCircle, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { Product } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 import { fetchCategories, fetchProducts } from '../api/catalog';
 import { getDashboardPathForRole } from '../lib/roleRouting';
-import { Button, buttonVariants } from '../components/ui/button';
+import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Checkbox } from '../components/ui/checkbox';
 import { Label } from '../components/ui/label';
 import { Badge } from '../components/ui/badge';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '../components/ui/sheet';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '../components/ui/dropdown-menu';
 import { Skeleton } from '../components/ui/skeleton';
 import { AvailabilityBadge, OrganicBadge, SurplusBadge } from '../components/ProductBadges';
 import { ProductMeta } from '../components/ProductMeta';
 import { SurplusInfo } from '../components/SurplusInfo';
 import { Card, CardContent } from '../components/ui/card';
-import { Sprout } from 'lucide-react';
+import { SiteHeader } from '../components/SiteHeader';
 import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs';
 
 const fallbackCategories = ['All', 'Vegetables', 'Fruit', 'Dairy Products', 'Bakery', 'Preserves'];
@@ -61,8 +60,8 @@ function getPriceBounds(priceFilter: PriceFilter): { minPrice?: number; maxPrice
 
 export function MarketplacePage() {
   const navigate = useNavigate();
-  const { user, logout, addresses } = useAuth();
-  const { getTotalItems, addToCart, undoLastAdd } = useCart();
+  const { user } = useAuth();
+  const { addToCartAndWait, getProductCartQuantity, undoLastAdd } = useCart();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<string[]>(fallbackCategories);
   const [searchQuery, setSearchQuery] = useState('');
@@ -79,25 +78,6 @@ export function MarketplacePage() {
   const [viewMode, setViewMode] = useState<ViewMode>('all');
   const [excludedAllergens, setExcludedAllergens] = useState<string[]>([]);
   const [reloadKey, setReloadKey] = useState(0);
-  const isCustomer = user?.role === 'CUSTOMER';
-  const customerName = (user?.name || '').trim() || 'Customer';
-  const isCommunityMode = user?.role === 'COMMUNITY';
-  const isRestaurantMode = user?.role === 'RESTAURANT';
-  const isBulkMode = isCommunityMode || isRestaurantMode;
-  const defaultAddressText = useMemo(() => {
-    if (!addresses || addresses.length === 0) {
-      return '';
-    }
-    const defaultAddress = addresses.find((address) => address.is_default) || addresses[0];
-    return [defaultAddress.line1, defaultAddress.city, defaultAddress.postcode]
-      .filter(Boolean)
-      .join(', ');
-  }, [addresses]);
-
-  const handleLogout = () => {
-    logout();
-    navigate('/');
-  };
 
   useEffect(() => {
     let mounted = true;
@@ -294,7 +274,7 @@ export function MarketplacePage() {
     (viewMode === 'surplus' ? 1 : 0) +
     (sortBy !== 'relevance' ? 1 : 0);
 
-  const handleAddToCart = (product: Product, quantity: number, e: React.MouseEvent) => {
+  const handleAddToCart = async (product: Product, quantity: number, e: React.MouseEvent) => {
     e.stopPropagation();
 
     if (!user) {
@@ -328,8 +308,20 @@ export function MarketplacePage() {
       return;
     }
 
-    addToCart(product, quantity);
-    toast.success(`Added: ${product.name} (${quantity} ${product.unit})`, {
+    const currentCartQuantity = getProductCartQuantity(product.id);
+    const remainingStock = Math.max(0, Math.floor(product.stock) - currentCartQuantity);
+    if (remainingStock <= 0) {
+      toast.error(`You already have the maximum available quantity of ${product.name} in your cart.`);
+      return;
+    }
+
+    const quantityToAdd = Math.min(quantity, remainingStock);
+    const cartItemId = await addToCartAndWait(product, quantityToAdd);
+    if (!cartItemId) {
+      return;
+    }
+
+    toast.success(`Added: ${product.name} (${quantityToAdd} ${product.unit})`, {
       action: {
         label: 'Undo',
         onClick: () => undoLastAdd(),
@@ -391,9 +383,9 @@ export function MarketplacePage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="any">Any price</SelectItem>
-                <SelectItem value="under-3">Under Â£3</SelectItem>
-                <SelectItem value="3-to-6">Â£3 - Â£6</SelectItem>
-                <SelectItem value="over-6">Over Â£6</SelectItem>
+                <SelectItem value="under-3">Under £3</SelectItem>
+                <SelectItem value="3-to-6">£3 - £6</SelectItem>
+                <SelectItem value="over-6">Over £6</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -469,8 +461,8 @@ export function MarketplacePage() {
   const getSortLabel = (option: SortOption): string => {
     switch (option) {
       case 'relevance': return 'Relevance';
-      case 'price-low': return 'Price (low â†’ high)';
-      case 'price-high': return 'Price (high â†’ low)';
+      case 'price-low': return 'Price (low to high)';
+      case 'price-high': return 'Price (high to low)';
       case 'nearest': return 'Nearest';
       case 'harvest-newest': return 'Harvested newest';
       case 'ending-soon': return 'Ending soon';
@@ -480,11 +472,11 @@ export function MarketplacePage() {
   const getPriceFilterLabel = (filter: PriceFilter): string => {
     switch (filter) {
       case 'under-3':
-        return 'Under Â£3';
+        return 'Under £3';
       case '3-to-6':
-        return 'Â£3 - Â£6';
+        return '£3 - £6';
       case 'over-6':
-        return 'Over Â£6';
+        return 'Over £6';
       case 'any':
       default:
         return 'Any price';
@@ -527,152 +519,12 @@ export function MarketplacePage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[oklch(0.98_0.01_145)] to-[oklch(0.96_0.02_150)]">
-      {/* D) Tightened Header with Account Menu */}
-      <header className="bg-white/80 backdrop-blur-sm border-b border-[oklch(0.88_0.02_145)] sticky top-0 z-10 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="size-10 bg-gradient-to-br from-[oklch(0.45_0.12_155)] to-[oklch(0.55_0.10_150)] rounded-full flex items-center justify-center shadow-sm">
-                <Sprout className="size-5 text-white" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-semibold">Local Food Marketplace</h1>
-                <p className="text-sm text-gray-700">
-                  {!user
-                    ? 'Browse first, then sign in when you are ready to order.'
-                    : isCustomer
-                      ? `Signed in as ${customerName}`
-                      : `Browsing as ${customerName}`}
-                </p>
-                {isCommunityMode && (
-                  <p className="text-xs text-gray-600">Role: COMMUNITY | Bulk multi-producer ordering interface</p>
-                )}
-                {isRestaurantMode && (
-                  <p className="text-xs text-gray-600">Role: RESTAURANT | Recurring-order marketplace interface</p>
-                )}
-                {isCustomer && defaultAddressText && (
-                  <p className="text-xs text-gray-600 truncate max-w-[22rem]">Delivery address: {defaultAddressText}</p>
-                )}
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-2">
-              {isCustomer && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navigate('/cart')}
-                  className="relative focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
-                >
-                  <ShoppingCart className="size-4 sm:mr-2" />
-                  <span className="hidden sm:inline">Cart</span>
-                  {getTotalItems() > 0 && (
-                    <Badge className="ml-2 px-1.5 min-w-5 h-5 flex items-center justify-center">
-                      {getTotalItems()}
-                    </Badge>
-                  )}
-                </Button>
-              )}
-
-              {user ? (
-                <>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleLogout}
-                    className="focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
-                  >
-                    <LogOut className="size-4 sm:mr-2" />
-                    <span className="hidden sm:inline">Sign Out</span>
-                  </Button>
-
-                  <DropdownMenu>
-                    <DropdownMenuTrigger
-                      type="button"
-                      aria-label="Open account menu"
-                      className={`${buttonVariants({ variant: 'ghost', size: 'sm' })} focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2`}
-                    >
-                      <User className="size-4" />
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuLabel>Hello, {customerName}</DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-                      {isCustomer ? (
-                        <>
-                          <DropdownMenuLabel>Account</DropdownMenuLabel>
-                          <DropdownMenuItem onClick={() => navigate('/account')}>
-                            Account Information
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => navigate('/settings')}>
-                            Settings
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => navigate('/orders/history')}>
-                            Order History
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuLabel>Explore</DropdownMenuLabel>
-                          <DropdownMenuItem onClick={() => navigate('/map')}>
-                            Producers Near Me
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => navigate('/content/feed')}>
-                            Recipes & Stories
-                          </DropdownMenuItem>
-                        </>
-                      ) : (
-                        <DropdownMenuItem onClick={() => navigate(getDashboardPathForRole(user.role))}>
-                          Go to Dashboard
-                        </DropdownMenuItem>
-                      )}
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={handleLogout} className="text-red-600">
-                        <LogOut className="size-4 mr-2" />
-                        Logout
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </>
-              ) : (
-                <Button
-                  size="sm"
-                  onClick={() => navigate('/login')}
-                  className="focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
-                >
-                  <User className="size-4 mr-2" />
-                  Login
-                </Button>
-              )}
-            </div>
-          </div>
-
-          {/* Search Bar */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-            <Input
-              placeholder="Search products, producers, categories... (Press / to focus)"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2 hidden sm:block"
-              id="marketplace-search"
-            />
-            <Input
-              placeholder="Search..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2 sm:hidden"
-              id="marketplace-search-mobile"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                aria-label="Clear search"
-              >
-                <X className="size-4" />
-              </button>
-            )}
-          </div>
-        </div>
-      </header>
+      <SiteHeader
+        showSearch
+        searchQuery={searchQuery}
+        onSearchQueryChange={setSearchQuery}
+        searchPlaceholder="Search products, producers, categories... (Press / to focus)"
+      />
 
       <div className="max-w-7xl mx-auto px-4 py-6">
         <div className="flex gap-6">
@@ -740,8 +592,8 @@ export function MarketplacePage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="relevance">Relevance</SelectItem>
-                    <SelectItem value="price-low">Price (low â†’ high)</SelectItem>
-                    <SelectItem value="price-high">Price (high â†’ low)</SelectItem>
+                    <SelectItem value="price-low">Price (low to high)</SelectItem>
+                    <SelectItem value="price-high">Price (high to low)</SelectItem>
                     <SelectItem value="nearest">Nearest</SelectItem>
                     <SelectItem value="harvest-newest">Harvested newest</SelectItem>
                     {viewMode === 'surplus' && (
@@ -971,7 +823,7 @@ export function MarketplacePage() {
                     key={product.id} 
                     product={product} 
                     handleAddToCart={handleAddToCart} 
-                    isBulkMode={isBulkMode}
+                    currentCartQuantity={getProductCartQuantity(product.id)}
                   />
                 ))}
               </div>
@@ -987,18 +839,23 @@ export function MarketplacePage() {
 function ProductCard({ 
   product, 
   handleAddToCart,
-  isBulkMode,
+  currentCartQuantity,
 }: { 
   product: Product; 
-  handleAddToCart: (product: Product, quantity: number, e: React.MouseEvent) => void;
-  isBulkMode: boolean;
+  handleAddToCart: (product: Product, quantity: number, e: React.MouseEvent) => Promise<void>;
+  currentCartQuantity: number;
 }) {
   const navigate = useNavigate();
   const [quantity, setQuantity] = useState(1);
 
   const isAvailable = product.availability !== 'unavailable' && product.stock > 0;
   const hasAllergens = product.allergens && product.allergens.length > 0;
-  const maxQuantity = Math.max(1, Math.floor(product.stock));
+  const remainingStock = Math.max(0, Math.floor(product.stock) - currentCartQuantity);
+  const maxQuantity = Math.max(1, remainingStock);
+
+  useEffect(() => {
+    setQuantity((previous) => Math.max(1, Math.min(previous, maxQuantity)));
+  }, [maxQuantity]);
 
   const incrementQuantity = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -1089,7 +946,7 @@ function ProductCard({
         ) : (
           <div className="flex items-baseline gap-1">
             <span className="text-lg font-semibold text-green-700">
-              Â£{product.price.toFixed(2)}
+              £{product.price.toFixed(2)}
             </span>
             <span className="text-sm text-gray-500">/{product.unit}</span>
           </div>
@@ -1115,29 +972,27 @@ function ProductCard({
               >
                 <Minus className="size-3" />
               </Button>
-              {isBulkMode ? (
-                <Input
-                  type="number"
-                  min="1"
-                  max={String(maxQuantity)}
-                  step="1"
-                  value={quantity}
-                  onClick={(event) => event.stopPropagation()}
-                  onChange={updateQuantity}
-                  className="w-16 h-8 rounded-none border-0 text-center shadow-none"
-                  aria-label="Enter quantity"
-                />
-              ) : (
-                <div className="px-3 py-1 text-sm font-medium min-w-[3rem] text-center">
-                  {quantity}
-                </div>
-              )}
+              <Input
+                type="number"
+                min="1"
+                max={String(maxQuantity)}
+                step="1"
+                value={quantity}
+                onClick={(event) => event.stopPropagation()}
+                onFocus={(event) => {
+                  event.stopPropagation();
+                  event.target.select();
+                }}
+                onChange={updateQuantity}
+                className="h-8 w-16 rounded-none border-0 text-center text-sm font-medium shadow-none focus-visible:ring-1"
+                aria-label="Enter quantity"
+              />
               <Button
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8 rounded-l-none focus-visible:ring-2 focus-visible:ring-green-600"
                 onClick={incrementQuantity}
-                disabled={quantity >= maxQuantity}
+                disabled={remainingStock <= 0 || quantity >= maxQuantity}
                 aria-label="Increase quantity"
               >
                 <Plus className="size-3" />
@@ -1147,9 +1002,10 @@ function ProductCard({
               size="sm"
               className="flex-1 focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
               onClick={(e) => handleAddToCart(product, quantity, e)}
+              disabled={remainingStock <= 0}
               aria-label={`Add ${quantity} ${product.unit} of ${product.name} to cart`}
             >
-              Add {quantity} {product.unit}
+              {remainingStock <= 0 ? 'Max in cart' : `Add ${quantity} ${product.unit}`}
             </Button>
           </div>
         )}

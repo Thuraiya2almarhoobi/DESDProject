@@ -1,5 +1,6 @@
 import { Navigate } from 'react-router';
 import { useAuth } from '../contexts/AuthContext';
+import { getPendingCustomerPreviewExitTarget } from '../lib/customerPreview';
 import { UserRole } from '../types';
 
 interface ProtectedRouteProps {
@@ -9,6 +10,7 @@ interface ProtectedRouteProps {
 
 export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
   const { user, loading } = useAuth();
+  const pendingProducerPreviewExitTarget = getPendingCustomerPreviewExitTarget();
 
   if (loading) {
     return null;
@@ -19,6 +21,9 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
   }
 
   if (allowedRoles && !allowedRoles.includes(user.role)) {
+    if (user.role === 'PRODUCER' && pendingProducerPreviewExitTarget) {
+      return <Navigate to={pendingProducerPreviewExitTarget} replace />;
+    }
     return <Navigate to="/access-denied" replace />;
   }
 

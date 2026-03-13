@@ -6,6 +6,8 @@ import { toast } from 'sonner';
 import { ApiFeedEntry, ApiRecipe, ApiStory, apiJson } from '../lib/api';
 import { useSafeBack } from '../lib/navigation';
 import { useAuth } from '../contexts/AuthContext';
+import { ImageSourceField } from '../components/ImageSourceField';
+import { SiteHeader } from '../components/SiteHeader';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
@@ -84,6 +86,12 @@ export function ContentFeedPage() {
   const [storyDraft, setStoryDraft] = useState<StoryDraft>(INITIAL_STORY_DRAFT);
   const [publishingRecipe, setPublishingRecipe] = useState(false);
   const [publishingStory, setPublishingStory] = useState(false);
+  const backButton = (
+    <Button variant="ghost" onClick={goBack}>
+      <ArrowLeft className="mr-2 size-4" />
+      Back
+    </Button>
+  );
 
   const loadFeed = useCallback(async () => {
     setLoading(true);
@@ -193,6 +201,7 @@ export function ContentFeedPage() {
       toast.error('Recipe title, ingredients, and instructions are required.');
       return;
     }
+
     if (recipeDraft.product_ids.length === 0) {
       toast.error('Link at least one product to the recipe.');
       return;
@@ -244,47 +253,57 @@ export function ContentFeedPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[oklch(0.98_0.01_145)] to-[oklch(0.96_0.02_150)]">
-      <header className="bg-white/80 backdrop-blur-sm border-b border-[oklch(0.88_0.02_145)] shadow-sm">
-        <div className="max-w-6xl mx-auto px-4 py-4 flex justify-between items-center">
-          <Button variant="ghost" onClick={goBack}>
-            <ArrowLeft className="size-4 mr-2" />
-            Back
-          </Button>
-          {isCustomer ? (
-            <Button variant="outline" onClick={() => navigate('/orders/history')}>Order History</Button>
-          ) : (
-            <Button variant="outline" onClick={() => navigate('/producer/inventory')}>My Inventory</Button>
-          )}
-        </div>
-      </header>
+      <SiteHeader />
 
       <main className="max-w-6xl mx-auto px-4 py-8 space-y-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {backButton}
+          {isCustomer ? (
+            <Button variant="outline" onClick={() => navigate('/orders/history')}>
+              Order History
+            </Button>
+          ) : (
+            <Button variant="outline" onClick={() => navigate('/marketplace')}>
+              Marketplace
+            </Button>
+          )}
+        </div>
+
         <div>
-          <h1 className="text-3xl font-semibold">Recipes & Stories</h1>
-          <p className="text-sm text-gray-600 mt-1">Community feed powered by producer content in the `content` app.</p>
+          <h1 className="text-3xl font-semibold">Recipes & Farm Stories</h1>
+          <p className="mt-1 text-sm text-gray-600">
+            Seasonal recipes, farm stories, and linked local products published by producers.
+          </p>
         </div>
 
         {isProducer && (
-          <div className="grid lg:grid-cols-2 gap-4">
+          <div className="grid gap-4 lg:grid-cols-2">
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Publish Recipe</CardTitle>
+                <CardTitle className="text-lg">Add New Recipe</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div>
-                  <Label htmlFor="recipe-title">Title</Label>
+                  <Label htmlFor="recipe-title">Recipe Title</Label>
                   <Input
                     id="recipe-title"
                     value={recipeDraft.title}
-                    onChange={(event) => setRecipeDraft((prev) => ({ ...prev, title: event.target.value }))}
+                    onChange={(event) =>
+                      setRecipeDraft((previous) => ({ ...previous, title: event.target.value }))
+                    }
                   />
                 </div>
                 <div>
-                  <Label htmlFor="recipe-description">Description</Label>
+                  <Label htmlFor="recipe-description">Recipe Description</Label>
                   <Textarea
                     id="recipe-description"
                     value={recipeDraft.description}
-                    onChange={(event) => setRecipeDraft((prev) => ({ ...prev, description: event.target.value }))}
+                    onChange={(event) =>
+                      setRecipeDraft((previous) => ({
+                        ...previous,
+                        description: event.target.value,
+                      }))
+                    }
                   />
                 </div>
                 <div>
@@ -292,53 +311,78 @@ export function ContentFeedPage() {
                   <Textarea
                     id="recipe-ingredients"
                     value={recipeDraft.ingredients}
-                    onChange={(event) => setRecipeDraft((prev) => ({ ...prev, ingredients: event.target.value }))}
+                    onChange={(event) =>
+                      setRecipeDraft((previous) => ({
+                        ...previous,
+                        ingredients: event.target.value,
+                      }))
+                    }
                   />
                 </div>
                 <div>
-                  <Label htmlFor="recipe-instructions">Instructions</Label>
+                  <Label htmlFor="recipe-instructions">Cooking Instructions</Label>
                   <Textarea
                     id="recipe-instructions"
                     value={recipeDraft.instructions}
-                    onChange={(event) => setRecipeDraft((prev) => ({ ...prev, instructions: event.target.value }))}
+                    onChange={(event) =>
+                      setRecipeDraft((previous) => ({
+                        ...previous,
+                        instructions: event.target.value,
+                      }))
+                    }
                   />
                 </div>
-                <div className="grid sm:grid-cols-2 gap-3">
+                <div className="grid gap-3 sm:grid-cols-2">
                   <div>
                     <Label htmlFor="recipe-season">Seasonal Tag</Label>
                     <Input
                       id="recipe-season"
                       placeholder="Autumn/Winter"
                       value={recipeDraft.seasonal_tag}
-                      onChange={(event) => setRecipeDraft((prev) => ({ ...prev, seasonal_tag: event.target.value }))}
+                      onChange={(event) =>
+                        setRecipeDraft((previous) => ({
+                          ...previous,
+                          seasonal_tag: event.target.value,
+                        }))
+                      }
                     />
                   </div>
-                  <div>
-                    <Label htmlFor="recipe-image">Image URL</Label>
-                    <Input
-                      id="recipe-image"
-                      value={recipeDraft.image_url}
-                      onChange={(event) => setRecipeDraft((prev) => ({ ...prev, image_url: event.target.value }))}
-                    />
-                  </div>
+                  <ImageSourceField
+                    id="recipe-image"
+                    label="Recipe Image URL"
+                    value={recipeDraft.image_url}
+                    onChange={(value) =>
+                      setRecipeDraft((previous) => ({
+                        ...previous,
+                        image_url: value,
+                      }))
+                    }
+                    uploadScope="recipes"
+                    helpText="Paste a recipe image URL or upload a recipe image from your computer."
+                  />
                 </div>
 
                 <div>
-                  <p className="text-sm font-medium mb-2">Link Products</p>
+                  <p className="mb-2 text-sm font-medium">Link Products</p>
                   {producerProducts.length === 0 ? (
-                    <p className="text-sm text-gray-600">No producer products available to link.</p>
+                    <p className="text-sm text-gray-600">No producer products are available to link.</p>
                   ) : (
                     <div className="space-y-2">
                       {producerProducts.map((product) => {
                         const checked = recipeDraft.product_ids.includes(product.id);
                         return (
-                          <label key={product.id} className="flex items-center gap-3 border rounded-md p-2 cursor-pointer">
+                          <label
+                            key={product.id}
+                            className="flex cursor-pointer items-center gap-3 rounded-md border p-2"
+                          >
                             <Checkbox
                               checked={checked}
-                              onCheckedChange={(value) => toggleRecipeProduct(product.id, value === true)}
+                              onCheckedChange={(value) =>
+                                toggleRecipeProduct(product.id, value === true)
+                              }
                             />
                             <span className="text-sm">
-                              {product.name} ({product.unit}) · £{Number(product.price).toFixed(2)}
+                              {product.name} ({product.unit}) • £{Number(product.price).toFixed(2)}
                             </span>
                           </label>
                         );
@@ -355,15 +399,17 @@ export function ContentFeedPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Publish Farm Story</CardTitle>
+                <CardTitle className="text-lg">Add New Farm Story</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div>
-                  <Label htmlFor="story-title">Title</Label>
+                  <Label htmlFor="story-title">Story Title</Label>
                   <Input
                     id="story-title"
                     value={storyDraft.title}
-                    onChange={(event) => setStoryDraft((prev) => ({ ...prev, title: event.target.value }))}
+                    onChange={(event) =>
+                      setStoryDraft((previous) => ({ ...previous, title: event.target.value }))
+                    }
                   />
                 </div>
                 <div>
@@ -371,27 +417,39 @@ export function ContentFeedPage() {
                   <Textarea
                     id="story-body"
                     value={storyDraft.body}
-                    onChange={(event) => setStoryDraft((prev) => ({ ...prev, body: event.target.value }))}
+                    onChange={(event) =>
+                      setStoryDraft((previous) => ({ ...previous, body: event.target.value }))
+                    }
                   />
                 </div>
-                <div className="grid sm:grid-cols-2 gap-3">
+                <div className="grid gap-3 sm:grid-cols-2">
                   <div>
                     <Label htmlFor="story-season">Seasonal Tag</Label>
                     <Input
                       id="story-season"
                       placeholder="Harvest Season"
                       value={storyDraft.seasonal_tag}
-                      onChange={(event) => setStoryDraft((prev) => ({ ...prev, seasonal_tag: event.target.value }))}
+                      onChange={(event) =>
+                        setStoryDraft((previous) => ({
+                          ...previous,
+                          seasonal_tag: event.target.value,
+                        }))
+                      }
                     />
                   </div>
-                  <div>
-                    <Label htmlFor="story-image">Image URL</Label>
-                    <Input
-                      id="story-image"
-                      value={storyDraft.image_url}
-                      onChange={(event) => setStoryDraft((prev) => ({ ...prev, image_url: event.target.value }))}
-                    />
-                  </div>
+                  <ImageSourceField
+                    id="story-image"
+                    label="Story Image URL"
+                    value={storyDraft.image_url}
+                    onChange={(value) =>
+                      setStoryDraft((previous) => ({
+                        ...previous,
+                        image_url: value,
+                      }))
+                    }
+                    uploadScope="stories"
+                    helpText="Paste a story image URL or upload a story image from your computer."
+                  />
                 </div>
 
                 <Button onClick={publishStory} disabled={publishingStory}>
@@ -404,7 +462,7 @@ export function ContentFeedPage() {
 
         <Tabs value={filter} onValueChange={(value) => setFilter(value as FeedFilter)}>
           <TabsList>
-            <TabsTrigger value="all">All</TabsTrigger>
+            <TabsTrigger value="all">All Content</TabsTrigger>
             <TabsTrigger value="recipe">Recipes</TabsTrigger>
             <TabsTrigger value="story">Farm Stories</TabsTrigger>
           </TabsList>
@@ -412,14 +470,18 @@ export function ContentFeedPage() {
 
         {loading ? (
           <Card>
-            <CardContent className="py-10 text-center text-gray-600">Loading content feed...</CardContent>
+            <CardContent className="py-10 text-center text-gray-600">
+              Loading content feed...
+            </CardContent>
           </Card>
         ) : visibleFeed.length === 0 ? (
           <Card>
-            <CardContent className="py-10 text-center text-gray-600">No feed entries available for this filter.</CardContent>
+            <CardContent className="py-10 text-center text-gray-600">
+              No feed entries available for this filter.
+            </CardContent>
           </Card>
         ) : (
-          <div className="grid md:grid-cols-2 gap-4">
+          <div className="grid gap-4 md:grid-cols-2">
             {visibleFeed.map((entry) => {
               const key = detailKey(entry.type, entry.id);
               const details = detailsByKey[key];
@@ -428,10 +490,10 @@ export function ContentFeedPage() {
               return (
                 <Card key={key}>
                   <CardHeader>
-                    <div className="flex justify-between gap-3 items-start">
+                    <div className="flex items-start justify-between gap-3">
                       <div>
                         <CardTitle className="text-lg">{entry.title}</CardTitle>
-                        <p className="text-sm text-gray-600 mt-1">By {entry.producer_name}</p>
+                        <p className="mt-1 text-sm text-gray-600">By {entry.producer_name}</p>
                       </div>
                       <Badge variant={isRecipe ? 'secondary' : 'outline'}>
                         {isRecipe ? 'Recipe' : 'Story'}
@@ -450,7 +512,13 @@ export function ContentFeedPage() {
 
                     <div className="flex flex-wrap gap-2">
                       <Button variant="outline" size="sm" onClick={() => openDetails(entry)}>
-                        {details ? 'Hide Details' : 'View Details'}
+                        {details
+                          ? isRecipe
+                            ? 'Hide Recipe'
+                            : 'Hide Story'
+                          : isRecipe
+                            ? 'View Full Recipe'
+                            : 'View Full Story'}
                       </Button>
                       {isRecipe && isCustomer && (
                         <Button
@@ -458,8 +526,8 @@ export function ContentFeedPage() {
                           variant={savedRecipeIds.has(entry.id) ? 'default' : 'outline'}
                           onClick={() => toggleSavedRecipe(entry.id)}
                         >
-                          <Star className="size-4 mr-2" />
-                          {savedRecipeIds.has(entry.id) ? 'Saved' : 'Save'}
+                          <Star className="mr-2 size-4" />
+                          {savedRecipeIds.has(entry.id) ? 'Saved Recipe' : 'Save Recipe'}
                         </Button>
                       )}
                     </div>
@@ -469,30 +537,37 @@ export function ContentFeedPage() {
                     )}
 
                     {details && (
-                      <div className="border rounded-md p-3 bg-gray-50 space-y-2">
+                      <div className="space-y-3 rounded-md border bg-gray-50 p-3">
+                        {details.image_url && (
+                          <img
+                            src={details.image_url}
+                            alt={details.title}
+                            className="h-48 w-full rounded-md object-cover"
+                          />
+                        )}
+
                         {'ingredients' in details ? (
                           <>
                             <div className="flex items-center gap-2 text-sm font-medium">
                               <BookOpenText className="size-4" />
                               Ingredients
                             </div>
-                            <p className="text-sm whitespace-pre-line">{details.ingredients}</p>
-                            <div className="flex items-center gap-2 text-sm font-medium mt-3">
+                            <p className="whitespace-pre-line text-sm">{details.ingredients}</p>
+                            <div className="mt-3 flex items-center gap-2 text-sm font-medium">
                               <Newspaper className="size-4" />
                               Instructions
                             </div>
-                            <p className="text-sm whitespace-pre-line">{details.instructions}</p>
+                            <p className="whitespace-pre-line text-sm">{details.instructions}</p>
                             {details.linked_products.length > 0 && (
                               <div className="pt-2">
                                 <p className="text-xs text-gray-600">Linked products</p>
-                                <div className="flex flex-wrap gap-2 mt-1">
+                                <div className="mt-1 flex flex-wrap gap-2">
                                   {details.linked_products.map((product) => (
                                     <Button
                                       key={product.id}
                                       variant="outline"
                                       size="sm"
                                       onClick={() => navigate(`/product/${product.id}`)}
-                                      disabled={!isCustomer}
                                     >
                                       {product.name}
                                     </Button>
@@ -507,7 +582,7 @@ export function ContentFeedPage() {
                               <Newspaper className="size-4" />
                               Story
                             </div>
-                            <p className="text-sm whitespace-pre-line">{details.body}</p>
+                            <p className="whitespace-pre-line text-sm">{details.body}</p>
                           </>
                         )}
                       </div>

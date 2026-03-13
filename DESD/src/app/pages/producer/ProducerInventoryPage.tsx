@@ -1,5 +1,5 @@
 ﻿import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import {
   AlertCircle,
   AlertTriangle,
@@ -8,7 +8,6 @@ import {
   CheckCircle2,
   ChevronDown,
   Edit,
-  Eye,
   HelpCircle,
   Loader2,
   Plus,
@@ -20,6 +19,8 @@ import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSafeBack } from '../../lib/navigation';
 import { AvailabilityBadge, OrganicBadge, SurplusBadge } from '../../components/ProductBadges';
+import { ImageSourceField } from '../../components/ImageSourceField';
+import { SiteHeader } from '../../components/SiteHeader';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
@@ -170,6 +171,7 @@ function formatHarvestDate(value: string): string {
 }
 export function ProducerInventoryPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const goBack = useSafeBack('/producer/dashboard');
   const { user } = useAuth();
   const demoUserEmail = (user?.email || 'producer@example.com').trim().toLowerCase();
@@ -214,6 +216,23 @@ export function ProducerInventoryPage() {
       mounted = false;
     };
   }, [demoUserEmail]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('create') === 'product') {
+      setCreateDialogOpen(true);
+    }
+  }, [location.search]);
+
+  const handleCreateDialogChange = (open: boolean) => {
+    setCreateDialogOpen(open);
+    if (!open) {
+      const params = new URLSearchParams(location.search);
+      if (params.get('create') === 'product') {
+        navigate('/producer/inventory', { replace: true });
+      }
+    }
+  };
 
   const lowStockItems = useMemo(() => products.filter((product) => product.stock > 0 && product.stock < 10), [products]);
   const outOfStockItems = useMemo(() => products.filter((product) => product.stock === 0), [products]);
@@ -439,30 +458,20 @@ export function ProducerInventoryPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[oklch(0.98_0.01_145)] to-[oklch(0.96_0.02_150)]">
-      <header className="bg-white/80 backdrop-blur-sm border-b border-[oklch(0.88_0.02_145)] shadow-sm">
-        <div className="max-w-6xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <Button
-              variant="ghost"
-              onClick={goBack}
-              className="focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
-            >
-              <ArrowLeft className="size-4 mr-2" />
-              Back to Dashboard
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => navigate('/marketplace')}
-              className="gap-2 focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
-            >
-              <Eye className="size-4" />
-              Preview as customer
-            </Button>
-          </div>
-        </div>
-      </header>
+      <SiteHeader />
 
       <main className="max-w-6xl mx-auto px-4 py-8">
+        <div className="mb-6">
+          <Button
+            variant="ghost"
+            onClick={goBack}
+            className="focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
+          >
+            <ArrowLeft className="size-4 mr-2" />
+            Back to Dashboard
+          </Button>
+        </div>
+
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-3xl font-semibold">Inventory Management</h1>
@@ -692,7 +701,7 @@ export function ProducerInventoryPage() {
                     <div className="grid md:grid-cols-4 gap-4">
                       <div>
                         <p className="text-sm text-gray-600">Price</p>
-                        <p className="font-semibold">Â£{product.price.toFixed(2)}/{product.unit}</p>
+                        <p className="font-semibold">£{product.price.toFixed(2)}/{product.unit}</p>
                       </div>
                       <div>
                         <p className="text-sm text-gray-600">Category</p>
@@ -825,7 +834,7 @@ export function ProducerInventoryPage() {
         )}
       </main>
 
-      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+      <Dialog open={createDialogOpen} onOpenChange={handleCreateDialogChange}>
         <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add New Product</DialogTitle>
@@ -998,15 +1007,14 @@ export function ProducerInventoryPage() {
                   </div>
                 )}
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="new-image">Image URL (optional)</Label>
-                <Input
-                  id="new-image"
-                  value={newProduct.imageUrl}
-                  onChange={(event) => setNewProduct((previous) => ({ ...previous, imageUrl: event.target.value }))}
-                  placeholder="https://..."
-                />
-              </div>
+              <ImageSourceField
+                id="new-image"
+                label="Image URL (optional)"
+                value={newProduct.imageUrl}
+                onChange={(value) => setNewProduct((previous) => ({ ...previous, imageUrl: value }))}
+                uploadScope="products"
+                helpText="Paste an image URL or upload a product photo from your computer."
+              />
             </div>
 
             <div className="grid md:grid-cols-2 gap-4">
@@ -1061,5 +1069,3 @@ export function ProducerInventoryPage() {
     </div>
   );
 }
-
-

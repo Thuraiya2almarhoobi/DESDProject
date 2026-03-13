@@ -4,15 +4,19 @@ services:
       context: .
       args:
         VITE_GOOGLE_MAPS_API_KEY: "${VITE_GOOGLE_MAPS_API_KEY}"
+    volumes:
+      - media_data:/app/media
     ports:
       - "8000:8000"
     depends_on:
       db:
         condition: service_healthy
+      payments:
+        condition: service_healthy
     environment:
       DJANGO_DEBUG: "${DJANGO_DEBUG:-true}"
       DJANGO_ALLOWED_HOSTS: "${DJANGO_ALLOWED_HOSTS:-127.0.0.1,localhost,0.0.0.0}"
-      FRONTEND_URL: "${FRONTEND_URL:-http://localhost:5173}"
+      FRONTEND_URL: "${FRONTEND_URL:-http://127.0.0.1:8000}"
       DJANGO_DB_ENGINE: "django.db.backends.postgresql"
       DJANGO_DB_HOST: "db"
       DJANGO_DB_PORT: "5432"
@@ -27,6 +31,11 @@ services:
       EMAIL_USE_TLS: "${EMAIL_USE_TLS:-true}"
       EMAIL_USE_SSL: "${EMAIL_USE_SSL:-false}"
       DEFAULT_FROM_EMAIL: "${DEFAULT_FROM_EMAIL:-noreply@localfood.test}"
+      STRIPE_PUBLISHABLE_KEY: "${STRIPE_PUBLISHABLE_KEY:-}"
+      STRIPE_SECRET_KEY: "${STRIPE_SECRET_KEY:-sk_test_51_placeholder_replace_me}"
+      STRIPE_WEBHOOK_SECRET: "${STRIPE_WEBHOOK_SECRET:-whsec_placeholder_replace_me}"
+      PAYMENT_SERVICE_BASE_URL: "http://payments:8010"
+      PAYMENT_SERVICE_SHARED_SECRET: "${PAYMENT_SERVICE_SHARED_SECRET:-local-payment-service-secret}"
     command: >
       sh -c "
       until python manage.py migrate; do
@@ -37,6 +46,22 @@ services:
       python manage.py seed_catalog_demo &&
       python manage.py runserver 0.0.0.0:8000
       "
+
+  payments:
+    build:
+      context: .
+      dockerfile: payment_service/Dockerfile
+    environment:
+      STRIPE_PUBLISHABLE_KEY: "${STRIPE_PUBLISHABLE_KEY:-}"
+      STRIPE_SECRET_KEY: "${STRIPE_SECRET_KEY:-sk_test_51_placeholder_replace_me}"
+      STRIPE_WEBHOOK_SECRET: "${STRIPE_WEBHOOK_SECRET:-whsec_placeholder_replace_me}"
+      PAYMENT_SERVICE_SHARED_SECRET: "${PAYMENT_SERVICE_SHARED_SECRET:-local-payment-service-secret}"
+      PAYMENT_SERVICE_PORT: "8010"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8010/health').read()"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
 
   db:
     image: postgres:16-alpine
@@ -54,3 +79,4 @@ services:
 
 volumes:
   postgres_data:
+  media_data:

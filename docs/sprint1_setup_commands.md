@@ -21,7 +21,14 @@ Notes:
 - Vite proxy forwards `/api` to `http://localhost:8000`.
 - Mock catalog fallback is opt-in only (`VITE_USE_MOCK_PRODUCTS=true`).
 
-## Docker (web + PostgreSQL containers)
+## Docker (web + PostgreSQL + Stripe payment service containers)
+Set Stripe test-mode credentials before starting Docker:
+```bash
+export STRIPE_PUBLISHABLE_KEY=pk_test_your_key_here
+export STRIPE_SECRET_KEY=sk_test_your_key_here
+export STRIPE_WEBHOOK_SECRET=whsec_your_key_here
+```
+
 ```bash
 docker compose up --build
 ```
@@ -29,7 +36,9 @@ docker compose up --build
 Notes:
 - `web` container runs migrations, `seed_demo_data`, and `seed_catalog_demo` on startup.
 - `db` container runs PostgreSQL 16 and persists data in a Docker volume.
+- `payments` container is the Stripe microservice used for Checkout Session creation and webhook verification.
 - After startup, open: `http://127.0.0.1:8000/`
+- Customer checkout redirects to Stripe in test mode, then returns to `http://127.0.0.1:8000/checkout/success` or `http://127.0.0.1:8000/checkout/cancel`.
 
 ## Tests
 ```bash

@@ -18,7 +18,9 @@ interface CartContextType {
   selectedCartItemIds: string[];
   selectedItems: CartItem[];
   addToCart: (product: Product, quantity: number) => void;
+  addToCartAndWait: (product: Product, quantity: number) => Promise<string | null>;
   removeFromCart: (productId: string) => void;
+  removeFromCartAndWait: (productId: string) => Promise<boolean>;
   updateQuantity: (productId: string, quantity: number) => void;
   clearCart: () => void;
   getCartByProducer: () => CartByProducer[];
@@ -26,10 +28,13 @@ interface CartContextType {
   getTotalItems: () => number;
   getGrandTotal: () => number;
   getSelectedGrandTotal: () => number;
+  isProductInCart: (productId: string) => boolean;
+  getProductCartQuantity: (productId: string) => number;
   isCartItemSelected: (cartItemId: string) => boolean;
   setCartItemSelection: (cartItemIds: string[], checked: boolean) => void;
   selectAllCartItems: () => void;
   clearCartSelection: () => void;
+  prepareSingleItemCheckout: (product: Product, quantity: number) => Promise<boolean>;
   undoLastAdd: () => void;
   lastAddedItem: { product: Product; quantity: number } | null;
   refreshCart: () => Promise<void>;
@@ -148,6 +153,14 @@ function findApiCartItem(cart: ApiCart | null, productId: string): ApiCartItem |
   return null;
 }
 
+function cartItemIdsFromApiCart(cart: ApiCart | null): string[] {
+  if (!cart) {
+    return [];
+  }
+
+  return cart.groups.flatMap((group) => group.items.map((item) => String(item.cart_item_id)));
+}
+
 export function CartProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [cart, setCart] = useState<ApiCart | null>(null);
@@ -206,62 +219,67 @@ export function CartProvider({ children }: { children: ReactNode }) {
     previousCartItemIdsRef.current = validIds;
   }, [items]);
 
-  const addToCart = (product: Product, quantity: number) => {
+  const addToCartAndWait = useCallback(async (product: Product, quantity: number) => {
     const productId = Number(product.id);
     if (!Number.isInteger(productId)) {
       toast.error('Invalid product selected.');
-      return;
+      return null;
     }
 
-    void (async () => {
-      try {
-        const result = await apiJson<{ message: string; cart: ApiCart }>('/api/orders/cart/items/', {
-          method: 'POST',
-          body: JSON.stringify({ product_id: productId, quantity }),
+    try {
+      const result = await apiJson<{ message: string; cart: ApiCart }>('/api/orders/cart/items/', {
+        method: 'POST',
+        body: JSON.stringify({ product_id: productId, quantity }),
+      });
+      const matchingCartItem = findApiCartItem(result.cart, product.id);
+      const matchingCartItemId = matchingCartItem ? String(matchingCartItem.cart_item_id) : null;
+
+      setCart(result.cart);
+      if (matchingCartItemId) {
+        const validCartItemIds = cartItemIdsFromApiCart(result.cart);
+        setSelectedCartItemIds((previous) => {
+          const next = new Set(previous);
+          next.add(matchingCartItemId);
+          return validCartItemIds.filter((cartItemId) => next.has(cartItemId));
         });
-        setCart(result.cart);
-        const updatedGroups = buildCartByProducer(result.cart);
-        const matchingCartItemId = updatedGroups
-          .flatMap((group) => group.items)
-          .find((item) => item.product.id === product.id)?.cartItemId;
-        if (matchingCartItemId) {
-          setSelectedCartItemIds((previous) => {
-            const next = new Set(previous);
-            next.add(matchingCartItemId);
-            return updatedGroups
-              .flatMap((group) => group.items)
-              .map((item) => item.cartItemId)
-              .filter((cartItemId): cartItemId is string => Boolean(cartItemId) && next.has(cartItemId));
-          });
-        }
-        setLastAddedItem({ product, quantity });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unable to add item to cart.';
-        toast.error(message);
       }
-    })();
+      setLastAddedItem({ product, quantity });
+      return matchingCartItemId;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to add item to cart.';
+      toast.error(message);
+      return null;
+    }
+  }, []);
+
+  const addToCart = (product: Product, quantity: number) => {
+    void addToCartAndWait(product, quantity);
   };
 
-  const removeFromCart = (productId: string) => {
+  const removeFromCartAndWait = useCallback(async (productId: string) => {
     const cartItem = findApiCartItem(cart, productId);
     if (!cartItem) {
-      return;
+      return false;
     }
 
-    void (async () => {
-      try {
-        const result = await apiJson<{ message: string; cart: ApiCart }>(
-          `/api/orders/cart/items/${cartItem.cart_item_id}/`,
-          {
-            method: 'DELETE',
-          },
-        );
-        setCart(result.cart);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unable to remove item from cart.';
-        toast.error(message);
-      }
-    })();
+    try {
+      const result = await apiJson<{ message: string; cart: ApiCart }>(
+        `/api/orders/cart/items/${cartItem.cart_item_id}/`,
+        {
+          method: 'DELETE',
+        },
+      );
+      setCart(result.cart);
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to remove item from cart.';
+      toast.error(message);
+      return false;
+    }
+  }, [cart]);
+
+  const removeFromCart = (productId: string) => {
+    void removeFromCartAndWait(productId);
   };
 
   const updateQuantity = (productId: string, quantity: number) => {
@@ -335,6 +353,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
     return selectedCartByProducer.reduce((sum, group) => sum + group.subtotal, 0);
   };
 
+  const isProductInCart = (productId: string) => {
+    return Boolean(findApiCartItem(cart, productId));
+  };
+
+  const getProductCartQuantity = (productId: string) => {
+    const cartItem = findApiCartItem(cart, productId);
+    return cartItem ? toNumber(cartItem.quantity) : 0;
+  };
+
   const isCartItemSelected = (cartItemId: string) => {
     return selectedCartItemIds.includes(cartItemId);
   };
@@ -368,6 +395,56 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setSelectedCartItemIds([]);
   };
 
+  const prepareSingleItemCheckout = useCallback(async (product: Product, quantity: number) => {
+    const productId = Number(product.id);
+    if (!Number.isInteger(productId)) {
+      toast.error('Invalid product selected.');
+      return false;
+    }
+
+    const existingCartItem = findApiCartItem(cart, product.id);
+    if (existingCartItem && toNumber(existingCartItem.quantity) === quantity) {
+      setSelectedCartItemIds([String(existingCartItem.cart_item_id)]);
+      return true;
+    }
+
+    try {
+      let nextCart: ApiCart;
+
+      if (existingCartItem) {
+        const result = await apiJson<{ message: string; cart: ApiCart }>(
+          `/api/orders/cart/items/${existingCartItem.cart_item_id}/`,
+          {
+            method: 'PATCH',
+            body: JSON.stringify({ quantity }),
+          },
+        );
+        nextCart = result.cart;
+      } else {
+        const result = await apiJson<{ message: string; cart: ApiCart }>('/api/orders/cart/items/', {
+          method: 'POST',
+          body: JSON.stringify({ product_id: productId, quantity }),
+        });
+        nextCart = result.cart;
+        setLastAddedItem({ product, quantity });
+      }
+
+      const preparedCartItem = findApiCartItem(nextCart, product.id);
+      if (!preparedCartItem) {
+        toast.error('Unable to prepare checkout for this product.');
+        return false;
+      }
+
+      setCart(nextCart);
+      setSelectedCartItemIds([String(preparedCartItem.cart_item_id)]);
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to prepare checkout.';
+      toast.error(message);
+      return false;
+    }
+  }, [cart]);
+
   const undoLastAdd = () => {
     if (!lastAddedItem) {
       return;
@@ -397,7 +474,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
         selectedCartItemIds,
         selectedItems,
         addToCart,
+        addToCartAndWait,
         removeFromCart,
+        removeFromCartAndWait,
         updateQuantity,
         clearCart,
         getCartByProducer,
@@ -405,10 +484,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
         getTotalItems,
         getGrandTotal,
         getSelectedGrandTotal,
+        isProductInCart,
+        getProductCartQuantity,
         isCartItemSelected,
         setCartItemSelection,
         selectAllCartItems,
         clearCartSelection,
+        prepareSingleItemCheckout,
         undoLastAdd,
         lastAddedItem,
         refreshCart,

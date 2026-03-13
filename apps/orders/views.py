@@ -1,24 +1,39 @@
 from datetime import date
 from decimal import Decimal, InvalidOperation, ROUND_CEILING
 
+from django.db.models import Q
 from django.db import transaction
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
-from rest_framework import status
+from rest_framework import generics, permissions, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.catalog.serializers import ProductReviewCreateSerializer, ProductReviewSerializer
+from apps.community.models import ProductReview
+
+from .marketplace_sync import get_or_create_catalog_product_mirror
 from .models import CartItem, CustomerProfile, Order, Producer, ProducerSubOrder, Product
 from .serializers import (
     CheckoutRequestSerializer,
     CustomerProfileSerializer,
+    MarketplaceProductSerializer,
     OrderDetailSerializer,
     OrderSummarySerializer,
     ProducerSerializer,
     ProductSerializer,
 )
-from .services import build_cart_payload, checkout_cart, get_or_create_cart, reorder_order_to_cart
+from .services import (
+    build_cart_payload,
+    checkout_cart,
+    checkout_cart_with_stripe_reservation,
+    get_or_create_cart,
+    reorder_order_to_cart,
+)
+
+TRUE_VALUES = {"1", "true", "yes", "on"}
+FALSE_VALUES = {"0", "false", "no", "off"}
 
 
 def _parse_quantity(value) -> Decimal:
@@ -29,6 +44,26 @@ def _parse_quantity(value) -> Decimal:
     if quantity <= Decimal("0"):
         raise ValueError("Quantity must be greater than zero.")
     return quantity.quantize(Decimal("0.01"))
+
+
+def _parse_boolean(value: str | None) -> bool | None:
+    if value is None:
+        return None
+    normalized = value.strip().lower()
+    if normalized in TRUE_VALUES:
+        return True
+    if normalized in FALSE_VALUES:
+        return False
+    return None
+
+
+def _parse_decimal(value: str | None) -> Decimal | None:
+    if value is None:
+        return None
+    try:
+        return Decimal(value.strip())
+    except (InvalidOperation, ValueError):
+        return None
 
 
 PRODUCER_SUBORDER_ALLOWED_TRANSITIONS = {
@@ -88,6 +123,10 @@ def _producer_portal_stock_units(quantity: Decimal) -> int:
 
 
 def _deduct_producer_portal_stock_for_delivery(sub_order: ProducerSubOrder) -> None:
+    payment_record = getattr(sub_order.order, "payment", None)
+    if payment_record and bool((payment_record.raw_payload or {}).get("stock_reserved")):
+        return
+
     producer_user = sub_order.producer.user
     if producer_user is None:
         return
@@ -190,13 +229,48 @@ class ProductListCreateAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        queryset = Product.objects.select_related("producer").all()
+        queryset = Product.objects.select_related("producer", "producer__user").all()
         producer_id = request.query_params.get("producer_id")
         if producer_id:
             queryset = queryset.filter(producer_id=producer_id)
+
+        search_query = request.query_params.get("search")
+        if search_query:
+            queryset = queryset.filter(
+                Q(name__icontains=search_query)
+                | Q(description__icontains=search_query)
+                | Q(producer__business_name__icontains=search_query)
+                | Q(category__icontains=search_query)
+                | Q(allergen_info__icontains=search_query)
+            )
+
+        category_param = request.query_params.get("category")
+        if category_param:
+            category_tokens = [token.strip() for token in category_param.split(",") if token.strip()]
+            category_filter = Q()
+            for token in category_tokens:
+                category_filter |= Q(category__iexact=token)
+            if category_filter:
+                queryset = queryset.filter(category_filter)
+
+        organic_param = _parse_boolean(request.query_params.get("organic"))
+        if organic_param is not None:
+            if organic_param:
+                queryset = queryset.filter(Q(name__icontains="organic") | Q(description__icontains="organic"))
+            else:
+                queryset = queryset.exclude(Q(name__icontains="organic") | Q(description__icontains="organic"))
+
+        min_price = _parse_decimal(request.query_params.get("min_price"))
+        if min_price is not None:
+            queryset = queryset.filter(price__gte=min_price)
+
+        max_price = _parse_decimal(request.query_params.get("max_price"))
+        if max_price is not None:
+            queryset = queryset.filter(price__lte=max_price)
+
         if request.query_params.get("available") == "true":
             queryset = queryset.filter(is_available=True, stock_quantity__gt=0)
-        serializer = ProductSerializer(queryset, many=True)
+        serializer = MarketplaceProductSerializer(queryset.order_by("name"), many=True, context={"request": request})
         return Response(serializer.data)
 
     def post(self, request):
@@ -204,6 +278,43 @@ class ProductListCreateAPIView(APIView):
         serializer.is_valid(raise_exception=True)
         product = serializer.save()
         return Response(ProductSerializer(product).data, status=status.HTTP_201_CREATED)
+
+
+class ProductDetailAPIView(generics.RetrieveAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = MarketplaceProductSerializer
+
+    def get_queryset(self):
+        return Product.objects.select_related("producer", "producer__user").all().order_by("name")
+
+
+class ProductReviewsAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, product_id: int):
+        order_product = get_object_or_404(Product.objects.select_related("producer"), id=product_id)
+        catalog_product = get_or_create_catalog_product_mirror(order_product)
+        reviews = ProductReview.objects.filter(product=catalog_product).order_by("-created_at")
+        serializer = ProductReviewSerializer(reviews, many=True)
+        return Response(serializer.data)
+
+    def post(self, request, product_id: int):
+        order_product = get_object_or_404(Product.objects.select_related("producer"), id=product_id)
+        catalog_product = get_or_create_catalog_product_mirror(order_product)
+
+        if request.user.role != "CUSTOMER":
+            return Response(
+                {"detail": "Only customers can submit reviews."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        serializer = ProductReviewCreateSerializer(
+            data=request.data,
+            context={"request": request, "product": catalog_product},
+        )
+        serializer.is_valid(raise_exception=True)
+        review = serializer.save()
+        return Response(ProductReviewSerializer(review).data, status=status.HTTP_201_CREATED)
 
 
 class CartAPIView(APIView):
@@ -306,15 +417,47 @@ class CheckoutAPIView(APIView):
     def post(self, request):
         serializer = CheckoutRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        if getattr(request.user, "role", None) in {"COMMUNITY", "RESTAURANT"}:
+            try:
+                order = checkout_cart(request.user, serializer.validated_data)
+            except ValueError as exc:
+                return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+            return Response(
+                {
+                    "message": "Order placed successfully.",
+                    "order": OrderDetailSerializer(order).data,
+                },
+                status=status.HTTP_201_CREATED,
+            )
+
+        order = None
         try:
-            order = checkout_cart(request.user, serializer.validated_data)
+            order = checkout_cart_with_stripe_reservation(request.user, serializer.validated_data)
+            from apps.payments.services import cancel_stripe_checkout_order, create_stripe_checkout_session_for_order
+
+            checkout_session = create_stripe_checkout_session_for_order(order)
         except ValueError as exc:
+            if order is not None:
+                try:
+                    from apps.payments.services import cancel_stripe_checkout_order
+
+                    cancel_stripe_checkout_order(order)
+                except ValueError:
+                    pass
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
         return Response(
             {
-                "message": "Order placed successfully.",
+                "message": "Stripe checkout session created successfully.",
                 "order": OrderDetailSerializer(order).data,
+                "payment": {
+                    "provider": "stripe",
+                    "checkout_session_id": checkout_session.session_id,
+                    "checkout_url": checkout_session.checkout_url,
+                    "publishable_key": checkout_session.publishable_key,
+                    "test_mode": checkout_session.test_mode,
+                },
             },
             status=status.HTTP_201_CREATED,
         )
@@ -470,6 +613,3 @@ class ProducerSubOrderStatusUpdateAPIView(APIView):
             sub_order.refresh_from_db()
 
         return Response(_producer_sub_order_payload(sub_order), status=status.HTTP_200_OK)
-
-
-

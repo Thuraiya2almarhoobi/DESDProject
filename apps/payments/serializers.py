@@ -12,6 +12,14 @@ class StripeCheckoutSessionRequestSerializer(serializers.Serializer):
     order_id = serializers.IntegerField(min_value=1)
 
 
+class StripeCheckoutSessionConfirmSerializer(serializers.Serializer):
+    session_id = serializers.CharField(max_length=255)
+
+
+class StripeCheckoutCancelSerializer(serializers.Serializer):
+    order_id = serializers.IntegerField(min_value=1)
+
+
 class SettlementOrderLineSerializer(serializers.ModelSerializer):
     order_number = serializers.CharField(source="order.order_number", read_only=True)
     delivery_date = serializers.DateTimeField(source="order.delivery_date", read_only=True)

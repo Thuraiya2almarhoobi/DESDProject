@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router';
 import { ArrowLeft, Calendar, Download, Loader2 } from 'lucide-react';
 import { format, isValid, parseISO } from 'date-fns';
 import { toast } from 'sonner';
 import { apiBlob, apiJson } from '../../lib/api';
 import { useSafeBack } from '../../lib/navigation';
+import { SiteHeader } from '../../components/SiteHeader';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
@@ -48,7 +48,6 @@ function triggerDownload(blob: Blob, filename: string): void {
 }
 
 export function ProducerPaymentsPage() {
-  const navigate = useNavigate();
   const goBack = useSafeBack('/producer/dashboard');
   const [settlements, setSettlements] = useState<WeeklySettlementApi[]>([]);
   const [loading, setLoading] = useState(true);
@@ -123,16 +122,16 @@ export function ProducerPaymentsPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[oklch(0.98_0.01_145)] to-[oklch(0.96_0.02_150)]">
-      <header className="bg-white/80 backdrop-blur-sm border-b border-[oklch(0.88_0.02_145)] shadow-sm">
-        <div className="max-w-6xl mx-auto px-4 py-4">
+      <SiteHeader />
+
+      <main className="max-w-6xl mx-auto px-4 py-8">
+        <div className="mb-6">
           <Button variant="ghost" onClick={goBack}>
             <ArrowLeft className="size-4 mr-2" />
             Back to Dashboard
           </Button>
         </div>
-      </header>
 
-      <main className="max-w-6xl mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-3xl font-semibold">Payment History</h1>

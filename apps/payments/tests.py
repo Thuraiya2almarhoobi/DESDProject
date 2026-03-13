@@ -27,6 +27,19 @@ from apps.payments.services import get_previous_week_range, process_weekly_settl
 User = get_user_model()
 
 
+class MockPaymentServiceResponse:
+    def __init__(self, status_code: int, payload: dict):
+        self.status_code = status_code
+        self._payload = payload
+
+    @property
+    def ok(self) -> bool:
+        return 200 <= self.status_code < 300
+
+    def json(self):
+        return self._payload
+
+
 class PaymentsCriticalTestCases(APITestCase):
     def setUp(self):
         self.producer = User.objects.create_user(
@@ -150,21 +163,18 @@ class PaymentsCriticalTestCases(APITestCase):
         digest = hmac.new(secret.encode("utf-8"), signed_payload, hashlib.sha256).hexdigest()
         return f"t={timestamp},v1={digest}"
 
-    @override_settings(
-        STRIPE_SECRET_KEY="sk_test_checkout_key",
-        STRIPE_PUBLISHABLE_KEY="pk_test_checkout_key",
-        STRIPE_WEBHOOK_SECRET="whsec_checkout_key",
-        STRIPE_SUCCESS_URL="http://localhost:5173/checkout/success?session_id={CHECKOUT_SESSION_ID}",
-        STRIPE_CANCEL_URL="http://localhost:5173/checkout/cancel",
-    )
-    @patch("apps.payments.services.stripe.checkout.Session.create")
-    def test_backend_creates_stripe_checkout_session_in_test_mode(self, mock_create_session):
+    @patch("apps.payments.services.requests.post")
+    def test_backend_creates_stripe_checkout_session_in_test_mode(self, mock_post):
         order = self._create_checkout_order("ORD-STRIPE-SESSION-1", Decimal("20.00"))
-        mock_create_session.return_value = {
-            "id": "cs_test_123",
-            "url": "https://checkout.stripe.com/c/pay/cs_test_123",
-            "livemode": False,
-        }
+        mock_post.return_value = MockPaymentServiceResponse(
+            201,
+            {
+                "id": "cs_test_123",
+                "url": "https://checkout.stripe.com/c/pay/cs_test_123",
+                "livemode": False,
+                "publishable_key": "pk_test_checkout_key",
+            },
+        )
 
         self.client.force_authenticate(self.customer)
         response_ = self.client.post(
@@ -177,8 +187,8 @@ class PaymentsCriticalTestCases(APITestCase):
         self.assertEqual(response_.data["checkout_session_id"], "cs_test_123")
         self.assertEqual(response_.data["publishable_key"], "pk_test_checkout_key")
         self.assertTrue(response_.data["test_mode"])
-        self.assertTrue(mock_create_session.called)
-        self.assertEqual(mock_create_session.call_args.kwargs["mode"], "payment")
+        self.assertTrue(mock_post.called)
+        self.assertEqual(mock_post.call_args.kwargs["json"]["client_reference_id"], str(order.id))
 
         order.refresh_from_db()
         transaction_record = PaymentTransaction.objects.get(order=order)
@@ -190,13 +200,13 @@ class PaymentsCriticalTestCases(APITestCase):
         self.assertTrue(transaction_record.test_mode)
         self.assertEqual(transaction_record.raw_payload["checkout_url"], "https://checkout.stripe.com/c/pay/cs_test_123")
 
-    @override_settings(
-        STRIPE_SECRET_KEY="sk_live_not_allowed",
-        STRIPE_PUBLISHABLE_KEY="pk_live_not_allowed",
-        STRIPE_WEBHOOK_SECRET="whsec_checkout_key",
-    )
-    def test_live_stripe_keys_are_rejected(self):
+    @patch("apps.payments.services.requests.post")
+    def test_live_stripe_keys_are_rejected(self, mock_post):
         order = self._create_checkout_order("ORD-STRIPE-LIVE-REJECT", Decimal("20.00"))
+        mock_post.return_value = MockPaymentServiceResponse(
+            400,
+            {"detail": "Live Stripe keys are not allowed. Use Stripe test keys only."},
+        )
 
         self.client.force_authenticate(self.customer)
         response_ = self.client.post(
@@ -208,14 +218,8 @@ class PaymentsCriticalTestCases(APITestCase):
         self.assertEqual(response_.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("Live Stripe keys are not allowed", response_.data["detail"])
 
-    @override_settings(
-        STRIPE_SECRET_KEY="sk_test_webhook_key",
-        STRIPE_PUBLISHABLE_KEY="pk_test_webhook_key",
-        STRIPE_WEBHOOK_SECRET="whsec_test_webhook_key",
-        STRIPE_SUCCESS_URL="http://localhost:5173/checkout/success?session_id={CHECKOUT_SESSION_ID}",
-        STRIPE_CANCEL_URL="http://localhost:5173/checkout/cancel",
-    )
-    def test_stripe_webhook_marks_payment_paid_idempotently(self):
+    @patch("apps.payments.services.requests.post")
+    def test_stripe_webhook_marks_payment_paid_idempotently(self, mock_post):
         order = self._create_checkout_order("ORD-STRIPE-WEBHOOK-1", Decimal("20.00"))
         PaymentTransaction.objects.create(
             order=order,
@@ -242,6 +246,10 @@ class PaymentsCriticalTestCases(APITestCase):
         }
         payload_json = json.dumps(event_payload, separators=(",", ":"))
         signature = self._stripe_signature(payload_json, "whsec_test_webhook_key")
+        mock_post.return_value = MockPaymentServiceResponse(
+            200,
+            {"event": event_payload},
+        )
 
         response_ = self.client.post(
             "/api/payments/stripe/webhook/",
@@ -275,6 +283,101 @@ class PaymentsCriticalTestCases(APITestCase):
         self.assertEqual(order.payment_status, Order.PaymentStatus.PAID)
         self.assertEqual(transaction_record.status, "succeeded")
         self.assertEqual(transaction_record.raw_payload["processed_event_ids"], ["evt_test_webhook_123"])
+
+    @patch("apps.payments.services.requests.post")
+    def test_confirming_stripe_checkout_marks_order_paid_and_reduces_both_stock_records(self, mock_post):
+        self.product.stock_quantity = 5
+        self.product.save(update_fields=["stock_quantity", "updated_at"])
+        self.orders_product.stock_quantity = Decimal("5.00")
+        self.orders_product.save(update_fields=["stock_quantity", "updated_at"])
+
+        def payment_service_side_effect(url, json=None, headers=None, timeout=None):
+            if url.endswith("/stripe/checkout-sessions"):
+                return MockPaymentServiceResponse(
+                    201,
+                    {
+                        "id": "cs_test_live_checkout_5",
+                        "url": "https://checkout.stripe.com/c/pay/cs_test_live_checkout_5",
+                        "livemode": False,
+                        "publishable_key": "pk_test_checkout_key",
+                    },
+                )
+            if url.endswith("/stripe/checkout-sessions/retrieve"):
+                return MockPaymentServiceResponse(
+                    200,
+                    {
+                        "id": "cs_test_live_checkout_5",
+                        "payment_status": "paid",
+                        "status": "complete",
+                        "payment_intent": "pi_test_live_checkout_5",
+                        "livemode": False,
+                    },
+                )
+            raise AssertionError(f"Unexpected payment service request: {url}")
+
+        mock_post.side_effect = payment_service_side_effect
+
+        self.client.force_authenticate(self.customer)
+        add_response = self.client.post(
+            "/api/orders/cart/items/",
+            {"product_id": self.orders_product.id, "quantity": "5"},
+            format="json",
+        )
+        self.assertEqual(add_response.status_code, status.HTTP_200_OK)
+
+        checkout_response = self.client.post(
+            "/api/orders/checkout/",
+            {
+                "delivery_address": "99 Checkout Road, Bristol",
+                "customer_postcode": "BS1 2AB",
+                "delivery_date": (timezone.localdate() + timedelta(days=2)).isoformat(),
+            },
+            format="json",
+        )
+        self.assertEqual(checkout_response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(checkout_response.data["payment"]["checkout_session_id"], "cs_test_live_checkout_5")
+
+        order = Order.objects.get(id=checkout_response.data["order"]["id"])
+        transaction_record = PaymentTransaction.objects.get(order=order)
+        self.orders_product.refresh_from_db()
+        self.product.refresh_from_db()
+
+        self.assertEqual(order.payment_status, Order.PaymentStatus.PENDING)
+        self.assertEqual(self.orders_product.stock_quantity, Decimal("0.00"))
+        self.assertFalse(self.orders_product.is_available)
+        self.assertEqual(self.product.stock_quantity, 0)
+        self.assertTrue(transaction_record.raw_payload["stock_reserved"])
+
+        confirm_response = self.client.post(
+            "/api/payments/stripe/checkout-session/confirm/",
+            {"session_id": "cs_test_live_checkout_5"},
+            format="json",
+        )
+        self.assertEqual(confirm_response.status_code, status.HTTP_200_OK)
+        self.assertTrue(confirm_response.data["confirmed"])
+        self.assertEqual(confirm_response.data["order"]["payment_reference"], "pi_test_live_checkout_5")
+
+        order.refresh_from_db()
+        transaction_record.refresh_from_db()
+        self.assertEqual(order.payment_status, Order.PaymentStatus.PAID)
+        self.assertEqual(order.payment_reference, "pi_test_live_checkout_5")
+        self.assertEqual(transaction_record.status, "succeeded")
+
+        cart_response = self.client.get("/api/orders/cart/")
+        self.assertEqual(cart_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(cart_response.data["producer_count"], 0)
+
+        sold_out_response = self.client.post(
+            "/api/orders/cart/items/",
+            {"product_id": self.orders_product.id, "quantity": "1"},
+            format="json",
+        )
+        self.assertEqual(sold_out_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("Product is unavailable", sold_out_response.data["detail"])
+
+        available_products_response = self.client.get("/api/orders/products/?available=true")
+        self.assertEqual(available_products_response.status_code, status.HTTP_200_OK)
+        self.assertFalse(any(product["id"] == self.orders_product.id for product in available_products_response.data))
 
     def test_tc_012_weekly_settlement_job_and_history_are_correct(self):
         reference_date = date(2026, 2, 23)

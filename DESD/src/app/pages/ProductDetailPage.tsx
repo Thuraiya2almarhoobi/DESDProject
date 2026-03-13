@@ -1,6 +1,19 @@
 ﻿import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
-import { ArrowLeft, ShoppingCart, Plus, Minus, ChefHat, MapPin, Sprout, AlertCircle, Star, User as UserIcon } from 'lucide-react';
+import {
+  ArrowLeft,
+  ShoppingCart,
+  Plus,
+  Minus,
+  ChefHat,
+  MapPin,
+  Sprout,
+  AlertCircle,
+  Star,
+  User as UserIcon,
+  CreditCard,
+  Trash2,
+} from 'lucide-react';
 import { useCart } from '../contexts/CartContext';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/ui/button';
@@ -17,11 +30,13 @@ import { Input } from '../components/ui/input';
 import { Separator } from '../components/ui/separator';
 import { Skeleton } from '../components/ui/skeleton';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../components/ui/accordion';
+import { SiteHeader } from '../components/SiteHeader';
 import { toast } from 'sonner';
 import { Product, ProductReview } from '../types';
 import { createProductReview, fetchProductById, fetchProductReviews } from '../api/catalog';
 import { getDashboardPathForRole } from '../lib/roleRouting';
 import { useSafeBack } from '../lib/navigation';
+import { ApiRecipe, apiJson } from '../lib/api';
 
 function formatReviewDate(value: string): string {
   const parsed = new Date(value);
@@ -55,7 +70,13 @@ export function ProductDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const goBack = useSafeBack('/marketplace');
-  const { addToCart } = useCart();
+  const {
+    addToCartAndWait,
+    removeFromCartAndWait,
+    isProductInCart,
+    getProductCartQuantity,
+    prepareSingleItemCheckout,
+  } = useCart();
   const { user } = useAuth();
 
   const [product, setProduct] = useState<Product | null>(null);
@@ -70,6 +91,10 @@ export function ProductDetailPage() {
   const [reviewComment, setReviewComment] = useState('');
   const [reviewFormError, setReviewFormError] = useState('');
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [activeCartAction, setActiveCartAction] = useState<'add' | 'buy' | 'remove' | null>(null);
+  const [linkedRecipes, setLinkedRecipes] = useState<ApiRecipe[]>([]);
+  const [linkedRecipesLoading, setLinkedRecipesLoading] = useState(false);
+  const [expandedRecipeIds, setExpandedRecipeIds] = useState<number[]>([]);
 
   useEffect(() => {
     if (!id) {
@@ -141,6 +166,39 @@ export function ProductDetailPage() {
   }, [id]);
 
   useEffect(() => {
+    if (!id) {
+      setLinkedRecipes([]);
+      setLinkedRecipesLoading(false);
+      return;
+    }
+
+    let mounted = true;
+    setLinkedRecipesLoading(true);
+
+    apiJson<ApiRecipe[]>(`/api/content/products/${id}/recipes/`)
+      .then((recipes) => {
+        if (!mounted) {
+          return;
+        }
+        setLinkedRecipes(recipes);
+      })
+      .catch(() => {
+        if (mounted) {
+          setLinkedRecipes([]);
+        }
+      })
+      .finally(() => {
+        if (mounted) {
+          setLinkedRecipesLoading(false);
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [id]);
+
+  useEffect(() => {
     if (!product) {
       setHasReviewedAllergens(false);
       return;
@@ -173,7 +231,6 @@ export function ProductDetailPage() {
     }
     return Math.min(product.stock, 99);
   }, [product]);
-  const isBulkRole = user?.role === 'COMMUNITY' || user?.role === 'RESTAURANT';
 
   const requiresAllergenReview = Boolean(product && product.allergens.length > 0);
   const producerDeliveryLeadTime = product?.producerDeliveryLeadTime || 48;
@@ -190,14 +247,33 @@ export function ProductDetailPage() {
     const total = reviews.reduce((sum, review) => sum + review.rating, 0);
     return total / reviews.length;
   }, [reviews]);
+  const isInCart = useMemo(() => {
+    if (!product) {
+      return false;
+    }
+    return isProductInCart(product.id);
+  }, [isProductInCart, product]);
+  const cartQuantity = useMemo(() => {
+    if (!product) {
+      return 0;
+    }
+    return getProductCartQuantity(product.id);
+  }, [getProductCartQuantity, product]);
+  const isCartActionPending = activeCartAction !== null;
+  const remainingAddToCartQuantity = useMemo(() => {
+    if (!product) {
+      return 0;
+    }
+    return Math.max(0, product.stock - cartQuantity);
+  }, [cartQuantity, product]);
 
-  const handleAddToCart = () => {
+  const validateCustomerPurchaseAction = () => {
     if (!product || !isAvailable) {
-      return;
+      return false;
     }
     if (requiresAllergenReview && !hasReviewedAllergens) {
       toast.warning('Please review and acknowledge allergen information before adding to cart.');
-      return;
+      return false;
     }
 
     if (!user) {
@@ -207,7 +283,7 @@ export function ProductDetailPage() {
           onClick: () => navigate('/login'),
         },
       });
-      return;
+      return false;
     }
 
     if (user.role !== 'CUSTOMER') {
@@ -217,17 +293,137 @@ export function ProductDetailPage() {
           onClick: () => navigate(getDashboardPathForRole(user.role)),
         },
       });
-      return;
+      return false;
     }
 
     if (requiresAllergenReview && !hasReviewedAllergens) {
       toast.warning('Please acknowledge allergen information before adding this item to cart.');
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleAddToCart = async () => {
+    if (!product || !validateCustomerPurchaseAction()) {
+      return;
+    }
+    if (remainingAddToCartQuantity <= 0) {
+      toast.error(`You already have the maximum available quantity of ${product.name} in your cart.`);
       return;
     }
 
-    addToCart(product, quantity);
-    toast.success(`Added ${quantity} ${product.unit} of ${product.name} to cart`);
+    setActiveCartAction('add');
+    try {
+      const quantityToAdd = Math.min(quantity, remainingAddToCartQuantity);
+      const cartItemId = await addToCartAndWait(product, quantityToAdd);
+      if (!cartItemId) {
+        return;
+      }
+      toast.success(`Added ${quantityToAdd} ${product.unit} of ${product.name} to cart`);
+    } finally {
+      setActiveCartAction(null);
+    }
   };
+
+  const handleBuyNow = async () => {
+    if (!product || !validateCustomerPurchaseAction()) {
+      return;
+    }
+
+    setActiveCartAction('buy');
+    try {
+      const checkoutReady = await prepareSingleItemCheckout(product, quantity);
+      if (!checkoutReady) {
+        return;
+      }
+      navigate('/checkout');
+    } finally {
+      setActiveCartAction(null);
+    }
+  };
+
+  const handleRemoveFromCart = async () => {
+    if (!product || !isInCart) {
+      return;
+    }
+
+    setActiveCartAction('remove');
+    try {
+      const removed = await removeFromCartAndWait(product.id);
+      if (removed) {
+        toast.success(`${product.name} removed from your cart.`);
+      }
+    } finally {
+      setActiveCartAction(null);
+    }
+  };
+
+  const handleViewCart = () => {
+    navigate('/cart');
+  };
+
+  const backToMarketplaceButton = (
+    <Button variant="ghost" onClick={goBack}>
+      <ArrowLeft className="mr-2 size-4" />
+      Back to Marketplace
+    </Button>
+  );
+
+  const cartActionPanel = isAvailable ? (
+    <div className="space-y-4 rounded-2xl border border-[oklch(0.88_0.03_145)] bg-white/85 p-5 shadow-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant="secondary" className="bg-[oklch(0.96_0.05_150)] text-[oklch(0.34_0.05_145)]">
+          Ready for checkout
+        </Badge>
+        {isInCart && (
+          <Badge variant="outline">
+            In cart: {cartQuantity} {product?.unit}
+          </Badge>
+        )}
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Button size="lg" onClick={() => void handleBuyNow()} disabled={isCartActionPending}>
+          <CreditCard className="size-5" />
+          {activeCartAction === 'buy' ? 'Preparing Checkout...' : 'Buy Now'}
+        </Button>
+        <Button
+          size="lg"
+          variant="outline"
+          onClick={() => void handleAddToCart()}
+          disabled={isCartActionPending || remainingAddToCartQuantity <= 0}
+        >
+          <ShoppingCart className="size-5" />
+          {activeCartAction === 'add'
+            ? 'Adding to Cart...'
+            : remainingAddToCartQuantity <= 0
+              ? 'Max in Cart'
+              : 'Add to Cart'}
+        </Button>
+      </div>
+
+      <div className="flex flex-wrap gap-3">
+        {isInCart && (
+          <Button variant="secondary" onClick={handleViewCart} disabled={isCartActionPending}>
+            <ShoppingCart className="size-4" />
+            View Cart
+          </Button>
+        )}
+        {isInCart && (
+          <Button variant="ghost" onClick={() => void handleRemoveFromCart()} disabled={isCartActionPending}>
+            <Trash2 className="size-4" />
+            {activeCartAction === 'remove' ? 'Removing...' : 'Remove from Cart'}
+          </Button>
+        )}
+      </div>
+    </div>
+  ) : (
+    <Button className="w-full" size="lg" disabled>
+      <ShoppingCart className="mr-2 size-5" />
+      Currently Unavailable
+    </Button>
+  );
 
   const handleAllergenReviewToggle = (checked: boolean) => {
     if (!product) {
@@ -303,18 +499,20 @@ export function ProductDetailPage() {
     }
   };
 
+  const toggleLinkedRecipe = (recipeId: number) => {
+    setExpandedRecipeIds((previous) =>
+      previous.includes(recipeId)
+        ? previous.filter((currentId) => currentId !== recipeId)
+        : [...previous, recipeId],
+    );
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-[oklch(0.98_0.01_145)] to-[oklch(0.96_0.02_150)]">
-        <header className="bg-white/80 backdrop-blur-sm border-b border-[oklch(0.88_0.02_145)] sticky top-0 z-10 shadow-sm">
-          <div className="max-w-5xl mx-auto px-4 py-4">
-            <Button variant="ghost" onClick={goBack}>
-              <ArrowLeft className="size-4 mr-2" />
-              Back to Marketplace
-            </Button>
-          </div>
-        </header>
+        <SiteHeader />
         <main className="max-w-5xl mx-auto px-4 py-8">
+          <div className="mb-6">{backToMarketplaceButton}</div>
           <div className="grid md:grid-cols-2 gap-8">
             <Skeleton className="aspect-square w-full rounded-lg" />
             <div className="space-y-4">
@@ -333,28 +531,25 @@ export function ProductDetailPage() {
 
   if (hasError || !product) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[oklch(0.98_0.01_145)] to-[oklch(0.96_0.02_150)]">
-        <div className="text-center max-w-md px-4">
-          <AlertCircle className="size-10 text-red-500 mx-auto mb-4" />
-          <p className="text-gray-700 mb-4">Failed to load product details.</p>
-          <Button onClick={goBack}>Back to Marketplace</Button>
-        </div>
+      <div className="min-h-screen bg-gradient-to-br from-[oklch(0.98_0.01_145)] to-[oklch(0.96_0.02_150)]">
+        <SiteHeader />
+        <main className="mx-auto flex max-w-5xl items-center justify-center px-4 py-12">
+          <div className="max-w-md text-center">
+            <AlertCircle className="mx-auto mb-4 size-10 text-red-500" />
+            <p className="mb-4 text-gray-700">Failed to load product details.</p>
+            <div className="flex justify-center">{backToMarketplaceButton}</div>
+          </div>
+        </main>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[oklch(0.98_0.01_145)] to-[oklch(0.96_0.02_150)]">
-      <header className="bg-white/80 backdrop-blur-sm border-b border-[oklch(0.88_0.02_145)] sticky top-0 z-10 shadow-sm">
-        <div className="max-w-5xl mx-auto px-4 py-4">
-          <Button variant="ghost" onClick={goBack}>
-            <ArrowLeft className="size-4 mr-2" />
-            Back to Marketplace
-          </Button>
-        </div>
-      </header>
+      <SiteHeader />
 
       <main className="max-w-5xl mx-auto px-4 py-8">
+        <div className="mb-6">{backToMarketplaceButton}</div>
         <div className="grid md:grid-cols-2 gap-8">
           <div className="space-y-4">
             <div className="aspect-square rounded-lg overflow-hidden bg-gray-100">
@@ -383,7 +578,7 @@ export function ProductDetailPage() {
 
             <div>
               <div className="flex items-baseline gap-2">
-                <span className="text-4xl font-semibold text-green-700">Â£{product.price.toFixed(2)}</span>
+                <span className="text-4xl font-semibold text-green-700">£{product.price.toFixed(2)}</span>
                 <span className="text-xl text-gray-500">per {product.unit}</span>
               </div>
               {product.stock > 0 && product.stock < 10 && (
@@ -418,45 +613,47 @@ export function ProductDetailPage() {
               <div className="space-y-3">
                 <label className="text-sm font-medium">Quantity</label>
                 <div className="flex items-center gap-3">
-                  <Button variant="outline" size="icon" onClick={decrementQuantity} disabled={quantity <= 1}>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={decrementQuantity}
+                    disabled={quantity <= 1 || isCartActionPending}
+                  >
                     <Minus className="size-4" />
                   </Button>
-                  {isBulkRole ? (
-                    <div className="flex items-center gap-2">
-                      <Input
-                        type="number"
-                        min="1"
-                        max={String(maxQuantity)}
-                        step="1"
-                        value={quantity}
-                        onChange={(event) => {
-                          const next = Number(event.target.value);
-                          if (!Number.isFinite(next)) {
-                            return;
-                          }
-                          setQuantity(Math.max(1, Math.min(maxQuantity, Math.floor(next))));
-                        }}
-                        className="w-24 text-center"
-                      />
-                      <span className="text-sm text-gray-500">{product.unit}</span>
-                    </div>
-                  ) : (
-                    <div className="w-20 text-center">
-                      <span className="text-lg font-medium">{quantity}</span>
-                      <span className="text-sm text-gray-500 ml-1">{product.unit}</span>
-                    </div>
-                  )}
-                  <Button variant="outline" size="icon" onClick={incrementQuantity} disabled={quantity >= maxQuantity}>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      min="1"
+                      max={String(maxQuantity)}
+                      step="1"
+                      value={quantity}
+                      onFocus={(event) => event.target.select()}
+                      onChange={(event) => {
+                        const next = Number(event.target.value);
+                        if (!Number.isFinite(next)) {
+                          return;
+                        }
+                        setQuantity(Math.max(1, Math.min(maxQuantity, Math.floor(next))));
+                      }}
+                      className="w-24 text-center"
+                      disabled={isCartActionPending}
+                    />
+                    <span className="text-sm text-gray-500">{product.unit}</span>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={incrementQuantity}
+                    disabled={quantity >= maxQuantity || isCartActionPending}
+                  >
                     <Plus className="size-4" />
                   </Button>
                 </div>
               </div>
             )}
 
-            <Button className="w-full" size="lg" onClick={handleAddToCart} disabled={!isAvailable}>
-              <ShoppingCart className="size-5 mr-2" />
-              {isAvailable ? 'Add to Cart' : 'Currently Unavailable'}
-            </Button>
+            {cartActionPanel}
 
             <Separator />
 
@@ -672,16 +869,91 @@ export function ProductDetailPage() {
                 </div>
               </AccordionTrigger>
               <AccordionContent className="pb-4">
-                {product.recipeIdeas && product.recipeIdeas.length > 0 ? (
-                  <ul className="space-y-2">
+                {linkedRecipesLoading ? (
+                  <p className="text-sm text-gray-600">Loading linked recipes...</p>
+                ) : linkedRecipes.length > 0 ? (
+                  <div className="space-y-3">
+                    {linkedRecipes.map((recipe) => {
+                      const isExpanded = expandedRecipeIds.includes(recipe.id);
+                      return (
+                        <div key={recipe.id} className="rounded-lg border bg-gray-50 p-4">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                              <p className="font-medium text-gray-900">{recipe.title}</p>
+                              <p className="mt-1 text-sm text-gray-600">
+                                {recipe.description || `By ${recipe.producer_name}`}
+                              </p>
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => toggleLinkedRecipe(recipe.id)}
+                            >
+                              {isExpanded ? 'Hide Recipe' : 'View Full Recipe'}
+                            </Button>
+                          </div>
+
+                          {isExpanded && (
+                            <div className="mt-4 space-y-3">
+                              {recipe.image_url && (
+                                <img
+                                  src={recipe.image_url}
+                                  alt={recipe.title}
+                                  className="h-44 w-full rounded-md object-cover"
+                                />
+                              )}
+                              <div>
+                                <p className="text-sm font-medium text-gray-900">Ingredients</p>
+                                <p className="mt-1 whitespace-pre-line text-sm text-gray-700">
+                                  {recipe.ingredients}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium text-gray-900">Instructions</p>
+                                <p className="mt-1 whitespace-pre-line text-sm text-gray-700">
+                                  {recipe.instructions}
+                                </p>
+                              </div>
+                              {recipe.linked_products.length > 0 && (
+                                <div>
+                                  <p className="text-xs text-gray-500">Linked products</p>
+                                  <div className="mt-2 flex flex-wrap gap-2">
+                                    {recipe.linked_products.map((linkedProduct) => (
+                                      <Button
+                                        key={linkedProduct.id}
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => navigate(`/product/${linkedProduct.id}`)}
+                                      >
+                                        {linkedProduct.name}
+                                      </Button>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : product.recipeIdeas && product.recipeIdeas.length > 0 ? (
+                  <div className="space-y-2">
                     {product.recipeIdeas.map((recipe) => (
-                      <li key={recipe} className="text-sm text-gray-700">
+                      <div key={recipe} className="rounded-md border bg-gray-50 px-3 py-2 text-sm text-gray-700">
                         {recipe}
-                      </li>
+                      </div>
                     ))}
-                  </ul>
+                  </div>
                 ) : (
                   <p className="text-sm text-gray-600">Recipe suggestions coming soon.</p>
+                )}
+
+                {product.storageTips && (
+                  <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+                    <p className="text-sm font-medium text-emerald-900">Storage Guidance</p>
+                    <p className="mt-1 text-sm text-emerald-800">{product.storageTips}</p>
+                  </div>
                 )}
               </AccordionContent>
             </AccordionItem>

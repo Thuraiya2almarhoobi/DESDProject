@@ -1,5 +1,6 @@
 from datetime import timedelta
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.utils import timezone
@@ -12,6 +13,19 @@ from .models import Cart, CustomerProfile, Order, Producer, Product
 
 
 User = get_user_model()
+
+
+class MockPaymentServiceResponse:
+    def __init__(self, status_code: int, payload: dict):
+        self.status_code = status_code
+        self._payload = payload
+
+    @property
+    def ok(self) -> bool:
+        return 200 <= self.status_code < 300
+
+    def json(self):
+        return self._payload
 
 
 class OrdersCriticalFlowTests(APITestCase):
@@ -70,6 +84,26 @@ class OrdersCriticalFlowTests(APITestCase):
 
         self.client = APIClient()
         self.client.force_authenticate(self.customer)
+        self.payment_service_patcher = patch(
+            "apps.payments.services.requests.post",
+            side_effect=self._mock_payment_service_post,
+        )
+        self.payment_service_patcher.start()
+        self.addCleanup(self.payment_service_patcher.stop)
+
+    def _mock_payment_service_post(self, url, json=None, headers=None, timeout=None):
+        if url.endswith("/stripe/checkout-sessions"):
+            order_id = str((json or {}).get("client_reference_id") or "0")
+            return MockPaymentServiceResponse(
+                201,
+                {
+                    "id": f"cs_test_order_{order_id}",
+                    "url": f"https://checkout.stripe.com/c/pay/cs_test_order_{order_id}",
+                    "livemode": False,
+                    "publishable_key": "pk_test_checkout_key",
+                },
+            )
+        raise AssertionError(f"Unexpected payment service request: {url}")
 
     def _add_to_cart(self, product: Product, quantity: str):
         return self.client.post(
@@ -125,17 +159,16 @@ class OrdersCriticalFlowTests(APITestCase):
 
         order = Order.objects.get(id=order_id)
         self.assertEqual(order.status, Order.Status.PENDING)
-        self.assertEqual(order.payment_status, Order.PaymentStatus.PAID)
+        self.assertEqual(order.payment_status, Order.PaymentStatus.PENDING)
         self.assertEqual(order.sub_orders.count(), 1)
 
         expected_subtotal = Decimal("2.50") * Decimal("2.00") + Decimal("3.00") * Decimal("1.00")
         self.assertEqual(order.subtotal_amount, expected_subtotal.quantize(Decimal("0.01")))
         self.assertEqual(order.commission_amount, (expected_subtotal * Decimal("0.05")).quantize(Decimal("0.01")))
-        self.assertEqual(order.payment.provider, "mock")
+        self.assertEqual(order.payment.provider, "stripe")
+        self.assertEqual(order.payment.status, "pending")
         self.assertEqual(order.sub_orders.first().producer, self.producer_a)
-
-        cart = Cart.objects.get(customer=self.customer)
-        self.assertEqual(cart.items.count(), 0)
+        self.assertEqual(order.payment.provider_reference, f"cs_test_order_{order_id}")
 
     def test_tc008_multi_producer_split_checkout(self):
         self._add_to_cart(self.product_a1, "2")
@@ -216,8 +249,7 @@ class OrdersCriticalFlowTests(APITestCase):
         self.assertEqual(order.items.first().product, self.product_a1)
 
         cart = Cart.objects.get(customer=self.customer)
-        self.assertEqual(cart.items.count(), 1)
-        self.assertEqual(cart.items.first().product, self.product_b1)
+        self.assertEqual(cart.items.count(), 2)
 
     def test_order_history_receipt_and_reorder(self):
         self._add_to_cart(self.product_a1, "1")
@@ -260,6 +292,32 @@ class OrdersCriticalFlowTests(APITestCase):
         self.assertEqual(reorder_res.status_code, status.HTTP_200_OK)
         self.assertEqual(len(reorder_res.data["unavailable_items"]), 1)
 
+    def test_orders_product_routes_use_checkout_product_ids_for_marketplace_and_reviews(self):
+        list_response = self.client.get("/api/orders/products/", {"available": "true"})
+        self.assertEqual(list_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(list_response.data), 3)
+        self.assertTrue(any(product["id"] == self.product_a1.id for product in list_response.data))
+
+        detail_response = self.client.get(f"/api/orders/products/{self.product_a1.id}/")
+        self.assertEqual(detail_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(detail_response.data["id"], self.product_a1.id)
+        self.assertEqual(detail_response.data["name"], self.product_a1.name)
+        self.assertEqual(detail_response.data["producer_name"], self.producer_a.business_name)
+        self.assertIn("image_url", detail_response.data)
+
+        reviews_response = self.client.get(f"/api/orders/products/{self.product_a1.id}/reviews/")
+        self.assertEqual(reviews_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(reviews_response.data, [])
+
+        create_review_response = self.client.post(
+            f"/api/orders/products/{self.product_a1.id}/reviews/",
+            {"rating": 5, "comment": "Fresh and consistent."},
+            format="json",
+        )
+        self.assertEqual(create_review_response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(create_review_response.data["rating"], 5)
+        self.assertEqual(create_review_response.data["reviewer_name"], "customer_tc")
+
     def test_producer_can_update_sub_order_status_with_transition_rules(self):
         ProducerProduct.objects.create(
             producer=self.producer_user_a,
@@ -289,6 +347,13 @@ class OrdersCriticalFlowTests(APITestCase):
 
         order = Order.objects.get(id=checkout_res.data["order"]["id"])
         sub_order = order.sub_orders.get(producer=self.producer_a)
+        producer_product = ProducerProduct.objects.get(
+            producer=self.producer_user_a,
+            name=self.product_a1.name,
+            unit=self.product_a1.unit,
+        )
+        producer_product.refresh_from_db()
+        self.assertEqual(producer_product.stock_quantity, 8)
 
         producer_client = APIClient()
         producer_client.force_authenticate(self.producer_user_a)
@@ -330,11 +395,6 @@ class OrdersCriticalFlowTests(APITestCase):
         self.assertEqual(delivered_res.data["status"], Order.Status.DELIVERED)
 
         order.refresh_from_db()
-        producer_product = ProducerProduct.objects.get(
-            producer=self.producer_user_a,
-            name=self.product_a1.name,
-            unit=self.product_a1.unit,
-        )
         self.assertEqual(order.status, Order.Status.DELIVERED)
         self.assertEqual(producer_product.stock_quantity, 8)
 
@@ -347,5 +407,3 @@ class OrdersCriticalFlowTests(APITestCase):
 
         producer_product.refresh_from_db()
         self.assertEqual(producer_product.stock_quantity, 8)
-
-

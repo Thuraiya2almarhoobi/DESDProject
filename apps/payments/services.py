@@ -5,12 +5,17 @@ from datetime import date, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
-import stripe
+import requests
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
 from apps.orders.models import Order, PaymentTransaction
+from apps.orders.services import (
+    clear_checked_out_cart_items,
+    create_order_notifications,
+    release_stock_reservation_for_order,
+)
 from apps.producer_portal.models import OrderStatus, ProducerOrder
 
 from .models import SettlementOrderLine, SettlementStatus, WeeklySettlement
@@ -40,6 +45,15 @@ class StripeCheckoutSessionResult:
     test_mode: bool
 
 
+@dataclass(frozen=True)
+class StripeCheckoutSessionStatus:
+    session_id: str
+    payment_status: str
+    checkout_status: str
+    payment_intent: str
+    livemode: bool
+
+
 def get_previous_week_range(reference_date: date | None = None) -> SettlementWeekRange:
     reference_date = reference_date or timezone.localdate()
     current_week_monday = reference_date - timedelta(days=reference_date.weekday())
@@ -56,37 +70,57 @@ def _money_to_minor_units(value: Decimal) -> int:
     return int((_money(value) * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
-def _stripe_value(obj: Any, key: str, default: Any = None) -> Any:
+def _payment_value(obj: Any, key: str, default: Any = None) -> Any:
     if isinstance(obj, dict):
         return obj.get(key, default)
     return getattr(obj, key, default)
 
 
-def _validated_stripe_keys() -> tuple[str, str]:
-    secret_key = (getattr(settings, "STRIPE_SECRET_KEY", "") or "").strip()
-    publishable_key = (getattr(settings, "STRIPE_PUBLISHABLE_KEY", "") or "").strip()
-
-    if not secret_key or not publishable_key:
-        raise ValueError("Stripe test keys are not configured.")
-    if secret_key.startswith("sk_live_") or publishable_key.startswith("pk_live_"):
-        raise ValueError("Live Stripe keys are not allowed. Use Stripe test keys only.")
-    if not secret_key.startswith("sk_test_") or not publishable_key.startswith("pk_test_"):
-        raise ValueError("Stripe keys must be test mode keys.")
-
-    return secret_key, publishable_key
+def _payment_service_base_url() -> str:
+    base_url = (getattr(settings, "PAYMENT_SERVICE_BASE_URL", "") or "").strip().rstrip("/")
+    if not base_url:
+        raise ValueError("Stripe payment service is not configured.")
+    return base_url
 
 
-def _validated_webhook_secret() -> str:
-    webhook_secret = (getattr(settings, "STRIPE_WEBHOOK_SECRET", "") or "").strip()
-    if not webhook_secret:
-        raise ValueError("Stripe webhook secret is not configured.")
-    return webhook_secret
+def _payment_service_headers() -> dict[str, str]:
+    headers = {"Content-Type": "application/json"}
+    shared_secret = (getattr(settings, "PAYMENT_SERVICE_SHARED_SECRET", "") or "").strip()
+    if shared_secret:
+        headers["X-Payment-Service-Token"] = shared_secret
+    return headers
 
 
-def _configure_stripe() -> tuple[str, str]:
-    secret_key, publishable_key = _validated_stripe_keys()
-    stripe.api_key = secret_key
-    return secret_key, publishable_key
+def _payment_service_timeout() -> int:
+    return int(getattr(settings, "PAYMENT_SERVICE_TIMEOUT_SECONDS", 15))
+
+
+def _payment_service_request(path: str, payload: dict[str, Any]) -> dict[str, Any]:
+    url = f"{_payment_service_base_url()}{path}"
+    try:
+        response = requests.post(
+            url,
+            json=payload,
+            headers=_payment_service_headers(),
+            timeout=_payment_service_timeout(),
+        )
+    except requests.RequestException as exc:
+        raise ValueError("Stripe payment service is unavailable.") from exc
+
+    try:
+        response_payload = response.json()
+    except ValueError:
+        response_payload = {}
+
+    if not response.ok:
+        detail = response_payload.get("detail") if isinstance(response_payload, dict) else None
+        if isinstance(detail, str) and detail.strip():
+            raise ValueError(detail)
+        raise ValueError("Stripe payment service request failed.")
+
+    if not isinstance(response_payload, dict):
+        raise ValueError("Stripe payment service returned an invalid response.")
+    return response_payload
 
 
 def _build_stripe_line_items(order: Order) -> list[dict[str, Any]]:
@@ -117,34 +151,28 @@ def _build_stripe_line_items(order: Order) -> list[dict[str, Any]]:
 
 @transaction.atomic
 def create_stripe_checkout_session_for_order(order: Order) -> StripeCheckoutSessionResult:
-    _, publishable_key = _configure_stripe()
-
     if order.payment_status == Order.PaymentStatus.PAID:
         raise ValueError("Order is already paid.")
 
-    session = stripe.checkout.Session.create(
-        mode="payment",
-        client_reference_id=str(order.id),
-        customer_email=order.customer.email or None,
-        payment_method_types=["card"],
-        line_items=_build_stripe_line_items(order),
-        metadata={
-            "order_id": str(order.id),
-            "order_number": order.order_number,
-        },
-        payment_intent_data={
+    session = _payment_service_request(
+        "/stripe/checkout-sessions",
+        {
+            "client_reference_id": str(order.id),
+            "customer_email": order.customer.email or "",
+            "line_items": _build_stripe_line_items(order),
             "metadata": {
                 "order_id": str(order.id),
                 "order_number": order.order_number,
-            }
+            },
+            "success_url": settings.STRIPE_SUCCESS_URL,
+            "cancel_url": settings.STRIPE_CANCEL_URL,
         },
-        success_url=settings.STRIPE_SUCCESS_URL,
-        cancel_url=settings.STRIPE_CANCEL_URL,
     )
 
-    session_id = _stripe_value(session, "id", "")
-    checkout_url = _stripe_value(session, "url", "")
-    livemode = bool(_stripe_value(session, "livemode", False))
+    session_id = str(_payment_value(session, "id", ""))
+    checkout_url = str(_payment_value(session, "url", ""))
+    livemode = bool(_payment_value(session, "livemode", False))
+    publishable_key = str(_payment_value(session, "publishable_key", ""))
 
     if not session_id or not checkout_url:
         raise ValueError("Stripe did not return a valid Checkout Session.")
@@ -205,17 +233,33 @@ def create_stripe_checkout_session_for_order(order: Order) -> StripeCheckoutSess
 
 
 def verify_and_construct_stripe_event(payload: bytes, signature: str) -> dict[str, Any]:
-    _configure_stripe()
-    webhook_secret = _validated_webhook_secret()
-
-    try:
-        event = stripe.Webhook.construct_event(payload=payload, sig_header=signature, secret=webhook_secret)
-    except Exception as exc:
-        raise ValueError("Invalid Stripe webhook signature.") from exc
-
-    if hasattr(event, "to_dict_recursive"):
-        return event.to_dict_recursive()
+    payload_text = payload.decode("utf-8")
+    response_payload = _payment_service_request(
+        "/stripe/webhooks/verify",
+        {
+            "payload": payload_text,
+            "signature": signature,
+        },
+    )
+    event = response_payload.get("event")
+    if not isinstance(event, dict):
+        raise ValueError("Stripe payment service returned an invalid webhook event.")
     return event
+
+
+def retrieve_stripe_checkout_session(session_id: str) -> StripeCheckoutSessionStatus:
+    response_payload = _payment_service_request(
+        "/stripe/checkout-sessions/retrieve",
+        {"session_id": session_id},
+    )
+    result_session_id = str(response_payload.get("id") or session_id)
+    return StripeCheckoutSessionStatus(
+        session_id=result_session_id,
+        payment_status=str(response_payload.get("payment_status") or ""),
+        checkout_status=str(response_payload.get("status") or ""),
+        payment_intent=str(response_payload.get("payment_intent") or ""),
+        livemode=bool(response_payload.get("livemode", False)),
+    )
 
 
 @transaction.atomic
@@ -235,6 +279,25 @@ def handle_stripe_webhook_event(event: dict[str, Any]) -> dict[str, Any]:
     payment_intent = session.get("payment_intent") or ""
     event_id = str(event.get("id", ""))
 
+    order, transaction_record = _get_order_and_transaction(order_id=order_id, session_id=session_id)
+    success = event_type in STRIPE_SUCCESS_EVENT_TYPES
+    return _apply_payment_result(
+        order,
+        transaction_record,
+        session_id=session_id,
+        payment_intent=payment_intent,
+        success=success,
+        event_type=event_type,
+        event_id=event_id,
+        checkout_status=str(session.get("status") or ""),
+    )
+
+
+def _get_order_and_transaction(
+    *,
+    order_id: str | int | None = None,
+    session_id: str = "",
+) -> tuple[Order, PaymentTransaction]:
     transaction_record = None
     order = None
 
@@ -260,13 +323,43 @@ def handle_stripe_webhook_event(event: dict[str, Any]) -> dict[str, Any]:
         transaction_record = PaymentTransaction.objects.create(
             order=order,
             provider="stripe",
-            provider_reference=session_id or payment_intent or f"evt-{event_id or order.id}",
+            provider_reference=session_id or f"ord-{order.id}",
             amount=order.total_amount,
             status="pending",
             test_mode=True,
             raw_payload={},
         )
 
+    return order, transaction_record
+
+
+def _clear_reserved_cart_items_if_needed(order: Order, raw_payload: dict[str, Any]) -> dict[str, Any]:
+    if raw_payload.get("cart_items_cleared"):
+        return raw_payload
+
+    if raw_payload.get("clear_entire_cart"):
+        clear_checked_out_cart_items(order, None)
+        raw_payload["cart_items_cleared"] = True
+        return raw_payload
+
+    selected_cart_item_ids = raw_payload.get("selected_cart_item_ids")
+    if isinstance(selected_cart_item_ids, list):
+        clear_checked_out_cart_items(order, [int(item_id) for item_id in selected_cart_item_ids])
+        raw_payload["cart_items_cleared"] = True
+    return raw_payload
+
+
+def _apply_payment_result(
+    order: Order,
+    transaction_record: PaymentTransaction,
+    *,
+    session_id: str,
+    payment_intent: str,
+    success: bool,
+    event_type: str,
+    event_id: str = "",
+    checkout_status: str = "",
+) -> dict[str, Any]:
     raw_payload = dict(transaction_record.raw_payload or {})
     processed_event_ids = [str(value) for value in raw_payload.get("processed_event_ids", []) if value]
     if event_id and event_id in processed_event_ids:
@@ -278,28 +371,53 @@ def handle_stripe_webhook_event(event: dict[str, Any]) -> dict[str, Any]:
             "payment_status": order.payment_status,
         }
 
-    next_payment_status = (
-        Order.PaymentStatus.PAID if event_type in STRIPE_SUCCESS_EVENT_TYPES else Order.PaymentStatus.FAILED
-    )
-    next_transaction_status = "succeeded" if next_payment_status == Order.PaymentStatus.PAID else "failed"
+    if success:
+        order.payment_status = Order.PaymentStatus.PAID
+        order.payment_method = "stripe_checkout"
+        if payment_intent:
+            order.payment_reference = payment_intent
+        elif session_id and not order.payment_reference:
+            order.payment_reference = session_id
+        order.save(update_fields=["payment_status", "payment_method", "payment_reference", "updated_at"])
 
-    order.payment_status = next_payment_status
-    order.payment_method = "stripe_checkout"
-    if payment_intent:
-        order.payment_reference = payment_intent
-    elif session_id and not order.payment_reference:
-        order.payment_reference = session_id
-    order.save(update_fields=["payment_status", "payment_method", "payment_reference", "updated_at"])
+        raw_payload = _clear_reserved_cart_items_if_needed(order, raw_payload)
+        if not raw_payload.get("notifications_created"):
+            create_order_notifications(order)
+            raw_payload["notifications_created"] = True
+    else:
+        if order.payment_status != Order.PaymentStatus.PAID:
+            order.payment_status = Order.PaymentStatus.FAILED
+            order.payment_method = "stripe_checkout"
+            order.status = Order.Status.CANCELLED
+            if payment_intent:
+                order.payment_reference = payment_intent
+            elif session_id and not order.payment_reference:
+                order.payment_reference = session_id
+            order.save(
+                update_fields=[
+                    "payment_status",
+                    "payment_method",
+                    "payment_reference",
+                    "status",
+                    "updated_at",
+                ]
+            )
+            order.sub_orders.exclude(status=Order.Status.DELIVERED).update(status=Order.Status.CANCELLED)
+            if raw_payload.get("stock_reserved") and not raw_payload.get("stock_released"):
+                release_stock_reservation_for_order(order)
+                raw_payload["stock_released"] = True
 
     if event_id:
         processed_event_ids.append(event_id)
     raw_payload.update(
         {
-            "checkout_session_id": session_id,
-            "payment_intent": payment_intent,
+            "checkout_session_id": session_id or raw_payload.get("checkout_session_id", ""),
+            "payment_intent": payment_intent or raw_payload.get("payment_intent", ""),
             "last_event_id": event_id,
             "last_event_type": event_type,
             "livemode": False,
+            "payment_status": order.payment_status,
+            "checkout_status": checkout_status,
             "processed_event_ids": processed_event_ids,
         }
     )
@@ -308,7 +426,7 @@ def handle_stripe_webhook_event(event: dict[str, Any]) -> dict[str, Any]:
     if session_id:
         transaction_record.provider_reference = session_id
     transaction_record.amount = order.total_amount
-    transaction_record.status = next_transaction_status
+    transaction_record.status = "succeeded" if success else "failed"
     transaction_record.test_mode = True
     transaction_record.raw_payload = raw_payload
     transaction_record.save(
@@ -329,6 +447,72 @@ def handle_stripe_webhook_event(event: dict[str, Any]) -> dict[str, Any]:
         "order_id": order.id,
         "payment_status": order.payment_status,
     }
+
+
+@transaction.atomic
+def confirm_stripe_checkout_session(session_id: str) -> dict[str, Any]:
+    session = retrieve_stripe_checkout_session(session_id)
+    if session.livemode:
+        raise ValueError("Stripe Checkout must run in test mode only.")
+
+    order, transaction_record = _get_order_and_transaction(session_id=session_id)
+    if session.payment_status == "paid" or session.checkout_status == "complete":
+        result = _apply_payment_result(
+            order,
+            transaction_record,
+            session_id=session.session_id,
+            payment_intent=session.payment_intent,
+            success=True,
+            event_type="checkout.session.completed",
+            checkout_status=session.checkout_status,
+        )
+        result["confirmed"] = True
+        return result
+
+    if session.checkout_status == "expired":
+        result = _apply_payment_result(
+            order,
+            transaction_record,
+            session_id=session.session_id,
+            payment_intent=session.payment_intent,
+            success=False,
+            event_type="checkout.session.expired",
+            checkout_status=session.checkout_status,
+        )
+        result["confirmed"] = False
+        return result
+
+    return {
+        "confirmed": False,
+        "handled": False,
+        "event_type": "checkout.session.pending",
+        "order_id": order.id,
+        "payment_status": order.payment_status,
+        "checkout_status": session.checkout_status,
+    }
+
+
+@transaction.atomic
+def cancel_stripe_checkout_order(order: Order) -> dict[str, Any]:
+    locked_order = Order.objects.select_for_update().get(pk=order.pk)
+    transaction_record = PaymentTransaction.objects.select_for_update().filter(order=locked_order).first()
+    if transaction_record is None:
+        raise ValueError("No Stripe payment record exists for this order.")
+
+    if locked_order.payment_status == Order.PaymentStatus.PAID:
+        raise ValueError("Order is already paid.")
+
+    result = _apply_payment_result(
+        locked_order,
+        transaction_record,
+        session_id=transaction_record.provider_reference,
+        payment_intent="",
+        success=False,
+        event_type="checkout.session.cancelled",
+        checkout_status="cancelled",
+    )
+    result["cancelled"] = True
+    return result
 
 
 @transaction.atomic

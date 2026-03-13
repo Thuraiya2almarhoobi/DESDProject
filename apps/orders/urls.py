@@ -14,13 +14,17 @@ from .views import (
     ProducerListCreateAPIView,
     ProducerSubOrderListAPIView,
     ProducerSubOrderStatusUpdateAPIView,
+    ProductDetailAPIView,
     ProductListCreateAPIView,
+    ProductReviewsAPIView,
 )
 
 urlpatterns = [
     path("profile/", CustomerProfileAPIView.as_view(), name="orders-profile"),
     path("producers/", ProducerListCreateAPIView.as_view(), name="orders-producers"),
     path("products/", ProductListCreateAPIView.as_view(), name="orders-products"),
+    path("products/<int:pk>/", ProductDetailAPIView.as_view(), name="orders-product-detail"),
+    path("products/<int:product_id>/reviews/", ProductReviewsAPIView.as_view(), name="orders-product-reviews"),
     path("cart/", CartAPIView.as_view(), name="orders-cart"),
     path("cart/items/", CartItemAddAPIView.as_view(), name="orders-cart-item-add"),
     path("cart/items/<int:item_id>/", CartItemDetailAPIView.as_view(), name="orders-cart-item-detail"),

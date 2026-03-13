@@ -1,30 +1,23 @@
-import { CalendarClock, ListChecks, LogOut, UtensilsCrossed } from 'lucide-react';
+import { CalendarClock, ListChecks, UtensilsCrossed } from 'lucide-react';
 import { useNavigate } from 'react-router';
+import { SiteHeader } from '../../components/SiteHeader';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
-import { useAuth } from '../../contexts/AuthContext';
 
 export function RestaurantDashboardPage() {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[oklch(0.98_0.01_145)] to-[oklch(0.96_0.02_150)]">
-      <header className="bg-white/80 backdrop-blur-sm border-b border-[oklch(0.88_0.02_145)] shadow-sm">
-        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold">Restaurant Dashboard</h1>
-            <p className="text-sm text-gray-700">{user?.name}</p>
-            <p className="text-xs text-gray-600 mt-1">Role: RESTAURANT | Interface: Recurring and multi-producer ordering</p>
-          </div>
-          <Button variant="ghost" onClick={logout}>
-            <LogOut className="size-4 mr-2" />
-            Sign Out
-          </Button>
-        </div>
-      </header>
+      <SiteHeader />
 
       <main className="max-w-5xl mx-auto px-4 py-8 space-y-4">
+        <div>
+          <h1 className="text-3xl font-semibold">Restaurant Dashboard</h1>
+          <p className="mt-1 text-sm text-gray-600">
+            Role: RESTAURANT | Interface: Recurring and multi-producer ordering
+          </p>
+        </div>
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

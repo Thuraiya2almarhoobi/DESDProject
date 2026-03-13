@@ -8,10 +8,18 @@ from rest_framework import generics, permissions, response, status
 from rest_framework.views import APIView
 
 from apps.orders.models import Order
+from apps.orders.serializers import OrderDetailSerializer
 
 from .models import WeeklySettlement
-from .serializers import StripeCheckoutSessionRequestSerializer, WeeklySettlementSerializer
+from .serializers import (
+    StripeCheckoutCancelSerializer,
+    StripeCheckoutSessionConfirmSerializer,
+    StripeCheckoutSessionRequestSerializer,
+    WeeklySettlementSerializer,
+)
 from .services import (
+    cancel_stripe_checkout_order,
+    confirm_stripe_checkout_session,
     create_stripe_checkout_session_for_order,
     handle_stripe_webhook_event,
     process_weekly_settlements,
@@ -67,6 +75,56 @@ class StripeWebhookAPIView(APIView):
             return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
         return response.Response(result, status=status.HTTP_200_OK)
+
+
+class StripeCheckoutSessionConfirmAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        serializer = StripeCheckoutSessionConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        session_id = serializer.validated_data["session_id"]
+        get_object_or_404(
+            Order.objects.select_related("payment"),
+            payment__provider="stripe",
+            payment__provider_reference=session_id,
+            customer=request.user,
+        )
+
+        try:
+            result = confirm_stripe_checkout_session(session_id)
+        except ValueError as exc:
+            return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        order = get_object_or_404(
+            Order.objects.prefetch_related("sub_orders__producer", "items"),
+            pk=result["order_id"],
+            customer=request.user,
+        )
+        payload = {**result, "order": OrderDetailSerializer(order).data}
+        return response.Response(payload, status=status.HTTP_200_OK)
+
+
+class StripeCheckoutCancelAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        serializer = StripeCheckoutCancelSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        order = get_object_or_404(
+            Order.objects.prefetch_related("sub_orders__producer", "items"),
+            pk=serializer.validated_data["order_id"],
+            customer=request.user,
+        )
+
+        try:
+            result = cancel_stripe_checkout_order(order)
+        except ValueError as exc:
+            return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        order.refresh_from_db()
+        payload = {**result, "order": OrderDetailSerializer(order).data}
+        return response.Response(payload, status=status.HTTP_200_OK)
 
 
 class WeeklySettlementListAPIView(generics.ListAPIView):

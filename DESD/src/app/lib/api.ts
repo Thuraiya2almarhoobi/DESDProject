@@ -280,6 +280,20 @@ export async function apiBlob(path: string, init: RequestInit = {}): Promise<Blo
   return response.blob();
 }
 
+export async function uploadImageFile(
+  file: File,
+  scope: 'general' | 'products' | 'recipes' | 'stories' = 'general',
+): Promise<{ url: string; relative_url: string }> {
+  const formData = new FormData();
+  formData.append('image', file);
+  formData.append('scope', scope);
+
+  return apiJson<{ url: string; relative_url: string }>('/api/accounts/uploads/images/', {
+    method: 'POST',
+    body: formData,
+  });
+}
+
 const PRODUCT_IMAGE_LIBRARY = [
   'https://images.unsplash.com/photo-1542838132-92c53300491e?w=900',
   'https://images.unsplash.com/photo-1518843875459-f738682238a6?w=900',
