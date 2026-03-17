@@ -1,13 +1,10 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router';
+import { Link, useNavigate } from 'react-router';
+
+import { MarketingAuthNav } from '../components/MarketingAuthNav';
 import { useAuth } from '../contexts/AuthContext';
-import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
-import { Alert, AlertDescription } from '../components/ui/alert';
-import { Sprout } from 'lucide-react';
 import { getDashboardPathForRole } from '../lib/roleRouting';
+import '../../styles/marketing-auth.css';
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -18,8 +15,8 @@ export function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
     setError('');
     setLoading(true);
 
@@ -35,87 +32,75 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[oklch(0.96_0.02_145)] via-[oklch(0.94_0.03_142)] to-[oklch(0.92_0.04_150)] p-4">
-      <Card className="w-full max-w-md shadow-lg">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-4 size-14 bg-gradient-to-br from-[oklch(0.45_0.12_155)] to-[oklch(0.55_0.10_150)] rounded-full flex items-center justify-center shadow-md">
-            <Sprout className="size-7 text-white" />
-          </div>
-          <CardTitle className="text-2xl">Local Food Marketplace</CardTitle>
-          <CardDescription>Sign in to connect with local farmers</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
+    <div className="lfm-auth-page">
+      <MarketingAuthNav active="login" />
 
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
+      <main className="lfm-auth-main">
+        <section className="lfm-modal-panel" aria-labelledby="login-title">
+          <h1 id="login-title" className="lfm-modal-title">
+            Welcome Back
+          </h1>
+          <p className="lfm-modal-subtitle">Sign in to your account.</p>
+
+          {error && <div className="lfm-alert lfm-alert-error">{error}</div>}
+
+          <form className="lfm-login-form" onSubmit={handleSubmit}>
+            <div className="lfm-form-group">
+              <label htmlFor="email">Email Address</label>
+              <input
                 id="email"
                 type="email"
-                placeholder="Enter your email"
+                placeholder="you@example.com"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(event) => setEmail(event.target.value)}
                 required
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
+            <div className="lfm-form-group">
+              <label htmlFor="password">Password</label>
+              <input
                 id="password"
                 type="password"
                 placeholder="Enter your password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(event) => setPassword(event.target.value)}
                 required
               />
             </div>
 
-            <div className="flex items-center justify-between text-sm">
-              <label className="inline-flex items-center gap-2">
+            <div className="lfm-form-options">
+              <label className="lfm-checkbox" htmlFor="rememberMe">
                 <input
+                  id="rememberMe"
                   type="checkbox"
                   checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
+                  onChange={(event) => setRememberMe(event.target.checked)}
                 />
                 <span>Remember me</span>
               </label>
-              <button
-                type="button"
-                className="text-[oklch(0.45_0.12_155)] hover:underline"
-                onClick={() => navigate('/forgot-password')}
-              >
-                Forgot password?
-              </button>
+
+              <Link to="/forgot-password">Forgot password?</Link>
             </div>
 
-            <Button type="submit" className="w-full" disabled={loading}>
+            <button type="submit" className="lfm-btn-submit" disabled={loading}>
               {loading ? 'Signing in...' : 'Sign In'}
-            </Button>
-            <Button type="button" variant="outline" className="w-full" onClick={() => navigate('/register')}>
-              Create Account
-            </Button>
-            <Button type="button" variant="ghost" className="w-full" onClick={() => navigate('/')}>
-              Browse Marketplace First
-            </Button>
+            </button>
 
-            <div className="mt-6 p-4 bg-gradient-to-br from-[oklch(0.96_0.02_145)] to-[oklch(0.94_0.03_142)] rounded-lg text-sm space-y-2 border border-[oklch(0.88_0.02_145)]">
-              <p className="font-medium text-[oklch(0.45_0.12_155)]">Demo Accounts:</p>
-              <div className="space-y-1 text-[oklch(0.40_0.05_150)]">
-                <p><strong>Customer:</strong> customer@example.com</p>
-                <p><strong>Producer:</strong> producer@example.com</p>
-                <p><strong>Admin:</strong> admin@example.com</p>
-                <p className="text-xs mt-2 text-muted-foreground">Password: DemoPass123!</p>
-              </div>
-            </div>
+            <Link to="/select-portal?mode=register" className="lfm-btn lfm-btn-secondary" style={{ width: '100%' }}>
+              Create Account
+            </Link>
+
+            <Link to="/" className="lfm-btn" style={{ width: '100%', border: '1px solid var(--lfm-border)' }}>
+              Browse Marketplace First
+            </Link>
           </form>
-        </CardContent>
-      </Card>
+
+          <p className="lfm-auth-switch">
+            Don&apos;t have an account? <Link to="/select-portal?mode=register">Sign up instead</Link>
+          </p>
+        </section>
+      </main>
     </div>
   );
 }

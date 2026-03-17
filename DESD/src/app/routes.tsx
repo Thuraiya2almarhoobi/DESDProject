@@ -1,4 +1,4 @@
-﻿import { createBrowserRouter, Navigate } from 'react-router';
+import { createBrowserRouter, Navigate } from 'react-router';
 import { AppShell } from './components/AppShell';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { RoleProtectedRoute } from './components/RoleProtectedRoute';
@@ -7,7 +7,6 @@ import { SiteShell } from './components/SiteShell';
 // Pages
 import { LandingPage } from './pages/LandingPage';
 import { LoginPage } from './pages/LoginPage';
-import { RegisterPage } from './pages/RegisterPage';
 import { VerifyEmailPage } from './pages/VerifyEmailPage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
@@ -186,7 +185,7 @@ export const router = createBrowserRouter([
       },
       {
         path: '/register',
-        element: <RegisterPage />,
+        element: <Navigate to="/select-portal?mode=register" replace />,
       },
       {
         path: '/register/customer',
@@ -295,4 +294,3 @@ export const router = createBrowserRouter([
     ],
   },
 ]);
-

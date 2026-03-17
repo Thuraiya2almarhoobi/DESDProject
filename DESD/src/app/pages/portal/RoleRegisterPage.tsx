@@ -164,7 +164,7 @@ export function RoleRegisterPage({ role }: RoleRegisterPageProps) {
       title={definition.registerHeading ?? 'Create account'}
       description={definition.registerDescription ?? 'Complete the registration form for this stakeholder role.'}
       accentClassName={definition.accentClassName}
-      backHref={definition.portalPath}
+      backHref="/select-portal?mode=register"
       backLabel="Back to Portal"
       insight="This form only collects fields required by the existing backend registration endpoint for this stakeholder type."
     >
@@ -399,7 +399,7 @@ export function RoleRegisterPage({ role }: RoleRegisterPageProps) {
             </Button>
 
             <Button asChild variant="outline" size="lg">
-              <Link to={definition.portalPath}>Back to Portal</Link>
+              <Link to="/select-portal?mode=register">Back to Portal</Link>
             </Button>
           </div>
         </form>

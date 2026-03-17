@@ -1,13 +1,18 @@
-import { Link } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import { ExternalLink, Sprout } from 'lucide-react';
 
 import { useAuth } from '../contexts/AuthContext';
 import { getSiteNavItems } from '../lib/siteNavigation';
 
 export function SiteFooter() {
+  const location = useLocation();
   const { user } = useAuth();
   const navItems = getSiteNavItems(user?.role);
   const currentYear = new Date().getFullYear();
+
+  if (location.pathname === '/') {
+    return null;
+  }
 
   return (
     <footer className="border-t border-[oklch(0.88_0.02_145)] bg-white/92 backdrop-blur-sm">
@@ -48,7 +53,7 @@ export function SiteFooter() {
             <Link to="/select-portal" className="transition-colors hover:text-[oklch(0.28_0.06_145)]">
               Role Portal
             </Link>
-            <Link to="/select-portal?mode=login" className="transition-colors hover:text-[oklch(0.28_0.06_145)]">
+            <Link to="/login" className="transition-colors hover:text-[oklch(0.28_0.06_145)]">
               Sign In
             </Link>
             <Link to="/select-portal?mode=register" className="transition-colors hover:text-[oklch(0.28_0.06_145)]">

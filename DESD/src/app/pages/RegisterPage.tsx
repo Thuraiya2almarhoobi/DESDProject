@@ -1,37 +1,35 @@
-import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router';
-import { CheckCircle2, Sprout, XCircle } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
 
-import { Alert, AlertDescription } from '../components/ui/alert';
-import { Button } from '../components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
-import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
-import { UserRole } from '../types';
+import { MarketingAuthNav } from '../components/MarketingAuthNav';
 import { useAuth } from '../contexts/AuthContext';
+import { UserRole } from '../types';
+import '../../styles/marketing-auth.css';
 
 type RegisterRole = Exclude<UserRole, 'ADMIN'>;
 
 const PASSWORD_MIN_LENGTH = 10;
 
-const roleOptions: Array<{ value: RegisterRole; label: string }> = [
-  { value: 'CUSTOMER', label: 'Customer' },
-  { value: 'PRODUCER', label: 'Producer' },
-  { value: 'COMMUNITY', label: 'Community' },
-  { value: 'RESTAURANT', label: 'Restaurant' },
+const roleOptions: Array<{ value: RegisterRole; label: string; icon: string; description: string }> = [
+  { value: 'CUSTOMER', label: 'Customer', icon: '\u{1F6D2}', description: 'Shop fresh local products' },
+  { value: 'PRODUCER', label: 'Producer', icon: '\u{1F33E}', description: 'Sell your local produce' },
+  { value: 'COMMUNITY', label: 'Community', icon: '\u{1F465}', description: 'Coordinate bulk orders' },
+  { value: 'RESTAURANT', label: 'Restaurant', icon: '\u{1F3EA}', description: 'Source for your kitchen' },
 ];
+
+const registerRoles = roleOptions.map((option) => option.value);
+
+function isRegisterRole(value: string): value is RegisterRole {
+  return registerRoles.includes(value as RegisterRole);
+}
 
 type PasswordStrength = 'Weak' | 'Medium' | 'Strong';
 
 export function RegisterPage() {
   const navigate = useNavigate();
-  const {
-    registerCommunity,
-    registerCustomer,
-    registerProducer,
-    registerRestaurant,
-  } = useAuth();
+  const [searchParams] = useSearchParams();
+  const { registerCommunity, registerCustomer, registerProducer, registerRestaurant } = useAuth();
 
   const [role, setRole] = useState<RegisterRole>('CUSTOMER');
   const [email, setEmail] = useState('');
@@ -55,6 +53,13 @@ export function RegisterPage() {
   const [successMessage, setSuccessMessage] = useState('');
   const [registrationComplete, setRegistrationComplete] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const requestedRole = (searchParams.get('role') || '').toUpperCase();
+    if (requestedRole && isRegisterRole(requestedRole)) {
+      setRole(requestedRole);
+    }
+  }, [searchParams]);
 
   const passwordChecks = useMemo(() => {
     return {
@@ -162,297 +167,296 @@ export function RegisterPage() {
     setLoading(false);
   };
 
-  const renderRule = (label: string, passed: boolean) => (
-    <div className={`flex items-center gap-2 text-xs ${passed ? 'text-green-700' : 'text-gray-600'}`}>
-      {passed ? <CheckCircle2 className="size-4" /> : <XCircle className="size-4" />}
-      <span>{label}</span>
+  const strengthClassName =
+    passwordStrength === 'Strong'
+      ? 'lfm-password-strength lfm-strength-strong'
+      : passwordStrength === 'Medium'
+        ? 'lfm-password-strength lfm-strength-medium'
+        : 'lfm-password-strength lfm-strength-weak';
+
+  const renderPasswordRule = (label: string, passed: boolean) => (
+    <div className={passed ? 'lfm-password-rule-ok' : 'lfm-password-rule-miss'}>
+      {passed ? '[x]' : '[ ]'} {label}
     </div>
   );
 
-  const strengthColor = passwordStrength === 'Strong'
-    ? 'text-green-700'
-    : passwordStrength === 'Medium'
-      ? 'text-amber-700'
-      : 'text-red-700';
-
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[oklch(0.96_0.02_145)] via-[oklch(0.94_0.03_142)] to-[oklch(0.92_0.04_150)] p-4">
-      <Card className="w-full max-w-lg shadow-lg">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-4 size-14 bg-gradient-to-br from-[oklch(0.45_0.12_155)] to-[oklch(0.55_0.10_150)] rounded-full flex items-center justify-center shadow-md">
-            <Sprout className="size-7 text-white" />
-          </div>
-          <CardTitle className="text-2xl">Create Account</CardTitle>
-          <CardDescription>Choose a stakeholder role and complete registration</CardDescription>
-        </CardHeader>
+    <div className="lfm-auth-page">
+      <MarketingAuthNav active="register" />
 
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-            {successMessage && (
-              <Alert>
-                <AlertDescription>{successMessage}</AlertDescription>
-              </Alert>
-            )}
+      <main className="lfm-auth-main">
+        <section className="lfm-modal-panel lfm-modal-panel-wide" aria-labelledby="register-title">
+          <h1 id="register-title" className="lfm-modal-title">
+            Join Us
+          </h1>
+          <p className="lfm-modal-subtitle">Choose your role to get started.</p>
 
-            <div className="space-y-2">
-              <Label htmlFor="role">Role</Label>
-              <select
-                id="role"
-                value={role}
-                onChange={(event) => setRole(event.target.value as RegisterRole)}
-                className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
-              >
+          {error && <div className="lfm-alert lfm-alert-error">{error}</div>}
+          {successMessage && <div className="lfm-alert lfm-alert-success">{successMessage}</div>}
+
+          <form className="lfm-login-form" onSubmit={handleSubmit}>
+            <div>
+              <div className="lfm-role-selector-grid">
                 {roleOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={`lfm-role-selector${role === option.value ? ' active' : ''}`}
+                    onClick={() => setRole(option.value)}
+                  >
+                    <div className="role-icon" aria-hidden="true">
+                      {option.icon}
+                    </div>
+                    <h4>{option.label}</h4>
+                    <p>{option.description}</p>
+                  </button>
                 ))}
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                required
-              />
-              <p className={`text-sm font-medium ${strengthColor}`}>Strength: {passwordStrength}</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {renderRule(`At least ${PASSWORD_MIN_LENGTH} characters`, passwordChecks.minLength)}
-                {renderRule('One uppercase letter', passwordChecks.uppercase)}
-                {renderRule('One lowercase letter', passwordChecks.lowercase)}
-                {renderRule('One number', passwordChecks.number)}
-                {renderRule('One special character', passwordChecks.special)}
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="confirm-password">Confirm Password</Label>
-              <Input
-                id="confirm-password"
-                type="password"
-                value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
-                required
-              />
-              {confirmPassword && !passwordMatch && (
-                <p className="text-xs text-red-700">Passwords do not match.</p>
+            <div className="lfm-register-grid">
+              <div className="lfm-form-group">
+                <label htmlFor="email">Email Address</label>
+                <input
+                  id="email"
+                  type="email"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="lfm-form-group">
+                <label htmlFor="password">Password</label>
+                <input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  required
+                />
+                <p className={strengthClassName}>Strength: {passwordStrength}</p>
+                <div className="lfm-password-rules">
+                  {renderPasswordRule(`At least ${PASSWORD_MIN_LENGTH} characters`, passwordChecks.minLength)}
+                  {renderPasswordRule('One uppercase letter', passwordChecks.uppercase)}
+                  {renderPasswordRule('One lowercase letter', passwordChecks.lowercase)}
+                  {renderPasswordRule('One number', passwordChecks.number)}
+                  {renderPasswordRule('One special character', passwordChecks.special)}
+                </div>
+              </div>
+
+              <div className="lfm-form-group full">
+                <label htmlFor="confirm-password">Confirm Password</label>
+                <input
+                  id="confirm-password"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  required
+                />
+                {confirmPassword && !passwordMatch && <span className="lfm-password-rule-miss">Passwords do not match.</span>}
+              </div>
+
+              {role === 'CUSTOMER' && (
+                <>
+                  <div className="lfm-form-group">
+                    <label htmlFor="full-name">Full Name</label>
+                    <input
+                      id="full-name"
+                      value={fullName}
+                      onChange={(event) => setFullName(event.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="lfm-form-group">
+                    <label htmlFor="customer-phone">Phone</label>
+                    <input
+                      id="customer-phone"
+                      value={customerPhone}
+                      onChange={(event) => setCustomerPhone(event.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="lfm-form-group full">
+                    <label htmlFor="delivery-address">Delivery Address</label>
+                    <input
+                      id="delivery-address"
+                      value={customerDeliveryAddress}
+                      onChange={(event) => setCustomerDeliveryAddress(event.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="lfm-form-group">
+                    <label htmlFor="customer-postcode">Postcode</label>
+                    <input
+                      id="customer-postcode"
+                      value={customerPostcode}
+                      onChange={(event) => setCustomerPostcode(event.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="lfm-form-group full">
+                    <label className="lfm-checkbox" htmlFor="accept-terms" style={{ marginTop: '0.35rem' }}>
+                      <input
+                        id="accept-terms"
+                        type="checkbox"
+                        checked={acceptTerms}
+                        onChange={(event) => setAcceptTerms(event.target.checked)}
+                        required
+                      />
+                      <span>I accept the terms and conditions.</span>
+                    </label>
+                  </div>
+                </>
+              )}
+
+              {role === 'PRODUCER' && (
+                <>
+                  <div className="lfm-form-group">
+                    <label htmlFor="business-name">Business Name</label>
+                    <input
+                      id="business-name"
+                      value={businessName}
+                      onChange={(event) => setBusinessName(event.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="lfm-form-group">
+                    <label htmlFor="producer-contact-name">Contact Name</label>
+                    <input
+                      id="producer-contact-name"
+                      value={producerContactName}
+                      onChange={(event) => setProducerContactName(event.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="lfm-form-group">
+                    <label htmlFor="producer-phone">Phone</label>
+                    <input
+                      id="producer-phone"
+                      value={producerPhone}
+                      onChange={(event) => setProducerPhone(event.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="lfm-form-group">
+                    <label htmlFor="producer-postcode">Postcode</label>
+                    <input
+                      id="producer-postcode"
+                      value={producerPostcode}
+                      onChange={(event) => setProducerPostcode(event.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="lfm-form-group full">
+                    <label htmlFor="producer-business-address">Business Address</label>
+                    <input
+                      id="producer-business-address"
+                      value={producerBusinessAddress}
+                      onChange={(event) => setProducerBusinessAddress(event.target.value)}
+                      required
+                    />
+                  </div>
+                </>
+              )}
+
+              {role === 'COMMUNITY' && (
+                <>
+                  <div className="lfm-form-group">
+                    <label htmlFor="organisation-name">Organisation Name</label>
+                    <input
+                      id="organisation-name"
+                      value={organisationName}
+                      onChange={(event) => setOrganisationName(event.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="lfm-form-group">
+                    <label htmlFor="organisation-type">Organisation Type</label>
+                    <input
+                      id="organisation-type"
+                      value={orgType}
+                      onChange={(event) => setOrgType(event.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="lfm-form-group">
+                    <label htmlFor="community-contact-name">Contact Name</label>
+                    <input
+                      id="community-contact-name"
+                      value={contactName}
+                      onChange={(event) => setContactName(event.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="lfm-form-group">
+                    <label htmlFor="community-phone">Phone</label>
+                    <input
+                      id="community-phone"
+                      value={sharedPhone}
+                      onChange={(event) => setSharedPhone(event.target.value)}
+                      required
+                    />
+                  </div>
+                </>
+              )}
+
+              {role === 'RESTAURANT' && (
+                <>
+                  <div className="lfm-form-group">
+                    <label htmlFor="restaurant-business-name">Business Name</label>
+                    <input
+                      id="restaurant-business-name"
+                      value={businessName}
+                      onChange={(event) => setBusinessName(event.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="lfm-form-group">
+                    <label htmlFor="restaurant-contact-name">Contact Name</label>
+                    <input
+                      id="restaurant-contact-name"
+                      value={contactName}
+                      onChange={(event) => setContactName(event.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="lfm-form-group full">
+                    <label htmlFor="restaurant-phone">Phone</label>
+                    <input
+                      id="restaurant-phone"
+                      value={sharedPhone}
+                      onChange={(event) => setSharedPhone(event.target.value)}
+                      required
+                    />
+                  </div>
+                </>
               )}
             </div>
 
-            {role === 'CUSTOMER' && (
-              <>
-                <div className="space-y-2">
-                  <Label htmlFor="full-name">Full Name</Label>
-                  <Input
-                    id="full-name"
-                    value={fullName}
-                    onChange={(event) => setFullName(event.target.value)}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Phone</Label>
-                  <Input
-                    id="phone"
-                    value={customerPhone}
-                    onChange={(event) => setCustomerPhone(event.target.value)}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="delivery-address">Delivery Address</Label>
-                  <Input
-                    id="delivery-address"
-                    value={customerDeliveryAddress}
-                    onChange={(event) => setCustomerDeliveryAddress(event.target.value)}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="customer-postcode">Postcode</Label>
-                  <Input
-                    id="customer-postcode"
-                    value={customerPostcode}
-                    onChange={(event) => setCustomerPostcode(event.target.value)}
-                    required
-                  />
-                </div>
-                <label className="flex items-start gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={acceptTerms}
-                    onChange={(event) => setAcceptTerms(event.target.checked)}
-                    className="mt-1"
-                    required
-                  />
-                  <span>I accept the terms and conditions.</span>
-                </label>
-              </>
-            )}
+            <div className="lfm-register-actions">
+              <button type="submit" className="lfm-btn-submit full" disabled={!canSubmit}>
+                {loading ? 'Creating account...' : 'Register'}
+              </button>
 
-            {role === 'PRODUCER' && (
-              <>
-                <div className="space-y-2">
-                  <Label htmlFor="business-name">Business Name</Label>
-                  <Input
-                    id="business-name"
-                    value={businessName}
-                    onChange={(event) => setBusinessName(event.target.value)}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="producer-contact-name">Contact Name</Label>
-                  <Input
-                    id="producer-contact-name"
-                    value={producerContactName}
-                    onChange={(event) => setProducerContactName(event.target.value)}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="producer-phone">Phone</Label>
-                  <Input
-                    id="producer-phone"
-                    value={producerPhone}
-                    onChange={(event) => setProducerPhone(event.target.value)}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="business-address">Business Address</Label>
-                  <Input
-                    id="business-address"
-                    value={producerBusinessAddress}
-                    onChange={(event) => setProducerBusinessAddress(event.target.value)}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="producer-postcode">Postcode</Label>
-                  <Input
-                    id="producer-postcode"
-                    value={producerPostcode}
-                    onChange={(event) => setProducerPostcode(event.target.value)}
-                    required
-                  />
-                </div>
-              </>
-            )}
+              {registrationComplete && (
+                <button type="button" className="lfm-btn lfm-btn-primary" onClick={() => navigate('/login')}>
+                  Continue to Login
+                </button>
+              )}
 
-            {role === 'COMMUNITY' && (
-              <>
-                <div className="space-y-2">
-                  <Label htmlFor="org-name">Organisation Name</Label>
-                  <Input
-                    id="org-name"
-                    value={organisationName}
-                    onChange={(event) => setOrganisationName(event.target.value)}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="org-type">Organisation Type</Label>
-                  <Input
-                    id="org-type"
-                    value={orgType}
-                    onChange={(event) => setOrgType(event.target.value)}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="contact-name">Contact Name</Label>
-                  <Input
-                    id="contact-name"
-                    value={contactName}
-                    onChange={(event) => setContactName(event.target.value)}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="community-phone">Phone</Label>
-                  <Input
-                    id="community-phone"
-                    value={sharedPhone}
-                    onChange={(event) => setSharedPhone(event.target.value)}
-                    required
-                  />
-                </div>
-              </>
-            )}
-
-            {role === 'RESTAURANT' && (
-              <>
-                <div className="space-y-2">
-                  <Label htmlFor="restaurant-business-name">Business Name</Label>
-                  <Input
-                    id="restaurant-business-name"
-                    value={businessName}
-                    onChange={(event) => setBusinessName(event.target.value)}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="restaurant-contact-name">Contact Name</Label>
-                  <Input
-                    id="restaurant-contact-name"
-                    value={contactName}
-                    onChange={(event) => setContactName(event.target.value)}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="restaurant-phone">Phone</Label>
-                  <Input
-                    id="restaurant-phone"
-                    value={sharedPhone}
-                    onChange={(event) => setSharedPhone(event.target.value)}
-                    required
-                  />
-                </div>
-              </>
-            )}
-
-            {!isPasswordValid && (
-              <p className="text-xs text-red-700">Password does not meet all required rules.</p>
-            )}
-
-            <Button type="submit" className="w-full" disabled={!canSubmit}>
-              {loading ? 'Creating account...' : 'Register'}
-            </Button>
-
-            {registrationComplete && (
-              <Button type="button" className="w-full" onClick={() => navigate('/login')}>
-                Continue to Login
-              </Button>
-            )}
-
-            <Button type="button" variant="outline" className="w-full" onClick={() => navigate('/login')}>
-              Back to login
-            </Button>
+              <Link to="/login" className="lfm-btn lfm-btn-secondary">
+                Back to Login
+              </Link>
+            </div>
           </form>
-        </CardContent>
-      </Card>
+
+          <p className="lfm-auth-switch">
+            Already have an account? <Link to="/login">Sign in instead</Link>
+          </p>
+        </section>
+      </main>
     </div>
   );
 }

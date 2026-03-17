@@ -1,111 +1,177 @@
-import { ArrowRight, ShoppingBasket, Store, Truck } from 'lucide-react';
 import { Link } from 'react-router';
 
-import { SiteHeader } from '../components/SiteHeader';
-import { Badge } from '../components/ui/badge';
-import { Button } from '../components/ui/button';
-import { Card, CardContent } from '../components/ui/card';
+import { MarketingAuthNav } from '../components/MarketingAuthNav';
+import '../../styles/marketing-auth.css';
 
-const marketSignals = [
+const stats = [
+  { number: '28+', label: 'Local Producers' },
+  { number: '500+', label: 'Fresh Products' },
+  { number: '48h', label: 'Average Delivery' },
+];
+
+const features = [
   {
-    label: 'Local producers',
-    value: '28',
-    detail: 'Fresh produce, dairy, and pantry staples',
-    icon: Store,
+    icon: '\u{1F96C}',
+    title: 'Farm Fresh Quality',
+    description:
+      'Direct from local producers to your table. Seasonal produce at peak freshness with full transparency on sourcing.',
   },
   {
-    label: 'Orders moving today',
-    value: '146',
-    detail: 'Mixed baskets, community supply, and restaurant runs',
-    icon: ShoppingBasket,
+    icon: '\u{1F4CD}',
+    title: 'Local Sourcing',
+    description:
+      'Know exactly where your food comes from. Track food miles, harvest dates, and connect directly with producers.',
   },
   {
-    label: 'Delivery coordination',
-    value: '48h',
-    detail: 'Average lead time across the Bristol network',
-    icon: Truck,
+    icon: '\u{1F69A}',
+    title: 'Fast Delivery',
+    description:
+      'Coordinated community deliveries in 48 hours or less. Multiple delivery options tailored to your needs.',
+  },
+  {
+    icon: '\u{1F49A}',
+    title: 'Supporting Community',
+    description:
+      'Every purchase directly supports local farmers and producers, strengthening your neighborhood economy.',
+  },
+  {
+    icon: '\u{1F512}',
+    title: 'Transparent & Safe',
+    description:
+      'Full allergen information, organic certification details, and detailed product sourcing for complete peace of mind.',
+  },
+  {
+    icon: '\u{1F381}',
+    title: 'Flexible Orders',
+    description:
+      'One-off purchases, recurring orders, or bulk community buys. Order exactly what you need, when you need it.',
+  },
+];
+
+const roles = [
+  {
+    icon: '\u{1F6D2}',
+    title: 'Customer',
+    description:
+      'Shop fresh local produce and products. Support local farmers while enjoying the highest quality ingredients.',
+    cta: 'Shop Now',
+    role: 'CUSTOMER',
+  },
+  {
+    icon: '\u{1F3EA}',
+    title: 'Restaurant',
+    description:
+      'Source consistent supply of premium local ingredients. Create repeatable orders and manage your supply chain efficiently.',
+    cta: 'Partner With Us',
+    role: 'RESTAURANT',
+  },
+  {
+    icon: '\u{1F465}',
+    title: 'Community Organizer',
+    description:
+      'Coordinate bulk orders across your network. Manage community deliveries and support local food access for all.',
+    cta: 'Get Involved',
+    role: 'COMMUNITY',
+  },
+  {
+    icon: '\u{1F33E}',
+    title: 'Producer',
+    description:
+      'Sell directly to your local community. Reach customers who value quality and are willing to pay fairly for your work.',
+    cta: 'Sell Your Produce',
+    role: 'PRODUCER',
   },
 ];
 
 export function LandingPage() {
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[linear-gradient(180deg,oklch(0.99_0.008_145),oklch(0.955_0.022_145))]">
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute left-[-8rem] top-[-7rem] h-80 w-80 rounded-full bg-[oklch(0.9_0.05_145/.38)] blur-3xl" />
-        <div className="absolute right-[-8rem] top-16 h-96 w-96 rounded-full bg-[oklch(0.94_0.04_70/.28)] blur-3xl" />
-        <div className="absolute bottom-[-10rem] left-1/3 h-[28rem] w-[28rem] rounded-full bg-[oklch(0.89_0.05_200/.16)] blur-3xl" />
-      </div>
+    <div className="lfm-page">
+      <MarketingAuthNav />
 
-      <div className="relative z-10">
-        <SiteHeader />
-      </div>
-
-      <main className="relative z-10">
-        <section className="mx-auto grid max-w-7xl gap-10 px-4 py-14 lg:grid-cols-[1.02fr_0.98fr] lg:items-center lg:py-20">
-          <div className="space-y-8">
-            <Badge className="rounded-full border border-[oklch(0.82_0.03_145)] bg-white/85 px-4 py-1 text-[0.7rem] font-semibold tracking-[0.22em] text-[oklch(0.42_0.05_145)] uppercase shadow-sm">
-              Local food buying, simplified
-            </Badge>
-
-            <div className="space-y-5">
-              <h1 className="max-w-3xl text-5xl font-semibold tracking-tight text-[oklch(0.22_0.02_145)] sm:text-6xl">
-                Buy local today.
-              </h1>
-              <p className="max-w-2xl text-lg leading-8 text-[oklch(0.36_0.03_145)]">
-                Shop fresh produce from Bristol suppliers, place repeat restaurant orders, or coordinate community
-                deliveries through one marketplace with role-based entry points.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-3">
-              <Button asChild size="lg" className="min-w-36">
-                <Link to="/select-portal">
-                  Buy today
-                  <ArrowRight className="size-4" />
-                </Link>
-              </Button>
-              <Button asChild variant="outline" size="lg" className="min-w-32">
-                <Link to="/select-portal?mode=login">Sign In</Link>
-              </Button>
-              <Button asChild variant="secondary" size="lg" className="min-w-32">
-                <Link to="/select-portal?mode=register">Sign Up</Link>
-              </Button>
-            </div>
-
-            <p className="text-sm text-[oklch(0.36_0.03_145)]">
-              Are you a producer?{' '}
-              <Link
-                to="/portal/producer"
-                className="font-semibold text-[oklch(0.44_0.08_150)] underline decoration-[oklch(0.72_0.05_145)] underline-offset-4"
-              >
-                Join now
-              </Link>
+      <main>
+        <section className="lfm-hero">
+          <div className="lfm-hero-content">
+            <h1>Local Food, Fresher Every Day</h1>
+            <p>
+              Connect directly with local farmers, producers, and community vendors. Buy fresh, eat local, support your
+              neighbors.
             </p>
+            <div className="lfm-hero-buttons">
+              <Link to="/select-portal?mode=register" className="lfm-btn lfm-btn-primary lfm-btn-large">
+                Get Started
+              </Link>
+              <a href="#features" className="lfm-btn lfm-btn-secondary lfm-btn-large">
+                Learn More
+              </a>
+            </div>
 
-            <div className="grid gap-4 sm:grid-cols-3">
-              {marketSignals.map((signal) => {
-                const Icon = signal.icon;
-                return (
-                  <Card key={signal.label} className="border-[oklch(0.86_0.02_145)] bg-white/84 shadow-sm">
-                    <CardContent className="space-y-3 p-5">
-                      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[oklch(0.95_0.03_145)]">
-                        <Icon className="size-5 text-[oklch(0.46_0.08_145)]" />
-                      </div>
-                      <div>
-                        <p className="text-xs font-semibold tracking-[0.18em] text-[oklch(0.45_0.05_145)] uppercase">
-                          {signal.label}
-                        </p>
-                        <p className="mt-2 text-3xl font-semibold text-[oklch(0.24_0.02_145)]">{signal.value}</p>
-                        <p className="mt-2 text-sm leading-6 text-[oklch(0.36_0.03_145)]">{signal.detail}</p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
+            <div className="lfm-stats">
+              {stats.map((stat) => (
+                <div key={stat.label} className="lfm-stat-item">
+                  <div className="lfm-stat-number">{stat.number}</div>
+                  <div className="lfm-stat-label">{stat.label}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section id="features" className="lfm-features">
+          <div className="lfm-section-header">
+            <div className="lfm-section-label">Why Choose Us</div>
+            <h2 className="lfm-section-title">Built for Your Community</h2>
+            <p className="lfm-section-subtitle">
+              Everything you need to support local agriculture and build stronger communities
+            </p>
+          </div>
+
+          <div className="lfm-features-grid">
+            {features.map((feature) => (
+              <article key={feature.title} className="lfm-feature-card">
+                <div className="lfm-feature-icon" aria-hidden="true">
+                  {feature.icon}
+                </div>
+                <h3>{feature.title}</h3>
+                <p>{feature.description}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="lfm-roles">
+          <div className="lfm-roles-content">
+            <div className="lfm-section-header">
+              <div className="lfm-section-label">Get Involved</div>
+              <h2 className="lfm-section-title">Choose Your Role</h2>
+              <p className="lfm-section-subtitle">Multiple ways to participate in our local food community</p>
+            </div>
+
+            <div className="lfm-roles-grid">
+              {roles.map((role) => (
+                <article key={role.title} className="lfm-role-card">
+                  <div className="lfm-role-icon" aria-hidden="true">
+                    {role.icon}
+                  </div>
+                  <h3>{role.title}</h3>
+                  <p>{role.description}</p>
+                  <Link to={`/select-portal?mode=register`} className="lfm-btn">
+                    {role.cta}
+                  </Link>
+                </article>
+              ))}
             </div>
           </div>
         </section>
       </main>
+
+      <footer className="lfm-marketing-footer">
+        <p>&copy; 2026 Local Food Marketplace. Supporting local farmers and communities.</p>
+        <p>
+          <a href="#">Privacy</a>
+          <a href="#">Terms</a>
+          <a href="#">Contact</a>
+        </p>
+      </footer>
     </div>
   );
 }

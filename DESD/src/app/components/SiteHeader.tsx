@@ -323,7 +323,7 @@ export function SiteHeader({
               <Link to="/portal/producer">Producer Portal</Link>
             </Button>
             <Button asChild variant="outline" size="sm">
-              <Link to="/select-portal?mode=login">Sign In</Link>
+              <Link to="/login">Sign In</Link>
             </Button>
             <Button asChild size="sm">
               <Link to="/select-portal?mode=register">Sign Up</Link>
