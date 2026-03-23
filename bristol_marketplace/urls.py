@@ -1,4 +1,4 @@
-"""
+﻿"""
 URL configuration for bristol_marketplace project.
 
 The `urlpatterns` list routes URLs to views. For more information please see:
@@ -33,12 +33,11 @@ urlpatterns = [
     path("api/payments/", include("apps.payments.urls")),
     path("api/geo/", include("apps.geo.urls")),
     path("api/content/", include("apps.content.urls")),
-    # Frontend route that intentionally uses /admin/commission.
-    re_path(r"^admin/commission/?$", frontend_app, name="frontend-admin-commission"),
     path("api/accounts/", include("apps.accounts.urls")),
-    path('admin/', admin.site.urls),
-    # Serve the React/Vite frontend for all application routes.
-    re_path(r"^(?!admin/|api/|static/|media/).*$", frontend_app, name="frontend-app"),
+    # Keep Django's table-based admin on a separate route so /admin/* can belong to the custom admin SPA.
+    path("django-admin/", admin.site.urls),
+    # Serve the React/Vite frontend for all application routes, including the custom /admin/* workspace.
+    re_path(r"^(?!api/|django-admin/|static/|media/).*$", frontend_app, name="frontend-app"),
 ]
 
 if settings.DEBUG:

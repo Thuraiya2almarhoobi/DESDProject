@@ -142,8 +142,8 @@ export const portalDefinitions: PortalDefinition[] = [
     loginHeading: 'Admin login',
     loginDescription:
       'Use staff credentials to access commission reporting, monthly summaries, and network payout drilldowns.',
-    portalPath: '/portal/admin',
-    loginPath: '/login/admin',
+    portalPath: '/admin/login',
+    loginPath: '/admin/login',
     landingCta: 'Admin Login',
     loginButtonLabel: 'Admin Login',
     highlight: 'Monitor 5 percent commission reporting and export auditable financial summaries.',

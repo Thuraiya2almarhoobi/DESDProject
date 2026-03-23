@@ -6,7 +6,15 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from apps.content.models import FarmStory, Recipe, RecipeProduct
-from apps.orders.models import CustomerProfile, Producer, Product
+from apps.orders.models import (
+    CustomerProfile,
+    Order,
+    OrderItem,
+    PaymentTransaction,
+    Producer,
+    ProducerSubOrder,
+    Product,
+)
 from apps.payments.services import get_previous_week_range, process_weekly_settlements
 from apps.producer_portal.models import (
     OrderStatus,
@@ -71,6 +79,24 @@ class Command(BaseCommand):
         )
         admin_user, admin_created = upsert_user(
             "admin@example.com",
+            role=User.Role.ADMIN,
+            is_staff=True,
+            is_superuser=True,
+        )
+        finance_admin_user, finance_admin_created = upsert_user(
+            "finance.admin@example.com",
+            role=User.Role.ADMIN,
+            is_staff=True,
+            is_superuser=True,
+        )
+        operations_admin_user, operations_admin_created = upsert_user(
+            "operations.admin@example.com",
+            role=User.Role.ADMIN,
+            is_staff=True,
+            is_superuser=True,
+        )
+        audit_admin_user, audit_admin_created = upsert_user(
+            "audit.admin@example.com",
             role=User.Role.ADMIN,
             is_staff=True,
             is_superuser=True,
@@ -408,6 +434,140 @@ class Command(BaseCommand):
         )
         process_weekly_settlements(reference_date=timezone.localdate())
 
+        def upsert_commission_report_order(
+            *,
+            order_number: str,
+            created_at,
+            delivery_address: str,
+            postcode: str,
+            total_amount: Decimal,
+            commission_amount: Decimal,
+            producer_payout_total: Decimal,
+            payment_reference: str,
+            sub_order_specs: list[dict],
+        ):
+            order, _ = Order.objects.update_or_create(
+                order_number=order_number,
+                defaults={
+                    "customer": customer_user,
+                    "status": Order.Status.DELIVERED,
+                    "payment_status": Order.PaymentStatus.PAID,
+                    "delivery_address": delivery_address,
+                    "customer_postcode": postcode,
+                    "special_instructions": "Admin reporting reference order",
+                    "subtotal_amount": total_amount,
+                    "commission_rate": Decimal("0.05"),
+                    "commission_amount": commission_amount,
+                    "total_amount": total_amount,
+                    "producer_payout_total": producer_payout_total,
+                    "payment_method": "test_card",
+                    "payment_reference": payment_reference,
+                },
+            )
+
+            ProducerSubOrder.objects.filter(order=order).delete()
+            OrderItem.objects.filter(order=order).delete()
+
+            for spec in sub_order_specs:
+                sub_order = ProducerSubOrder.objects.create(
+                    order=order,
+                    producer=spec["producer"],
+                    status=Order.Status.DELIVERED,
+                    delivery_date=created_at.date() + timedelta(days=2),
+                    subtotal_amount=spec["subtotal_amount"],
+                    commission_amount=spec["commission_amount"],
+                    payout_amount=spec["payout_amount"],
+                    notes="Seeded commission reporting data",
+                )
+                OrderItem.objects.create(
+                    order=order,
+                    sub_order=sub_order,
+                    product=spec["product"],
+                    product_name=spec["product_name"],
+                    producer_name=spec["producer"].business_name,
+                    unit=spec.get("unit", "kg"),
+                    quantity=spec["quantity"],
+                    unit_price=spec["unit_price"],
+                    line_total=spec["line_total"],
+                )
+
+            payment, _ = PaymentTransaction.objects.update_or_create(
+                order=order,
+                defaults={
+                    "provider": "mock",
+                    "provider_reference": payment_reference,
+                    "amount": total_amount,
+                    "currency": "GBP",
+                    "status": "succeeded",
+                    "test_mode": True,
+                    "raw_payload": {"seeded": True, "source": "seed_demo_data"},
+                },
+            )
+            Order.objects.filter(id=order.id).update(created_at=created_at, updated_at=created_at)
+            PaymentTransaction.objects.filter(id=payment.id).update(created_at=created_at + timedelta(minutes=5))
+
+        commission_now = timezone.now()
+        upsert_commission_report_order(
+            order_number="ORD-COMM-100",
+            created_at=commission_now - timedelta(days=10),
+            delivery_address="1 Report Street, Bristol",
+            postcode="BS1 2AA",
+            total_amount=Decimal("100.00"),
+            commission_amount=Decimal("5.00"),
+            producer_payout_total=Decimal("95.00"),
+            payment_reference="PAY-REF-100",
+            sub_order_specs=[
+                {
+                    "producer": bristol_farm,
+                    "product": products_by_name["Organic Carrots"],
+                    "product_name": "Organic Carrots",
+                    "subtotal_amount": Decimal("100.00"),
+                    "commission_amount": Decimal("5.00"),
+                    "payout_amount": Decimal("95.00"),
+                    "quantity": Decimal("100.00"),
+                    "unit_price": Decimal("1.00"),
+                    "line_total": Decimal("100.00"),
+                    "unit": "kg",
+                }
+            ],
+        )
+        upsert_commission_report_order(
+            order_number="ORD-COMM-150",
+            created_at=commission_now - timedelta(days=3),
+            delivery_address="2 Report Street, Bristol",
+            postcode="BS1 2AA",
+            total_amount=Decimal("150.00"),
+            commission_amount=Decimal("7.50"),
+            producer_payout_total=Decimal("142.50"),
+            payment_reference="PAY-REF-150",
+            sub_order_specs=[
+                {
+                    "producer": bristol_farm,
+                    "product": products_by_name["Organic Carrots"],
+                    "product_name": "Organic Carrots",
+                    "subtotal_amount": Decimal("80.00"),
+                    "commission_amount": Decimal("4.00"),
+                    "payout_amount": Decimal("76.00"),
+                    "quantity": Decimal("80.00"),
+                    "unit_price": Decimal("1.00"),
+                    "line_total": Decimal("80.00"),
+                    "unit": "kg",
+                },
+                {
+                    "producer": hillside_dairy,
+                    "product": products_by_name["Fresh Milk"],
+                    "product_name": "Fresh Milk",
+                    "subtotal_amount": Decimal("70.00"),
+                    "commission_amount": Decimal("3.50"),
+                    "payout_amount": Decimal("66.50"),
+                    "quantity": Decimal("70.00"),
+                    "unit_price": Decimal("1.00"),
+                    "line_total": Decimal("70.00"),
+                    "unit": "litre",
+                },
+            ],
+        )
+
         recipe, _ = Recipe.objects.update_or_create(
             producer=bristol_farm,
             title="Roasted Root Vegetable Medley",
@@ -450,12 +610,15 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS("Demo data seeded successfully."))
         self.stdout.write(
             self.style.WARNING(
-                "Accounts: customer@example.com, producer@example.com, producer2@example.com, admin@example.com"
+                "Accounts: customer@example.com, producer@example.com, producer2@example.com, "
+                "admin@example.com, finance.admin@example.com, operations.admin@example.com, audit.admin@example.com"
             )
         )
         self.stdout.write(self.style.WARNING(f"Password for all accounts: {password}"))
         self.stdout.write(
             "Users created/updated: "
             f"customer={customer_created}, producer={producer_created}, "
-            f"producer2={producer_two_created}, admin={admin_created}"
+            f"producer2={producer_two_created}, admin={admin_created}, "
+            f"finance_admin={finance_admin_created}, operations_admin={operations_admin_created}, "
+            f"audit_admin={audit_admin_created}"
         )

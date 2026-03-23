@@ -1,5 +1,6 @@
 import { createBrowserRouter, Navigate } from 'react-router';
 import { AppShell } from './components/AppShell';
+import { AdminLayout } from './components/admin/AdminLayout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { RoleProtectedRoute } from './components/RoleProtectedRoute';
 import { SiteShell } from './components/SiteShell';
@@ -25,6 +26,8 @@ import { ProducerOrdersPage } from './pages/producer/ProducerOrdersPage';
 import { ProducerInventoryPage } from './pages/producer/ProducerInventoryPage';
 import { ProducerPaymentsPage } from './pages/producer/ProducerPaymentsPage';
 import { AdminCommissionPage } from './pages/admin/AdminCommissionPage';
+import { AdminDashboardPage } from './pages/admin/AdminDashboardPage';
+import { AdminLoginPage } from './pages/admin/AdminLoginPage';
 import { CommunityDashboardPage } from './pages/community/CommunityDashboardPage';
 import { RoleLoginPage } from './pages/portal/RoleLoginPage';
 import { PortalSelectPage } from './pages/portal/PortalSelectPage';
@@ -66,7 +69,7 @@ export const router = createBrowserRouter([
           },
           {
             path: '/portal/admin',
-            element: <StakeholderPortalPage role="ADMIN" />,
+            element: <Navigate to="/admin/login" replace />,
           },
           // Customer routes
           {
@@ -181,7 +184,36 @@ export const router = createBrowserRouter([
       },
       {
         path: '/login/admin',
-        element: <RoleLoginPage role="ADMIN" />,
+        element: <Navigate to="/admin/login" replace />,
+      },
+      {
+        path: '/admin',
+        element: <Navigate to="/admin/login" replace />,
+      },
+      {
+        path: '/admin/login',
+        element: <AdminLoginPage />,
+      },
+      {
+        element: (
+          <RoleProtectedRoute requiredRole="ADMIN">
+            <AdminLayout />
+          </RoleProtectedRoute>
+        ),
+        children: [
+          {
+            path: '/admin/dashboard',
+            element: <AdminDashboardPage />,
+          },
+          {
+            path: '/admin/financial-reports',
+            element: <AdminCommissionPage />,
+          },
+          {
+            path: '/admin/commission',
+            element: <Navigate to="/admin/financial-reports" replace />,
+          },
+        ],
       },
       {
         path: '/register',
@@ -275,15 +307,6 @@ export const router = createBrowserRouter([
         element: (
           <RoleProtectedRoute requiredRole="RESTAURANT">
             <RestaurantRecurringOrdersPage />
-          </RoleProtectedRoute>
-        ),
-      },
-      // Admin routes
-      {
-        path: '/admin/commission',
-        element: (
-          <RoleProtectedRoute requiredRole="ADMIN">
-            <AdminCommissionPage />
           </RoleProtectedRoute>
         ),
       },

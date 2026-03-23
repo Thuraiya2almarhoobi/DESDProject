@@ -870,3 +870,37 @@
     align-items: flex-start;
   }
 }
+
+.lfm-password-field {
+  position: relative;
+}
+
+.lfm-password-field input {
+  width: 100%;
+  padding-right: 3rem;
+}
+
+.lfm-password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 0.85rem;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: #5d6360;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.2s ease;
+}
+
+.lfm-password-toggle:hover {
+  color: var(--lfm-primary);
+}
+
+.lfm-password-toggle:focus-visible {
+  outline: none;
+  color: var(--lfm-primary);
+}

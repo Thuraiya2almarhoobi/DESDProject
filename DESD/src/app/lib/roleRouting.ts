@@ -11,7 +11,7 @@ export function getDashboardPathForRole(role: UserRole): string {
     case 'RESTAURANT':
       return '/restaurant/dashboard';
     case 'ADMIN':
-      return '/admin/commission';
+      return '/admin/dashboard';
     default:
       return '/login';
   }

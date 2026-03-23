@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import timedelta
 from pathlib import Path
 from urllib.parse import unquote
@@ -24,12 +25,15 @@ try:
 except ModuleNotFoundError:  # Offline fallback when simplejwt is unavailable.
     RefreshToken = None
 
+from apps.orders.models import CustomerProfile as OrdersCustomerProfile
+from apps.orders.models import Producer as OrdersProducer
+
 from .auth_tokens import (
     load_user_from_email_verification_token,
     load_user_from_password_reset_token,
 )
 from .email_utils import send_email_verification_message, send_password_reset_message
-from .models import Address, LoginAttempt
+from .models import Address, CustomerProfile, LoginAttempt, ProducerProfile
 from .permissions import IsAdmin, IsCommunity, IsCustomer, IsProducer, IsRestaurant
 from .serializers import (
     AddressSerializer,
@@ -135,15 +139,106 @@ def _build_auth_payload(user, *, remember_me: bool = False):
 
 
 def _get_user_profile(user):
+    return _get_or_create_editable_profile(user, ensure_exists=False)
+
+
+def _infer_city_from_address(address_line: str) -> str:
+    parts = [part.strip() for part in (address_line or "").split(",") if part.strip()]
+    if len(parts) >= 2:
+        return parts[-1]
+    return "Bristol"
+
+
+def _infer_display_name_from_email(email: str) -> str:
+    local_part = (email or "user").split("@")[0]
+    chunks = [chunk for chunk in re.split(r"[._-]+", local_part) if chunk]
+    if not chunks:
+        return "User"
+    return " ".join(chunk.capitalize() for chunk in chunks)
+
+
+def _preferred_address_for_user(user):
+    return user.addresses.filter(is_default=True).first() or user.addresses.order_by("id").first()
+
+
+def _bootstrap_customer_profile(user):
+    profile = CustomerProfile.objects.filter(user=user).first()
+    if profile is not None:
+        return profile
+
+    legacy_profile = OrdersCustomerProfile.objects.filter(user=user).first()
+    default_address = _preferred_address_for_user(user)
+    if default_address is None and legacy_profile and (legacy_profile.delivery_address or legacy_profile.postcode):
+        default_address = Address.objects.create(
+            user=user,
+            label="Delivery Address",
+            line1=legacy_profile.delivery_address or "Delivery Address",
+            city=_infer_city_from_address(legacy_profile.delivery_address or ""),
+            postcode=legacy_profile.postcode or "",
+            is_default=True,
+        )
+
+    return CustomerProfile.objects.create(
+        user=user,
+        full_name=(legacy_profile.full_name if legacy_profile and legacy_profile.full_name else _infer_display_name_from_email(user.email)),
+        phone=legacy_profile.phone if legacy_profile else "",
+        allergies_text="",
+        preferences_text="",
+        default_address=default_address,
+    )
+
+
+def _bootstrap_producer_profile(user):
+    profile = ProducerProfile.objects.filter(user=user).first()
+    if profile is not None:
+        return profile
+
+    legacy_producer = OrdersProducer.objects.filter(user=user).first()
+    address = _preferred_address_for_user(user)
+    if address is None and legacy_producer and legacy_producer.postcode:
+        address = Address.objects.create(
+            user=user,
+            label="Business Address",
+            line1=legacy_producer.business_name or _infer_display_name_from_email(user.email),
+            city="Bristol",
+            postcode=legacy_producer.postcode,
+            is_default=True,
+        )
+
+    return ProducerProfile.objects.create(
+        user=user,
+        business_name=(
+            legacy_producer.business_name
+            if legacy_producer and legacy_producer.business_name
+            else _infer_display_name_from_email(user.email)
+        ),
+        contact_name="",
+        phone=legacy_producer.phone if legacy_producer else "",
+        farm_origin_text="",
+        lead_time_hours=legacy_producer.lead_time_hours if legacy_producer else 48,
+        address=address,
+    )
+
+
+def _get_or_create_editable_profile(user, *, ensure_exists: bool):
     profile_model = PROFILE_MODEL_BY_ROLE.get(user.role)
     if profile_model is None:
         return None
-    return profile_model.objects.filter(user=user).first()
+
+    profile = profile_model.objects.filter(user=user).first()
+    if profile is not None or not ensure_exists:
+        return profile
+
+    if user.role == UserModel.Role.CUSTOMER:
+        return _bootstrap_customer_profile(user)
+    if user.role == UserModel.Role.PRODUCER:
+        return _bootstrap_producer_profile(user)
+    return None
 
 
 def _build_me_payload(request):
     user = request.user
-    profile_instance = _get_user_profile(user)
+    profile_instance = _get_or_create_editable_profile(user, ensure_exists=True)
     profile_serializer = PROFILE_SERIALIZER_BY_ROLE.get(user.role)
     profile_data = None
     if profile_serializer and profile_instance is not None:
@@ -339,7 +434,7 @@ class MeView(APIView):
             )
 
         serializer_class = PROFILE_SERIALIZER_BY_ROLE.get(request.user.role)
-        profile = _get_user_profile(request.user)
+        profile = _get_or_create_editable_profile(request.user, ensure_exists=True)
         if serializer_class is None or profile is None:
             return Response(
                 {"detail": "No editable profile exists for this role."},

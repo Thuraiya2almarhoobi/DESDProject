@@ -12,6 +12,9 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from apps.orders.models import CustomerProfile as OrdersCustomerProfile
+from apps.orders.models import Producer as OrdersProducer
+
 from .auth_tokens import generate_password_reset_token
 from .models import (
     Address,
@@ -321,6 +324,98 @@ class AccountsLoginTests(APITestCase):
         self.assertFalse(attempt.success)
         self.assertEqual(attempt.ip_address, "203.0.113.7")
         self.assertEqual(attempt.reason, "invalid_password")
+
+
+class AccountsEditableProfileBootstrapTests(APITestCase):
+    def test_me_get_bootstraps_missing_customer_profile_from_existing_order_profile(self):
+        user = UserModel.objects.create_user(
+            email="editable-customer@example.com",
+            password="StrongPass123!",
+            role=User.Role.CUSTOMER,
+        )
+        Address.objects.create(
+            user=user,
+            label="Delivery Address",
+            line1="12 Market Lane, Bristol",
+            city="Bristol",
+            postcode="BS1 4DJ",
+            is_default=True,
+        )
+        OrdersCustomerProfile.objects.create(
+            user=user,
+            full_name="Editable Customer",
+            phone="07000111222",
+            delivery_address="12 Market Lane, Bristol",
+            postcode="BS1 4DJ",
+        )
+
+        self.client.force_authenticate(user=user)
+        response = self.client.get(reverse("accounts-me"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["profile"]["full_name"], "Editable Customer")
+        self.assertTrue(CustomerProfile.objects.filter(user=user).exists())
+
+        patch_response = self.client.patch(
+            reverse("accounts-me"),
+            {
+                "profile": {
+                    "full_name": "Updated Customer",
+                    "phone": "07000999888",
+                    "allergies_text": "Peanuts",
+                }
+            },
+            format="json",
+        )
+
+        self.assertEqual(patch_response.status_code, status.HTTP_200_OK)
+        profile = CustomerProfile.objects.get(user=user)
+        self.assertEqual(profile.full_name, "Updated Customer")
+        self.assertEqual(profile.phone, "07000999888")
+        self.assertEqual(profile.allergies_text, "Peanuts")
+
+    def test_me_get_bootstraps_missing_producer_profile_from_existing_producer_record(self):
+        user = UserModel.objects.create_user(
+            email="editable-producer@example.com",
+            password="StrongPass123!",
+            role=User.Role.PRODUCER,
+        )
+        OrdersProducer.objects.create(
+            user=user,
+            business_name="Editable Farm",
+            contact_email="editable-producer@example.com",
+            phone="07111000222",
+            postcode="BS3 2AA",
+            lead_time_hours=72,
+            is_active=True,
+        )
+
+        self.client.force_authenticate(user=user)
+        response = self.client.get(reverse("accounts-me"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["profile"]["business_name"], "Editable Farm")
+        self.assertTrue(ProducerProfile.objects.filter(user=user).exists())
+
+        patch_response = self.client.patch(
+            reverse("accounts-me"),
+            {
+                "profile": {
+                    "business_name": "Updated Farm",
+                    "contact_name": "Pat Producer",
+                    "phone": "07111999888",
+                    "lead_time_hours": 96,
+                }
+            },
+            format="json",
+        )
+
+        self.assertEqual(patch_response.status_code, status.HTTP_200_OK)
+        profile = ProducerProfile.objects.get(user=user)
+        self.assertEqual(profile.business_name, "Updated Farm")
+        self.assertEqual(profile.contact_name, "Pat Producer")
+        self.assertEqual(profile.phone, "07111999888")
+        self.assertEqual(profile.lead_time_hours, 96)
 
 
 @override_settings(

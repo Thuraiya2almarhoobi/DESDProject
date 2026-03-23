@@ -1,3 +1,4 @@
+import { Eye, EyeOff } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
@@ -34,7 +35,9 @@ export function RegisterPage() {
   const [role, setRole] = useState<RegisterRole>('CUSTOMER');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [fullName, setFullName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerDeliveryAddress, setCustomerDeliveryAddress] = useState('');
@@ -229,13 +232,24 @@ export function RegisterPage() {
 
               <div className="lfm-form-group">
                 <label htmlFor="password">Password</label>
-                <input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  required
-                />
+                <div className="lfm-password-field">
+                  <input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="lfm-password-toggle"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    aria-pressed={showPassword}
+                    onClick={() => setShowPassword((current) => !current)}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
                 <p className={strengthClassName}>Strength: {passwordStrength}</p>
                 <div className="lfm-password-rules">
                   {renderPasswordRule(`At least ${PASSWORD_MIN_LENGTH} characters`, passwordChecks.minLength)}
@@ -248,13 +262,24 @@ export function RegisterPage() {
 
               <div className="lfm-form-group full">
                 <label htmlFor="confirm-password">Confirm Password</label>
-                <input
-                  id="confirm-password"
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(event) => setConfirmPassword(event.target.value)}
-                  required
-                />
+                <div className="lfm-password-field">
+                  <input
+                    id="confirm-password"
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    value={confirmPassword}
+                    onChange={(event) => setConfirmPassword(event.target.value)}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="lfm-password-toggle"
+                    aria-label={showConfirmPassword ? 'Hide password confirmation' : 'Show password confirmation'}
+                    aria-pressed={showConfirmPassword}
+                    onClick={() => setShowConfirmPassword((current) => !current)}
+                  >
+                    {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
                 {confirmPassword && !passwordMatch && <span className="lfm-password-rule-miss">Passwords do not match.</span>}
               </div>
 
