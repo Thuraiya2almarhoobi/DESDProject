@@ -8,6 +8,12 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db import models
 from django.utils import timezone
 
+from bristol_marketplace.seasonality import (
+    format_month_range,
+    is_current_month_in_range,
+    season_reminder,
+)
+
 
 class ProductAvailability(models.TextChoices):
     IN_SEASON = "in_season", "In Season"
@@ -44,6 +50,16 @@ class ProducerProduct(models.Model):
         choices=ProductAvailability.choices,
         default=ProductAvailability.IN_SEASON,
     )
+    season_start_month = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1), MaxValueValidator(12)],
+    )
+    season_end_month = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1), MaxValueValidator(12)],
+    )
     stock_quantity = models.PositiveIntegerField(default=0)
     allergen_information = models.CharField(max_length=255, blank=True)
     harvest_date = models.DateField()
@@ -67,13 +83,70 @@ class ProducerProduct(models.Model):
             )
         if not self.is_surplus:
             self.surplus_discount_percent = None
+        if self.availability == ProductAvailability.IN_SEASON:
+            if not self.season_start_month or not self.season_end_month:
+                raise ValidationError(
+                    {
+                        "season_start_month": "Season start month is required for seasonal products.",
+                        "season_end_month": "Season end month is required for seasonal products.",
+                    }
+                )
+        else:
+            self.season_start_month = None
+            self.season_end_month = None
 
     @property
     def is_visible_to_customers(self) -> bool:
+        return self.stock_quantity > 0 and self.effective_availability != ProductAvailability.UNAVAILABLE
+
+    @property
+    def seasonal_window_label(self) -> str:
+        return format_month_range(self.season_start_month, self.season_end_month)
+
+    def is_currently_in_season(self, reference_date=None) -> bool:
+        if self.availability == ProductAvailability.UNAVAILABLE:
+            return False
+        if self.availability == ProductAvailability.YEAR_ROUND:
+            return True
+        if self.season_start_month and self.season_end_month:
+            return is_current_month_in_range(self.season_start_month, self.season_end_month, reference_date)
+        return True
+
+    @property
+    def effective_availability(self) -> str:
+        if self.stock_quantity <= 0:
+            return ProductAvailability.UNAVAILABLE
+        if self.availability == ProductAvailability.UNAVAILABLE:
+            return ProductAvailability.UNAVAILABLE
+        if self.availability == ProductAvailability.YEAR_ROUND:
+            return ProductAvailability.YEAR_ROUND
         return (
-            self.stock_quantity > 0
-            and self.availability in {ProductAvailability.IN_SEASON, ProductAvailability.YEAR_ROUND}
+            ProductAvailability.IN_SEASON
+            if self.is_currently_in_season()
+            else ProductAvailability.UNAVAILABLE
         )
+
+    @property
+    def season_status_message(self) -> str:
+        if self.availability == ProductAvailability.YEAR_ROUND:
+            return "Available year-round."
+        if self.availability == ProductAvailability.UNAVAILABLE:
+            return "Hidden from customers until you mark it available."
+        window = self.seasonal_window_label or "seasonal window"
+        if self.is_currently_in_season():
+            return f"In season now. Customers can order during {window}."
+        return f"Out of season right now. Customers will see it again during {window}."
+
+    @property
+    def season_reminder_message(self) -> str:
+        if self.availability != ProductAvailability.IN_SEASON:
+            return ""
+        reminder = season_reminder(self.season_start_month, self.season_end_month)
+        if not reminder.starts_within_days or reminder.days_until_start in {None, 0}:
+            return ""
+        if reminder.days_until_start == 1:
+            return f"{self.name} becomes available tomorrow."
+        return f"{self.name} becomes available in {reminder.days_until_start} days."
 
     def __str__(self) -> str:
         return f"{self.name} ({self.producer_id})"

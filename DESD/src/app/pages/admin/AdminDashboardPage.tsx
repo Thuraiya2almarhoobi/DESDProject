@@ -1,4 +1,4 @@
-import { ArrowRight, CalendarRange, Download, ShieldCheck, Wallet } from 'lucide-react';
+import { ArrowRight, CalendarRange, Download, ShieldCheck, Star, Wallet } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
@@ -39,32 +39,56 @@ interface YTDSummary {
   total_producer_payouts: string;
 }
 
+interface PendingReviewModerationRow {
+  id: number;
+  order_product_id: number | null;
+  product_name: string;
+  producer_name: string;
+  title?: string;
+  reviewer_name: string;
+  rating: number;
+  comment: string;
+  moderation_status: 'pending' | 'published' | 'rejected';
+  moderation_reason?: string;
+  has_verified_purchase: boolean;
+  purchase_label: string;
+  created_at: string;
+}
+
 const defaultRange = getDefaultAdminDateRange();
 
 export function AdminDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [report, setReport] = useState<DashboardReportResponse | null>(null);
   const [ytdSummary, setYtdSummary] = useState<YTDSummary | null>(null);
+  const [pendingReviews, setPendingReviews] = useState<PendingReviewModerationRow[]>([]);
+  const [pendingReviewsLoading, setPendingReviewsLoading] = useState(true);
+  const [activeModerationReviewId, setActiveModerationReviewId] = useState<number | null>(null);
   const [selectedYear] = useState(new Date().getFullYear().toString());
 
   useEffect(() => {
     const loadSnapshot = async () => {
       setLoading(true);
+      setPendingReviewsLoading(true);
       try {
-        const [reportPayload, ytdPayload] = await Promise.all([
+        const [reportPayload, ytdPayload, pendingReviewsPayload] = await Promise.all([
           apiJson<DashboardReportResponse>(
             `/api/admin/commission-report/?start=${defaultRange.dateFrom}&end=${defaultRange.dateTo}`,
           ),
           apiJson<YTDSummary>(`/api/admin/commission-report/summary/ytd?year=${selectedYear}`),
+          apiJson<PendingReviewModerationRow[]>(`/api/orders/reviews/moderation-queue/`),
         ]);
         setReport(reportPayload);
         setYtdSummary(ytdPayload);
+        setPendingReviews(pendingReviewsPayload);
       } catch (error) {
         toast.error(error instanceof Error ? error.message : 'Unable to load the admin overview.');
         setReport(null);
         setYtdSummary(null);
+        setPendingReviews([]);
       } finally {
         setLoading(false);
+        setPendingReviewsLoading(false);
       }
     };
 
@@ -72,6 +96,43 @@ export function AdminDashboardPage() {
   }, [selectedYear]);
 
   const recentOrders = (report?.orders || []).slice(0, 4);
+
+  const handleModerationAction = async (
+    review: PendingReviewModerationRow,
+    moderationStatus: 'published' | 'rejected',
+  ) => {
+    if (!review.order_product_id) {
+      toast.error('This review is not linked to a checkout product, so it cannot be moderated from this queue.');
+      return;
+    }
+
+    setActiveModerationReviewId(review.id);
+    try {
+      await apiJson<unknown>(
+        `/api/orders/products/${review.order_product_id}/reviews/${review.id}/moderate/`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            moderation_status: moderationStatus,
+            moderation_reason: moderationStatus === 'published' ? '' : 'Rejected by moderator.',
+          }),
+        },
+      );
+      setPendingReviews((currentReviews) => currentReviews.filter((currentReview) => currentReview.id !== review.id));
+      toast.success(
+        moderationStatus === 'published'
+          ? `${review.reviewer_name}'s review is now published.`
+          : `${review.reviewer_name}'s review was rejected.`,
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to update review moderation status.');
+    } finally {
+      setActiveModerationReviewId(null);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -261,6 +322,87 @@ export function AdminDashboardPage() {
                 </Button>
               </div>
             </div>
+          </CardContent>
+        </Card>
+      </section>
+
+      <section>
+        <Card>
+          <CardHeader>
+            <CardTitle>Pending review moderation</CardTitle>
+            <CardDescription>
+              New customer reviews wait for approval first. When you publish one, the live marketplace will label it as
+              Verified purchase or Unverified purchase based on matching delivered orders.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {pendingReviewsLoading ? (
+              <p className="text-sm text-slate-500">Loading review queue...</p>
+            ) : null}
+
+            {!pendingReviewsLoading && pendingReviews.length === 0 ? (
+              <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-600">
+                There are no reviews waiting for moderation right now.
+              </div>
+            ) : null}
+
+            {pendingReviews.map((review) => (
+              <div key={review.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
+                        {review.product_name}
+                      </p>
+                      <p className="mt-2 text-lg font-semibold text-slate-950">{review.reviewer_name}</p>
+                      {review.title ? <p className="text-sm font-medium text-slate-900">{review.title}</p> : null}
+                      <p className="text-sm text-slate-600">
+                        Producer: {review.producer_name} · Submitted {new Date(review.created_at).toLocaleDateString('en-GB')}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge className="rounded-full bg-white text-slate-700 shadow-none hover:bg-white">
+                        {review.purchase_label}
+                      </Badge>
+                      <Badge className="rounded-full bg-amber-100 text-amber-900 shadow-none hover:bg-amber-100">
+                        Waiting for approval
+                      </Badge>
+                      <div className="flex items-center gap-1 text-amber-500">
+                        {Array.from({ length: 5 }).map((_, index) => (
+                          <Star
+                            key={`${review.id}-${index}`}
+                            className={`size-4 ${index < review.rating ? 'fill-current' : 'text-slate-300'}`}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                    <p className="text-sm leading-6 text-slate-700">
+                      {review.comment || 'No written comment provided.'}
+                    </p>
+                    {review.moderation_reason ? (
+                      <p className="text-xs text-slate-500">Status note: {review.moderation_reason}</p>
+                    ) : null}
+                  </div>
+
+                  <div className="flex flex-wrap gap-3">
+                    <Button
+                      className="bg-emerald-700 text-white hover:bg-emerald-800"
+                      disabled={activeModerationReviewId === review.id || !review.order_product_id}
+                      onClick={() => void handleModerationAction(review, 'published')}
+                    >
+                      {activeModerationReviewId === review.id ? 'Updating...' : 'Approve review'}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      disabled={activeModerationReviewId === review.id || !review.order_product_id}
+                      onClick={() => void handleModerationAction(review, 'rejected')}
+                    >
+                      Reject review
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))}
           </CardContent>
         </Card>
       </section>

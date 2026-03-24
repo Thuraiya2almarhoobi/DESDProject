@@ -2,11 +2,19 @@ from calendar import month_name
 from datetime import date
 from decimal import Decimal
 
+from django.utils import timezone
 from rest_framework.test import APITestCase
 
 from apps.accounts.models import CustomerProfile, User
 from apps.catalog.models import Category, Producer, Product
 from apps.community.models import ProductReview
+from apps.orders.models import (
+    Order,
+    OrderItem,
+    Producer as OrdersProducer,
+    ProducerSubOrder,
+    Product as OrdersProduct,
+)
 
 
 class ProductApiTests(APITestCase):
@@ -98,6 +106,62 @@ class ProductApiTests(APITestCase):
             email_verified=True,
         )
 
+        self.orders_producer = OrdersProducer.objects.create(
+            business_name="Sunrise Dairy",
+            postcode="BS1 4DJ",
+            lead_time_hours=48,
+        )
+        self.orders_milk = OrdersProduct.objects.create(
+            producer=self.orders_producer,
+            name="Fresh Whole Milk",
+            category="Dairy Products",
+            description="Whole milk from grass-fed cows",
+            unit="litre",
+            price=Decimal("2.80"),
+            stock_quantity=Decimal("80.00"),
+            is_available=True,
+            in_season=True,
+            allergen_info="Milk",
+        )
+
+    def _seed_delivered_purchase_for_milk(self):
+        order = Order.objects.create(
+            customer=self.customer_user,
+            status=Order.Status.DELIVERED,
+            payment_status=Order.PaymentStatus.PAID,
+            delivery_address="45 Park Street, Bristol",
+            customer_postcode="BS1 5JG",
+            special_instructions="Delivered review verification",
+            subtotal_amount=Decimal("2.80"),
+            commission_rate=Decimal("0.05"),
+            commission_amount=Decimal("0.14"),
+            total_amount=Decimal("2.80"),
+            producer_payout_total=Decimal("2.66"),
+            payment_method="test_card",
+            payment_reference="PAY-MILK-1",
+        )
+        sub_order = ProducerSubOrder.objects.create(
+            order=order,
+            producer=self.orders_producer,
+            status=Order.Status.DELIVERED,
+            delivery_date=timezone.localdate(),
+            subtotal_amount=Decimal("2.80"),
+            commission_amount=Decimal("0.14"),
+            payout_amount=Decimal("2.66"),
+            notes="Delivered milk review order",
+        )
+        OrderItem.objects.create(
+            order=order,
+            sub_order=sub_order,
+            product=self.orders_milk,
+            product_name=self.orders_milk.name,
+            producer_name=self.orders_producer.business_name,
+            unit=self.orders_milk.unit,
+            quantity=Decimal("1.00"),
+            unit_price=self.orders_milk.price,
+            line_total=Decimal("2.80"),
+        )
+
     def test_products_support_category_filter_by_slug(self):
         response = self.client.get("/api/products", {"category": "vegetables"})
         self.assertEqual(response.status_code, 200)
@@ -181,21 +245,24 @@ class ProductApiTests(APITestCase):
         self.assertIn("verified_purchase", response.data[0])
 
     def test_customer_can_submit_product_review_once(self):
+        self._seed_delivered_purchase_for_milk()
         self.client.force_authenticate(user=self.customer_user)
         response = self.client.post(
             f"/api/products/{self.milk.id}/reviews",
-            {"rating": 5, "comment": "Very fresh and creamy."},
+            {"rating": 5, "title": "Excellent quality", "comment": "Very fresh and creamy."},
             format="json",
         )
         self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["title"], "Excellent quality")
         self.assertEqual(response.data["reviewer_name"], "Reviewing Customer")
         self.assertEqual(response.data["rating"], 5)
-        self.assertFalse(response.data["verified_purchase"])
+        self.assertTrue(response.data["verified_purchase"])
         self.assertEqual(response.data["user_id"], self.customer_user.id)
+        self.assertEqual(response.data["moderation_status"], "published")
 
         duplicate = self.client.post(
             f"/api/products/{self.milk.id}/reviews",
-            {"rating": 4, "comment": "Second attempt."},
+            {"rating": 4, "title": "Second attempt", "comment": "Second attempt."},
             format="json",
         )
         self.assertEqual(duplicate.status_code, 400)
@@ -205,7 +272,7 @@ class ProductApiTests(APITestCase):
         self.client.force_authenticate(user=self.producer_user)
         response = self.client.post(
             f"/api/products/{self.tomatoes.id}/reviews",
-            {"rating": 5, "comment": "Should fail."},
+            {"rating": 5, "title": "Should fail", "comment": "Should fail."},
             format="json",
         )
         self.assertEqual(response.status_code, 403)
@@ -213,7 +280,7 @@ class ProductApiTests(APITestCase):
     def test_anonymous_user_cannot_submit_review(self):
         response = self.client.post(
             f"/api/products/{self.tomatoes.id}/reviews",
-            {"rating": 5, "comment": "Should fail."},
+            {"rating": 5, "title": "Should fail", "comment": "Should fail."},
             format="json",
         )
         self.assertEqual(response.status_code, 401)

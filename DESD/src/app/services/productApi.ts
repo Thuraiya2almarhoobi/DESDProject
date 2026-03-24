@@ -1,4 +1,5 @@
 ﻿import { Product, AvailabilityType } from '../types';
+import { resolveApiPathBase } from '../lib/apiBase';
 
 type BackendAvailability = 'in_season' | 'year_round' | 'unavailable';
 
@@ -14,6 +15,13 @@ interface BackendProduct {
   price: string;
   unit: Product['unit'];
   availability: BackendAvailability;
+  effective_availability?: BackendAvailability;
+  season_start_month?: number | null;
+  season_end_month?: number | null;
+  seasonal_window_label?: string;
+  season_status_message?: string;
+  season_reminder_message?: string;
+  is_currently_in_season?: boolean;
   stock_quantity: number;
   allergen_information: string | string[];
   harvest_date: string;
@@ -32,12 +40,14 @@ interface ProducerCreatePayload {
   stock: number;
   allergens?: string[];
   harvestDate: string;
+  seasonStartMonth?: number;
+  seasonEndMonth?: number;
   imageUrl?: string;
   isSurplus?: boolean;
   surplusDiscountPercent?: number;
 }
 
-const configuredBase = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '');
+const configuredBase = resolveApiPathBase(import.meta.env.VITE_API_BASE_URL, '/api');
 const apiUrl = (path: string) => (configuredBase ? `${configuredBase}${path}` : path);
 
 function toBackendAvailability(availability: AvailabilityType): BackendAvailability {
@@ -85,6 +95,8 @@ export function backendProductToFrontend(product: BackendProduct): Product {
   const price = Number(product.price);
   const discount = product.surplus_discount_percent ?? undefined;
   const originalPrice = discount ? Number((price / (1 - discount / 100)).toFixed(2)) : undefined;
+  const configuredAvailability = toFrontendAvailability(product.availability);
+  const effectiveAvailability = toFrontendAvailability(product.effective_availability ?? product.availability);
 
   return {
     id: String(product.id),
@@ -97,8 +109,15 @@ export function backendProductToFrontend(product: BackendProduct): Product {
     producerLocation: product.producer_location || 'Bristol, UK',
     category: product.category,
     harvestDate: product.harvest_date,
-    availability: toFrontendAvailability(product.availability),
-    seasonalDates: product.availability === 'in_season' ? 'Current season' : undefined,
+    availability: effectiveAvailability,
+    configuredAvailability,
+    effectiveAvailability,
+    seasonalDates: product.seasonal_window_label || (effectiveAvailability === 'in-season' ? 'Current season' : undefined),
+    seasonStartMonth: product.season_start_month ?? undefined,
+    seasonEndMonth: product.season_end_month ?? undefined,
+    seasonalStatusMessage: product.season_status_message || undefined,
+    seasonalReminderMessage: product.season_reminder_message || undefined,
+    isCurrentlyInSeason: product.is_currently_in_season,
     isOrganic: /organic/i.test(product.name) || /organic/i.test(product.description),
     allergens,
     imageUrl: product.image_url || 'https://images.unsplash.com/photo-1563636619-e9143da7973b?w=800',
@@ -121,19 +140,19 @@ async function parseResponse<T>(res: Response): Promise<T> {
 }
 
 export async function fetchMarketplaceProductsFromApi(): Promise<Product[]> {
-  const res = await fetch(apiUrl('/api/producer/public/products/'));
+  const res = await fetch(apiUrl('/producer/public/products/'));
   const products = await parseResponse<BackendProduct[]>(res);
   return products.map(backendProductToFrontend);
 }
 
 export async function fetchPublicMarketplaceProductById(productId: string): Promise<Product> {
-  const res = await fetch(apiUrl(`/api/producer/public/products/${productId}/`));
+  const res = await fetch(apiUrl(`/producer/public/products/${productId}/`));
   const product = await parseResponse<BackendProduct>(res);
   return backendProductToFrontend(product);
 }
 
 export async function fetchProducerProductsFromApi(demoUserEmail: string): Promise<Product[]> {
-  const res = await fetch(apiUrl('/api/producer/products/'), {
+  const res = await fetch(apiUrl('/producer/products/'), {
     headers: {
       'X-Demo-User': demoUserEmail,
     },
@@ -153,6 +172,8 @@ export async function createProducerProductInApi(
     price: payload.price.toFixed(2),
     unit: payload.unit,
     availability: toBackendAvailability(payload.availability),
+    season_start_month: payload.availability === 'in-season' ? payload.seasonStartMonth ?? null : null,
+    season_end_month: payload.availability === 'in-season' ? payload.seasonEndMonth ?? null : null,
     stock_quantity: payload.stock,
     allergen_information: serializeAllergens(payload.allergens),
     harvest_date: payload.harvestDate,
@@ -161,7 +182,7 @@ export async function createProducerProductInApi(
     surplus_discount_percent: payload.isSurplus ? payload.surplusDiscountPercent ?? 20 : null,
   };
 
-  const res = await fetch(apiUrl('/api/producer/products/'), {
+  const res = await fetch(apiUrl('/producer/products/'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -185,6 +206,8 @@ export async function patchProducerProductInApi(
   if (partialPayload.price !== undefined) body.price = partialPayload.price.toFixed(2);
   if (partialPayload.unit !== undefined) body.unit = partialPayload.unit;
   if (partialPayload.availability !== undefined) body.availability = toBackendAvailability(partialPayload.availability);
+  if (partialPayload.seasonStartMonth !== undefined) body.season_start_month = partialPayload.seasonStartMonth;
+  if (partialPayload.seasonEndMonth !== undefined) body.season_end_month = partialPayload.seasonEndMonth;
   if (partialPayload.stock !== undefined) body.stock_quantity = partialPayload.stock;
   if (partialPayload.allergens !== undefined) body.allergen_information = serializeAllergens(partialPayload.allergens);
   if (partialPayload.harvestDate !== undefined) body.harvest_date = partialPayload.harvestDate;
@@ -196,8 +219,12 @@ export async function patchProducerProductInApi(
   if (partialPayload.isSurplus === false) {
     body.surplus_discount_percent = null;
   }
+  if (partialPayload.availability !== undefined && partialPayload.availability !== 'in-season') {
+    body.season_start_month = null;
+    body.season_end_month = null;
+  }
 
-  const res = await fetch(apiUrl(`/api/producer/products/${productId}/`), {
+  const res = await fetch(apiUrl(`/producer/products/${productId}/`), {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',
@@ -208,4 +235,3 @@ export async function patchProducerProductInApi(
   const product = await parseResponse<BackendProduct>(res);
   return backendProductToFrontend(product);
 }
-

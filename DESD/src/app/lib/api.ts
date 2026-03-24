@@ -1,8 +1,9 @@
 import { Product } from '../types';
+import { resolveApiOriginBase } from './apiBase';
 import { clearAuthStorage, getAccessToken, getRefreshToken, setAuthTokens } from './tokenStorage';
 
 const AUTH_STORAGE_KEY = 'desd_basic_auth_token';
-const API_BASE = import.meta.env.VITE_API_BASE || '';
+const API_BASE = resolveApiOriginBase(import.meta.env.VITE_API_BASE, '');
 
 export class ApiError extends Error {
   status: number;
@@ -82,6 +83,15 @@ export interface ApiProduct {
   stock_quantity: string;
   is_available: boolean;
   in_season: boolean;
+  season_start_month?: number | null;
+  season_end_month?: number | null;
+  seasonal_window_label?: string;
+  season_status_message?: string;
+  season_reminder_message?: string;
+  is_currently_in_season?: boolean;
+  average_rating?: number | string | null;
+  review_count?: number | string;
+  verified_review_count?: number | string;
   harvest_date: string | null;
   allergen_info: string;
 }
@@ -96,6 +106,8 @@ export interface ApiCartItem {
   unit_price: string;
   line_total: string;
   available_stock: string;
+  availability?: Product['availability'];
+  seasonal_dates?: string;
 }
 
 export interface ApiCartGroup {
@@ -132,6 +144,7 @@ export interface ApiOrderSummary {
 
 export interface ApiOrderItem {
   id: number;
+  product_id?: number | null;
   product_name: string;
   producer_name: string;
   unit: string;
@@ -450,7 +463,14 @@ export function mapApiProductToProduct(apiProduct: ApiProduct, producerDistanceM
     category: apiProduct.category || 'Uncategorised',
     harvestDate: apiProduct.harvest_date || new Date().toISOString().slice(0, 10),
     availability: toAvailability(apiProduct.is_available, stock, apiProduct.in_season),
-    seasonalDates: apiProduct.in_season ? 'In season now' : 'Year-round',
+    configuredAvailability: apiProduct.in_season ? 'in-season' : 'year-round',
+    effectiveAvailability: toAvailability(apiProduct.is_available, stock, apiProduct.in_season),
+    seasonalDates: apiProduct.seasonal_window_label || (apiProduct.in_season ? 'In season now' : 'Year-round'),
+    seasonStartMonth: apiProduct.season_start_month ?? undefined,
+    seasonEndMonth: apiProduct.season_end_month ?? undefined,
+    seasonalStatusMessage: apiProduct.season_status_message || undefined,
+    seasonalReminderMessage: apiProduct.season_reminder_message || undefined,
+    isCurrentlyInSeason: apiProduct.is_currently_in_season,
     isOrganic: apiProduct.in_season,
     allergens: parseAllergens(apiProduct.allergen_info),
     imageUrl: imageForProduct(apiProduct.id),
@@ -458,5 +478,9 @@ export function mapApiProductToProduct(apiProduct: ApiProduct, producerDistanceM
     foodMiles: producerDistanceMiles ?? 0,
     storageTips: 'Keep refrigerated where appropriate and consume while fresh.',
     recipeIdeas: [],
+    averageRating: apiProduct.average_rating !== undefined && apiProduct.average_rating !== null ? Number(apiProduct.average_rating) : undefined,
+    reviewCount: apiProduct.review_count !== undefined ? Number(apiProduct.review_count) : undefined,
+    verifiedReviewCount:
+      apiProduct.verified_review_count !== undefined ? Number(apiProduct.verified_review_count) : undefined,
   };
 }

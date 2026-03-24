@@ -1,6 +1,6 @@
 ﻿import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { Filter, X, Plus, Minus, AlertCircle, AlertTriangle } from 'lucide-react';
+import { Filter, X, Plus, Minus, AlertCircle, AlertTriangle, Star } from 'lucide-react';
 import { toast } from 'sonner';
 import { Product } from '../types';
 import { useAuth } from '../contexts/AuthContext';
@@ -920,6 +920,22 @@ function ProductCard({
             seasonalDates={product.seasonalDates}
             compact
           />
+          {product.averageRating !== undefined && product.reviewCount ? (
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+              <div className="flex items-center gap-1 text-amber-500">
+                <Star className="size-4 fill-current" />
+                <span className="font-medium text-gray-900">{product.averageRating.toFixed(1)}</span>
+              </div>
+              <span className="text-gray-500">
+                {product.reviewCount} review{product.reviewCount === 1 ? '' : 's'}
+              </span>
+              {product.verifiedReviewCount ? (
+                <span className="text-gray-500">{product.verifiedReviewCount} verified</span>
+              ) : null}
+            </div>
+          ) : (
+            <p className="mt-3 text-sm text-gray-500">No customer ratings yet</p>
+          )}
         </div>
         
         {/* F) Accessible allergen warning - not color-only */}

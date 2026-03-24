@@ -1,7 +1,13 @@
+from django.utils import timezone
 from rest_framework import serializers
 
 from apps.accounts.models import User
 from apps.community.models import ProductReview
+from apps.community.review_policy import (
+    get_review_eligibility,
+    moderate_review_comment,
+    resolve_verified_purchase_status,
+)
 from .models import Category, Product
 
 
@@ -86,10 +92,16 @@ class ProductReviewSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "user_id",
+            "title",
             "reviewer_name",
+            "is_anonymous",
             "rating",
             "comment",
             "verified_purchase",
+            "moderation_status",
+            "moderation_reason",
+            "producer_response",
+            "producer_response_at",
             "created_at",
         ]
 
@@ -97,12 +109,20 @@ class ProductReviewSerializer(serializers.ModelSerializer):
 class ProductReviewCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProductReview
-        fields = ["rating", "comment"]
+        fields = ["rating", "title", "comment", "is_anonymous"]
+
+    def validate_title(self, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise serializers.ValidationError("Review title is required.")
+        return cleaned
 
     def validate(self, attrs):
         request = self.context["request"]
         product = self.context["product"]
         user = request.user
+        require_verified_purchase = self.context.get("require_verified_purchase", False)
+        order_product = self.context.get("order_product")
 
         if not user or not user.is_authenticated:
             raise serializers.ValidationError({"detail": "Authentication credentials were not provided."})
@@ -110,8 +130,16 @@ class ProductReviewCreateSerializer(serializers.ModelSerializer):
         if user.role != User.Role.CUSTOMER:
             raise serializers.ValidationError({"detail": "Only customers can submit reviews."})
 
-        if ProductReview.objects.filter(product=product, user=user).exists():
-            raise serializers.ValidationError({"detail": "You have already reviewed this product."})
+        eligibility = get_review_eligibility(
+            user=user,
+            catalog_product=product,
+            order_product=order_product,
+            require_verified_purchase=require_verified_purchase,
+        )
+        if not eligibility.can_submit:
+            raise serializers.ValidationError({"detail": eligibility.reason})
+
+        attrs["_eligibility"] = eligibility
 
         return attrs
 
@@ -119,18 +147,92 @@ class ProductReviewCreateSerializer(serializers.ModelSerializer):
         request = self.context["request"]
         product = self.context["product"]
         user = request.user
+        eligibility = validated_data.pop("_eligibility", None)
         customer_profile = getattr(user, "customer_profile", None)
-        reviewer_name = ""
-        if customer_profile and getattr(customer_profile, "full_name", ""):
-            reviewer_name = customer_profile.full_name.strip()
+        is_anonymous = bool(validated_data.get("is_anonymous"))
+        reviewer_name = "Anonymous" if is_anonymous else ""
         if not reviewer_name:
-            reviewer_name = user.email.split("@")[0]
+            if customer_profile and getattr(customer_profile, "full_name", ""):
+                reviewer_name = customer_profile.full_name.strip()
+            if not reviewer_name:
+                reviewer_name = user.email.split("@")[0]
+
+        moderation_input = " ".join(
+            part.strip()
+            for part in [
+                validated_data.get("title", ""),
+                validated_data.get("comment", ""),
+            ]
+            if part and part.strip()
+        )
+        moderation = moderate_review_comment(moderation_input)
 
         return ProductReview.objects.create(
             product=product,
             user=user,
+            title=validated_data["title"],
             reviewer_name=reviewer_name,
+            is_anonymous=is_anonymous,
             rating=validated_data["rating"],
             comment=validated_data.get("comment", "").strip(),
-            verified_purchase=False,
+            verified_purchase=bool(eligibility and eligibility.has_verified_purchase),
+            moderation_status=moderation.status,
+            moderation_reason=(
+                "Waiting for approval."
+                if moderation.status == ProductReview.ModerationStatus.PENDING
+                else ""
+            ),
         )
+
+
+class ProductReviewProducerResponseSerializer(serializers.ModelSerializer):
+    producer_response = serializers.CharField(max_length=1000)
+
+    class Meta:
+        model = ProductReview
+        fields = ["producer_response"]
+
+    def validate_producer_response(self, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise serializers.ValidationError("Producer response cannot be empty.")
+        return cleaned
+
+    def update(self, instance: ProductReview, validated_data):
+        instance.producer_response = validated_data["producer_response"]
+        instance.producer_response_at = timezone.now()
+        instance.save(update_fields=["producer_response", "producer_response_at"])
+        return instance
+
+
+class ProductReviewModerationSerializer(serializers.ModelSerializer):
+    moderation_status = serializers.ChoiceField(
+        choices=[
+            ProductReview.ModerationStatus.PUBLISHED,
+            ProductReview.ModerationStatus.REJECTED,
+        ]
+    )
+    moderation_reason = serializers.CharField(max_length=255, required=False, allow_blank=True)
+
+    class Meta:
+        model = ProductReview
+        fields = ["moderation_status", "moderation_reason"]
+
+    def update(self, instance: ProductReview, validated_data):
+        moderation_status = validated_data["moderation_status"]
+        moderation_reason = validated_data.get("moderation_reason", "").strip()
+
+        instance.moderation_status = moderation_status
+        instance.moderation_reason = moderation_reason
+
+        update_fields = ["moderation_status", "moderation_reason"]
+        if moderation_status == ProductReview.ModerationStatus.PUBLISHED:
+            instance.verified_purchase = resolve_verified_purchase_status(
+                user=instance.user,
+                catalog_product=instance.product,
+                order_product=self.context.get("order_product"),
+            )
+            update_fields.append("verified_purchase")
+
+        instance.save(update_fields=update_fields)
+        return instance

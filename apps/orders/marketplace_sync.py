@@ -6,6 +6,7 @@ from django.utils.text import slugify
 from django.utils import timezone
 
 from apps.orders.models import Product
+from bristol_marketplace.seasonality import format_month_range
 
 PRODUCT_IMAGE_LIBRARY = [
     "https://images.unsplash.com/photo-1542838132-92c53300491e?w=900",
@@ -71,6 +72,23 @@ def _default_business_name_for_user(user) -> str:
     return f"Producer {user.pk} Farm"
 
 
+def _available_orders_business_name(base_name: str, *, user=None, exclude_pk: int | None = None) -> str:
+    from apps.orders.models import Producer as OrdersProducer
+
+    business_name = base_name
+    suffix = 2
+    queryset = OrdersProducer.objects.all()
+    if user is not None:
+        queryset = queryset.exclude(user=user)
+    if exclude_pk is not None:
+        queryset = queryset.exclude(pk=exclude_pk)
+
+    while queryset.filter(business_name=business_name).exists():
+        business_name = f"{base_name} {suffix}"
+        suffix += 1
+    return business_name
+
+
 def _orders_producer_for_user(user):
     from apps.orders.models import Producer as OrdersProducer
 
@@ -79,7 +97,12 @@ def _orders_producer_for_user(user):
         updated_fields: list[str] = []
         profile = getattr(user, "producer_profile", None)
         address = getattr(profile, "address", None)
-        business_name = profile.business_name if profile and profile.business_name else orders_producer.business_name
+        desired_business_name = profile.business_name if profile and profile.business_name else orders_producer.business_name
+        business_name = _available_orders_business_name(
+            desired_business_name,
+            user=user,
+            exclude_pk=orders_producer.pk,
+        )
         postcode = address.postcode if address and address.postcode else orders_producer.postcode or "BS1 1AA"
         lead_time_hours = profile.lead_time_hours if profile else orders_producer.lead_time_hours
 
@@ -106,11 +129,7 @@ def _orders_producer_for_user(user):
     profile = getattr(user, "producer_profile", None)
     address = getattr(profile, "address", None)
     base_name = _default_business_name_for_user(user)
-    business_name = base_name
-    suffix = 2
-    while OrdersProducer.objects.filter(business_name=business_name).exclude(user=user).exists():
-        business_name = f"{base_name} {suffix}"
-        suffix += 1
+    business_name = _available_orders_business_name(base_name, user=user)
 
     return OrdersProducer.objects.create(
         user=user,
@@ -183,13 +202,16 @@ def get_or_create_catalog_product_mirror(order_product: Product):
         defaults={"name": category_name},
     )
 
-    availability = CatalogProduct.Availability.UNAVAILABLE
-    if payload["availability"]:
-        availability = (
-            CatalogProduct.Availability.IN_SEASON
-            if order_product.in_season
-            else CatalogProduct.Availability.YEAR_ROUND
-        )
+    if not order_product.is_available or order_product.stock_quantity <= Decimal("0.00"):
+        availability = CatalogProduct.Availability.UNAVAILABLE
+    elif order_product.season_start_month and order_product.season_end_month:
+        availability = CatalogProduct.Availability.IN_SEASON
+    elif order_product.in_season:
+        availability = CatalogProduct.Availability.IN_SEASON
+    else:
+        availability = CatalogProduct.Availability.YEAR_ROUND
+
+    seasonal_dates = format_month_range(order_product.season_start_month, order_product.season_end_month)
 
     defaults = {
         "category": category,
@@ -198,7 +220,7 @@ def get_or_create_catalog_product_mirror(order_product: Product):
         "unit": order_product.unit,
         "harvest_date": order_product.harvest_date or timezone.localdate(),
         "availability": availability,
-        "seasonal_dates": "Current season" if order_product.in_season else "",
+        "seasonal_dates": seasonal_dates or ("Current season" if order_product.in_season else ""),
         "is_organic": product_is_organic(name=order_product.name, description=order_product.description),
         "organic_certification": "",
         "allergens": payload["allergens"],
@@ -266,6 +288,8 @@ def sync_orders_product_from_producer_product(producer_product):
             "stock_quantity": producer_product.stock_quantity,
             "is_available": is_available,
             "in_season": producer_product.availability == ProductAvailability.IN_SEASON,
+            "season_start_month": producer_product.season_start_month,
+            "season_end_month": producer_product.season_end_month,
             "harvest_date": producer_product.harvest_date,
             "allergen_info": producer_product.allergen_information,
         },

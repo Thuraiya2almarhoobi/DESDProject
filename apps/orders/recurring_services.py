@@ -192,13 +192,18 @@ def _build_item_quantities(
     for template_item in template_items:
         product = template_item.product
         quantity = quantities.get(product.id, template_item.default_quantity)
-        if not product.is_available or product.stock_quantity < quantity:
+        if not product.is_orderable() or product.stock_quantity < quantity:
             unavailable.append(
                 {
                     "product_id": product.id,
                     "product_name": product.name,
                     "requested_quantity": str(quantity),
                     "available_stock": str(product.stock_quantity),
+                    "reason": (
+                        "Product out of season."
+                        if product.is_available and product.stock_quantity >= quantity
+                        else "Product unavailable for current template quantity."
+                    ),
                 }
             )
             continue
@@ -378,14 +383,18 @@ def generate_due_recurring_orders(
 def build_template_alerts(template: RecurringOrderTemplate) -> list[dict]:
     alerts = []
     for item in template.items.select_related("product").all():
-        if not item.product.is_available or item.product.stock_quantity < item.default_quantity:
+        if not item.product.is_orderable() or item.product.stock_quantity < item.default_quantity:
             alerts.append(
                 {
                     "product_id": item.product_id,
                     "product_name": item.product.name,
                     "available_stock": str(item.product.stock_quantity),
                     "required_quantity": str(item.default_quantity),
-                    "reason": "Product unavailable for current template quantity.",
+                    "reason": (
+                        "Product out of season for the current template date."
+                        if item.product.is_available and item.product.stock_quantity >= item.default_quantity
+                        else "Product unavailable for current template quantity."
+                    ),
                 }
             )
     return alerts

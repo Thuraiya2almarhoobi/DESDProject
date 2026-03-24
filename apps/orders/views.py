@@ -11,6 +11,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.catalog.serializers import ProductReviewCreateSerializer, ProductReviewSerializer
+from apps.catalog.serializers import ProductReviewProducerResponseSerializer
+from apps.catalog.serializers import ProductReviewModerationSerializer
+from apps.accounts.models import User
+from apps.community.review_policy import get_review_eligibility
 from apps.community.models import ProductReview
 
 from .marketplace_sync import get_or_create_catalog_product_mirror
@@ -21,6 +25,7 @@ from .serializers import (
     MarketplaceProductSerializer,
     OrderDetailSerializer,
     OrderSummarySerializer,
+    PendingReviewModerationSerializer,
     ProducerSerializer,
     ProductSerializer,
 )
@@ -34,6 +39,14 @@ from .services import (
 
 TRUE_VALUES = {"1", "true", "yes", "on"}
 FALSE_VALUES = {"0", "false", "no", "off"}
+
+
+def _filter_order_products_by_effective_availability(queryset, allowed_availabilities: set[str]):
+    matching_ids = []
+    for product in queryset:
+        if product.effective_availability() in allowed_availabilities:
+            matching_ids.append(product.id)
+    return queryset.filter(id__in=matching_ids)
 
 
 def _parse_quantity(value) -> Decimal:
@@ -231,7 +244,12 @@ class ProducerListCreateAPIView(APIView):
 
 
 class ProductListCreateAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [permissions.AllowAny]
+
+    def get_permissions(self):
+        if self.request.method.lower() == "get":
+            return [permissions.AllowAny()]
+        return [IsAuthenticated()]
 
     def get(self, request):
         queryset = Product.objects.select_related("producer", "producer__user").all()
@@ -274,7 +292,10 @@ class ProductListCreateAPIView(APIView):
             queryset = queryset.filter(price__lte=max_price)
 
         if request.query_params.get("available") == "true":
-            queryset = queryset.filter(is_available=True, stock_quantity__gt=0)
+            queryset = _filter_order_products_by_effective_availability(
+                queryset,
+                {"in-season", "year-round"},
+            )
         serializer = MarketplaceProductSerializer(queryset.order_by("name"), many=True, context={"request": request})
         return Response(serializer.data)
 
@@ -286,20 +307,32 @@ class ProductListCreateAPIView(APIView):
 
 
 class ProductDetailAPIView(generics.RetrieveAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [permissions.AllowAny]
     serializer_class = MarketplaceProductSerializer
 
+    def get_permissions(self):
+        if self.request.method.lower() == "get":
+            return [permissions.AllowAny()]
+        return [IsAuthenticated()]
     def get_queryset(self):
         return Product.objects.select_related("producer", "producer__user").all().order_by("name")
 
 
 class ProductReviewsAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [permissions.AllowAny]
+
+    def get_permissions(self):
+        if self.request.method.lower() == "get":
+            return [permissions.AllowAny()]
+        return [IsAuthenticated()]
 
     def get(self, request, product_id: int):
         order_product = get_object_or_404(Product.objects.select_related("producer"), id=product_id)
         catalog_product = get_or_create_catalog_product_mirror(order_product)
-        reviews = ProductReview.objects.filter(product=catalog_product).order_by("-created_at")
+        reviews = ProductReview.objects.filter(
+            product=catalog_product,
+            moderation_status=ProductReview.ModerationStatus.PUBLISHED,
+        ).order_by("-created_at")
         serializer = ProductReviewSerializer(reviews, many=True)
         return Response(serializer.data)
 
@@ -307,7 +340,7 @@ class ProductReviewsAPIView(APIView):
         order_product = get_object_or_404(Product.objects.select_related("producer"), id=product_id)
         catalog_product = get_or_create_catalog_product_mirror(order_product)
 
-        if request.user.role != "CUSTOMER":
+        if request.user.role != User.Role.CUSTOMER:
             return Response(
                 {"detail": "Only customers can submit reviews."},
                 status=status.HTTP_403_FORBIDDEN,
@@ -315,11 +348,135 @@ class ProductReviewsAPIView(APIView):
 
         serializer = ProductReviewCreateSerializer(
             data=request.data,
-            context={"request": request, "product": catalog_product},
+            context={
+                "request": request,
+                "product": catalog_product,
+                "order_product": order_product,
+                "require_verified_purchase": True,
+            },
         )
         serializer.is_valid(raise_exception=True)
         review = serializer.save()
-        return Response(ProductReviewSerializer(review).data, status=status.HTTP_201_CREATED)
+        response_status = (
+            status.HTTP_202_ACCEPTED
+            if review.moderation_status == ProductReview.ModerationStatus.PENDING
+            else status.HTTP_201_CREATED
+        )
+        return Response(ProductReviewSerializer(review).data, status=response_status)
+
+class ProductReviewEligibilityAPIView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, product_id: int):
+        order_product = get_object_or_404(Product.objects.select_related("producer", "producer__user"), id=product_id)
+        catalog_product = get_or_create_catalog_product_mirror(order_product)
+        eligibility = get_review_eligibility(
+            user=request.user,
+            catalog_product=catalog_product,
+            order_product=order_product,
+            require_verified_purchase=True,
+        )
+
+        can_respond = bool(
+            request.user
+            and request.user.is_authenticated
+            and request.user.role == User.Role.PRODUCER
+            and order_product.producer.user_id == request.user.id
+        )
+        response_reason = (
+            "You can respond to customer reviews for your product."
+            if can_respond
+            else "Only the producer who owns this product can respond to reviews."
+        )
+
+        return Response(
+            {
+                "can_submit": eligibility.can_submit,
+                "reason": eligibility.reason,
+                "has_verified_purchase": eligibility.has_verified_purchase,
+                "has_existing_review": eligibility.has_existing_review,
+                "daily_limit_reached": eligibility.daily_limit_reached,
+                "is_customer": eligibility.is_customer,
+                "is_authenticated": eligibility.is_authenticated,
+                "can_respond": can_respond,
+                "response_reason": response_reason,
+            }
+        )
+
+
+class ProductReviewResponseAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, product_id: int, review_id: int):
+        order_product = get_object_or_404(Product.objects.select_related("producer", "producer__user"), id=product_id)
+        catalog_product = get_or_create_catalog_product_mirror(order_product)
+        review = get_object_or_404(ProductReview, id=review_id, product=catalog_product)
+
+        if request.user.role != User.Role.PRODUCER:
+            return Response(
+                {"detail": "Only producers can respond to reviews."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if order_product.producer.user_id != request.user.id:
+            return Response(
+                {"detail": "You can only respond to reviews for your own products."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if review.moderation_status != ProductReview.ModerationStatus.PUBLISHED:
+            return Response(
+                {"detail": "Producer responses are only available for published reviews."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = ProductReviewProducerResponseSerializer(review, data=request.data)
+        serializer.is_valid(raise_exception=True)
+        review = serializer.save()
+        return Response(ProductReviewSerializer(review).data, status=status.HTTP_200_OK)
+
+
+class ProductReviewModerationAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, product_id: int, review_id: int):
+        if request.user.role != User.Role.ADMIN:
+            return Response(
+                {"detail": "Only admin accounts can moderate reviews."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        order_product = get_object_or_404(Product.objects.select_related("producer", "producer__user"), id=product_id)
+        catalog_product = get_or_create_catalog_product_mirror(order_product)
+        review = get_object_or_404(ProductReview, id=review_id, product=catalog_product)
+
+        serializer = ProductReviewModerationSerializer(
+            review,
+            data=request.data,
+            context={"order_product": order_product},
+        )
+        serializer.is_valid(raise_exception=True)
+        review = serializer.save()
+        return Response(ProductReviewSerializer(review).data, status=status.HTTP_200_OK)
+
+
+class PendingReviewModerationQueueAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if request.user.role != User.Role.ADMIN:
+            return Response(
+                {"detail": "Only admin accounts can view the review moderation queue."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        reviews = (
+            ProductReview.objects.select_related("product", "product__producer", "user")
+            .filter(moderation_status=ProductReview.ModerationStatus.PENDING)
+            .order_by("created_at")
+        )
+        serializer = PendingReviewModerationSerializer(reviews, many=True)
+        return Response(serializer.data)
 
 
 class CartAPIView(APIView):
@@ -346,8 +503,10 @@ class CartItemAddAPIView(APIView):
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
         product = get_object_or_404(Product.objects.select_related("producer"), pk=product_id)
-        if not product.is_available or product.stock_quantity <= 0:
-            return Response({"detail": "Product is unavailable."}, status=status.HTTP_400_BAD_REQUEST)
+        effective_availability = product.effective_availability()
+        if effective_availability == "unavailable":
+            detail = "Product is out of season." if product.is_available and product.stock_quantity > 0 else "Product is unavailable."
+            return Response({"detail": detail}, status=status.HTTP_400_BAD_REQUEST)
         if quantity > product.stock_quantity:
             return Response(
                 {"detail": "Requested quantity exceeds available stock."},
@@ -391,6 +550,11 @@ class CartItemDetailAPIView(APIView):
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
+        if not cart_item.product.is_orderable():
+            return Response(
+                {"detail": "Product is out of season."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         if quantity > cart_item.product.stock_quantity:
             return Response(
                 {"detail": "Requested quantity exceeds available stock."},

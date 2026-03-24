@@ -5,6 +5,7 @@ import {
   setAuthTokens,
   setStoredRole,
 } from '../lib/tokenStorage';
+import { resolveApiPathBase } from '../lib/apiBase';
 import { UserRole } from '../types';
 
 export interface AuthUserPayload {
@@ -89,8 +90,7 @@ class AuthApiError extends Error {
 }
 
 const env = import.meta.env as Record<string, string | undefined>;
-const rawApiBaseUrl = env.VITE_API_URL ?? env.REACT_APP_API_URL ?? '/api';
-const apiBaseUrl = rawApiBaseUrl.replace(/\/$/, '');
+const apiBaseUrl = resolveApiPathBase(env.VITE_API_URL ?? env.REACT_APP_API_URL, '/api');
 
 function toApiUrl(path: string): string {
   if (path.startsWith('http://') || path.startsWith('https://')) {

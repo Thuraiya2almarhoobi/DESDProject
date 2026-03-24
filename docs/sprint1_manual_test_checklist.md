@@ -60,14 +60,22 @@ Status legend:
 - Status: `Not Run`
 
 ## TC-016 Seasonal availability [High]
-- Scenario: Seasonal availability appears on cards and detail.
-- Preconditions: Seeded data includes in-season, unavailable, and year-round products.
+- Scenario: Producer-configured season windows automatically control customer availability and reminders.
+- Preconditions: Run `python3 manage.py seed_demo_data` or Docker auto-seed so producer and order products include seasonal windows.
 - Steps:
-  1. Observe availability badges in marketplace cards.
-  2. Open product detail pages with/without seasonal date ranges.
+  1. Login as `producer@example.com` and open `/producer/inventory`.
+  2. Confirm at least one product shows a seasonal window and one product appears under `Season starting soon`.
+  3. Edit a seasonal product and confirm the producer can set `Season starts` and `Season ends` with month dropdowns.
+  4. Open marketplace and confirm an in-season product shows `In Season` with its month range.
+  5. Open marketplace and confirm an out-of-season product is hidden from the default in-stock view.
+  6. Open the out-of-season product detail page directly and confirm it shows unavailable/out-of-season status plus the seasonal education message.
+  7. While logged in as a customer, attempt to add an out-of-season product to cart.
 - Expected result:
-  - Badge displays status (`In Season`, `Year-round`, `Unavailable`).
-  - Seasonal date text is shown where available.
+  - Producer can configure seasonal months without technical input.
+  - Seasonal reminder appears before a product becomes available.
+  - Availability updates automatically from the current date and configured month window.
+  - Customers cannot add out-of-season products to cart.
+  - Marketplace/detail pages show seasonal window text and educational context.
 - Actual result: `__________`
 - Status: `Not Run`
 

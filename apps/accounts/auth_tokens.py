@@ -44,6 +44,6 @@ def load_user_from_password_reset_token(token: str):
 
 
 def build_frontend_link(path: str, token: str) -> str:
-    frontend_base = str(getattr(settings, "FRONTEND_URL", "http://localhost:5173")).rstrip("/")
+    frontend_base = str(getattr(settings, "FRONTEND_URL", "http://127.0.0.1:8000")).rstrip("/")
     query = urlencode({"token": token})
     return f"{frontend_base}{path}?{query}"

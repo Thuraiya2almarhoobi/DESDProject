@@ -32,8 +32,14 @@ import { Skeleton } from '../components/ui/skeleton';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../components/ui/accordion';
 import { SiteHeader } from '../components/SiteHeader';
 import { toast } from 'sonner';
-import { Product, ProductReview } from '../types';
-import { createProductReview, fetchProductById, fetchProductReviews } from '../api/catalog';
+import { Product, ProductReview, ReviewEligibility } from '../types';
+import {
+  createProductReview,
+  fetchProductById,
+  fetchProductReviewEligibility,
+  fetchProductReviews,
+  respondToProductReview,
+} from '../api/catalog';
 import { getDashboardPathForRole } from '../lib/roleRouting';
 import { useSafeBack } from '../lib/navigation';
 import { ApiRecipe, apiJson } from '../lib/api';
@@ -86,11 +92,19 @@ export function ProductDetailPage() {
   const [hasError, setHasError] = useState(false);
   const [isReviewsLoading, setIsReviewsLoading] = useState(true);
   const [hasReviewsError, setHasReviewsError] = useState(false);
+  const [reviewEligibility, setReviewEligibility] = useState<ReviewEligibility | null>(null);
+  const [isReviewEligibilityLoading, setIsReviewEligibilityLoading] = useState(true);
   const [hasReviewedAllergens, setHasReviewedAllergens] = useState(false);
   const [reviewRating, setReviewRating] = useState(0);
+  const [reviewTitle, setReviewTitle] = useState('');
   const [reviewComment, setReviewComment] = useState('');
+  const [reviewIsAnonymous, setReviewIsAnonymous] = useState(false);
   const [reviewFormError, setReviewFormError] = useState('');
+  const [pendingReviewNotice, setPendingReviewNotice] = useState('');
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [producerReplyDrafts, setProducerReplyDrafts] = useState<Record<string, string>>({});
+  const [producerReplyErrors, setProducerReplyErrors] = useState<Record<string, string>>({});
+  const [activeProducerReplyId, setActiveProducerReplyId] = useState<string | null>(null);
   const [activeCartAction, setActiveCartAction] = useState<'add' | 'buy' | 'remove' | null>(null);
   const [linkedRecipes, setLinkedRecipes] = useState<ApiRecipe[]>([]);
   const [linkedRecipesLoading, setLinkedRecipesLoading] = useState(false);
@@ -199,6 +213,39 @@ export function ProductDetailPage() {
   }, [id]);
 
   useEffect(() => {
+    if (!id) {
+      setReviewEligibility(null);
+      setIsReviewEligibilityLoading(false);
+      return;
+    }
+
+    let mounted = true;
+    setIsReviewEligibilityLoading(true);
+
+    fetchProductReviewEligibility(id)
+      .then((eligibility) => {
+        if (!mounted) {
+          return;
+        }
+        setReviewEligibility(eligibility);
+      })
+      .catch(() => {
+        if (mounted) {
+          setReviewEligibility(null);
+        }
+      })
+      .finally(() => {
+        if (mounted) {
+          setIsReviewEligibilityLoading(false);
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [id, user]);
+
+  useEffect(() => {
     if (!product) {
       setHasReviewedAllergens(false);
       return;
@@ -218,6 +265,18 @@ export function ProductDetailPage() {
     );
   }, [product]);
 
+  useEffect(() => {
+    setProducerReplyDrafts((currentDrafts) => {
+      const nextDrafts = { ...currentDrafts };
+      for (const review of reviews) {
+        if (nextDrafts[review.id] === undefined && review.producerResponse) {
+          nextDrafts[review.id] = review.producerResponse;
+        }
+      }
+      return nextDrafts;
+    });
+  }, [reviews]);
+
   const isAvailable = useMemo(() => {
     if (!product) {
       return false;
@@ -234,12 +293,10 @@ export function ProductDetailPage() {
 
   const requiresAllergenReview = Boolean(product && product.allergens.length > 0);
   const producerDeliveryLeadTime = product?.producerDeliveryLeadTime || 48;
-  const hasExistingReview = useMemo(() => {
-    if (!user) {
-      return false;
-    }
-    return reviews.some((review) => review.userId === String(user.id));
-  }, [reviews, user]);
+  const hasExistingReview = Boolean(reviewEligibility?.hasExistingReview);
+  const canSubmitReview = Boolean(reviewEligibility?.canSubmit);
+  const canRespondToReviews = Boolean(reviewEligibility?.canRespond);
+  const reviewApprovalOutcomeLabel = 'Verified purchase';
   const averageRating = useMemo(() => {
     if (reviews.length === 0) {
       return null;
@@ -448,7 +505,30 @@ export function ProductDetailPage() {
     }
   };
 
+  const refreshReviewEligibility = async () => {
+    if (!id) {
+      return;
+    }
+
+    try {
+      const eligibility = await fetchProductReviewEligibility(id);
+      setReviewEligibility(eligibility);
+    } catch {
+      setReviewEligibility(null);
+    }
+  };
+
   const openReviewForm = () => {
+    if (!canSubmitReview) {
+      if (!user) {
+        navigate('/login');
+        return;
+      }
+      if (reviewEligibility?.reason) {
+        toast.info(reviewEligibility.reason);
+      }
+      return;
+    }
     document.getElementById('review-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
@@ -467,13 +547,19 @@ export function ProductDetailPage() {
       return;
     }
 
-    if (hasExistingReview) {
-      setReviewFormError('You have already reviewed this product.');
+    if (!canSubmitReview) {
+      const reason = reviewEligibility?.reason || 'You cannot review this product yet.';
+      setReviewFormError(reason);
       return;
     }
 
     if (reviewRating < 1 || reviewRating > 5) {
       setReviewFormError('Please choose a star rating before submitting.');
+      return;
+    }
+
+    if (!reviewTitle.trim()) {
+      setReviewFormError('Please add a short review title before submitting.');
       return;
     }
 
@@ -483,19 +569,67 @@ export function ProductDetailPage() {
     try {
       const createdReview = await createProductReview(id, {
         rating: reviewRating,
+        title: reviewTitle.trim(),
         comment: reviewComment.trim(),
+        isAnonymous: reviewIsAnonymous,
       });
-      setReviews((currentReviews) => [createdReview, ...currentReviews]);
+      if (createdReview.moderationStatus === 'pending') {
+        setPendingReviewNotice('Your review was submitted and is waiting for approval.');
+        toast.success('Your review was submitted and is waiting for approval.');
+      } else {
+        setPendingReviewNotice('');
+        setReviews((currentReviews) => [createdReview, ...currentReviews]);
+        toast.success('Your review is now live on this product.');
+      }
       setReviewRating(0);
+      setReviewTitle('');
       setReviewComment('');
+      setReviewIsAnonymous(false);
       setHasReviewsError(false);
-      toast.success('Your review has been posted.');
+      await refreshReviewEligibility();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to submit review.';
       setReviewFormError(message);
       toast.error(message);
     } finally {
       setIsSubmittingReview(false);
+    }
+  };
+
+  const handleProducerResponseSubmit = async (reviewId: string) => {
+    if (!id) {
+      return;
+    }
+
+    const responseText = (producerReplyDrafts[reviewId] || '').trim();
+    if (!responseText) {
+      setProducerReplyErrors((current) => ({
+        ...current,
+        [reviewId]: 'Producer response cannot be empty.',
+      }));
+      return;
+    }
+
+    setProducerReplyErrors((current) => ({ ...current, [reviewId]: '' }));
+    setActiveProducerReplyId(reviewId);
+
+    try {
+      const updatedReview = await respondToProductReview(id, reviewId, {
+        producer_response: responseText,
+      });
+      setReviews((currentReviews) =>
+        currentReviews.map((review) => (review.id === reviewId ? updatedReview : review)),
+      );
+      toast.success('Producer response saved.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to save producer response.';
+      setProducerReplyErrors((current) => ({
+        ...current,
+        [reviewId]: message,
+      }));
+      toast.error(message);
+    } finally {
+      setActiveProducerReplyId(null);
     }
   };
 
@@ -565,6 +699,23 @@ export function ProductDetailPage() {
               </div>
               <h1 className="text-3xl font-semibold mb-2">{product.name}</h1>
               <p className="text-gray-600">{product.description}</p>
+              {averageRating !== null ? (
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+                  <ReviewStars rating={Math.round(averageRating)} />
+                  <span className="font-semibold text-gray-900">{averageRating.toFixed(1)}</span>
+                  <span className="text-gray-500">
+                    from {reviews.length} review{reviews.length === 1 ? '' : 's'}
+                  </span>
+                </div>
+              ) : product.averageRating !== undefined && product.reviewCount ? (
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+                  <ReviewStars rating={Math.round(product.averageRating)} />
+                  <span className="font-semibold text-gray-900">{product.averageRating.toFixed(1)}</span>
+                  <span className="text-gray-500">
+                    from {product.reviewCount} review{product.reviewCount === 1 ? '' : 's'}
+                  </span>
+                </div>
+              ) : null}
             </div>
 
             <ProductMeta
@@ -668,6 +819,11 @@ export function ProductDetailPage() {
                   <div>
                     <p className="text-gray-500">Season</p>
                     <p className="font-medium">{product.seasonalDates || 'Year-round'}</p>
+                    {product.seasonalDates && product.seasonalDates !== 'Year-round' && (
+                      <p className="mt-1 text-xs text-emerald-700">
+                        Buying in season supports local crop cycles and reduces reliance on long-distance storage.
+                      </p>
+                    )}
                   </div>
                   <div>
                     <p className="text-gray-500">Certification</p>
@@ -700,24 +856,34 @@ export function ProductDetailPage() {
                       <span className="text-gray-500">
                         ({reviews.length} review{reviews.length === 1 ? '' : 's'})
                       </span>
+                      {reviews.some((review) => review.verifiedPurchase) && (
+                        <span className="text-gray-500">
+                          {reviews.filter((review) => review.verifiedPurchase).length} verified
+                        </span>
+                      )}
                     </div>
                   ) : (
                     <p className="text-sm text-gray-600">No reviews yet</p>
                   )}
                 </div>
-                {user?.role === 'CUSTOMER' && !hasExistingReview ? (
+                {user?.role === 'CUSTOMER' && canSubmitReview ? (
                   <Button variant="outline" size="sm" onClick={openReviewForm}>
                     Write a review
                   </Button>
                 ) : (
-                  <Button variant="outline" size="sm" disabled>
-                    Write a review
+                  <Button variant="outline" size="sm" disabled={isReviewEligibilityLoading}>
+                    {user?.role === 'PRODUCER' && canRespondToReviews ? 'Respond as producer below' : 'Write a review'}
                   </Button>
                 )}
               </div>
               <p className="text-xs text-gray-500">
-                New reviews can be submitted by signed-in customer accounts. Verified purchase badges remain limited to existing backend data until catalog products are linked directly to delivered orders.
+                Reviews use a clear 1 to 5 star scale. Only logged-in customers with a delivered purchase can submit a review. Verified purchases are labelled clearly, and suspicious reviews can still be held for approval.
               </p>
+              {pendingReviewNotice && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                  {pendingReviewNotice}
+                </div>
+              )}
 
               {!user ? (
                 <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-5">
@@ -731,23 +897,38 @@ export function ProductDetailPage() {
                 </div>
               ) : user.role !== 'CUSTOMER' ? (
                 <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-5 text-sm text-gray-600">
-                  Reviews can only be posted from customer accounts.
+                  {canRespondToReviews
+                    ? 'Customers review here, and you can reply beneath published reviews as the producer.'
+                    : 'Reviews can only be posted from customer accounts.'}
                 </div>
               ) : hasExistingReview ? (
                 <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-5 text-sm text-green-800">
-                  You have already reviewed this product. Thanks for sharing your feedback.
+                  {reviewEligibility?.reason || 'You have already reviewed this product. Thanks for sharing your feedback.'}
+                </div>
+              ) : isReviewEligibilityLoading ? (
+                <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-5 text-sm text-gray-600">
+                  Checking review eligibility...
+                </div>
+              ) : !canSubmitReview ? (
+                <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-5 text-sm text-gray-600">
+                  {reviewEligibility?.reason || 'You cannot review this product yet.'}
                 </div>
               ) : (
                 <div id="review-form" className="rounded-lg border bg-gray-50 p-4 space-y-4">
                   <div>
                     <p className="font-medium text-gray-900">Write your review</p>
                     <p className="text-sm text-gray-500">
-                      Rate the product and leave an optional comment. Reviews are posted immediately.
+                      Rate the product from 1 to 5 stars, add a short title, and leave an optional comment. Because this review comes from a delivered order, it will show as {reviewApprovalOutcomeLabel}.
                     </p>
                   </div>
+                  {reviewEligibility?.reason && (
+                    <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+                      {reviewEligibility.reason}
+                    </div>
+                  )}
 
                   <div className="space-y-2">
-                    <Label>Your rating</Label>
+                    <Label>Your rating (1 to 5 stars)</Label>
                     <div className="flex items-center gap-1">
                       {Array.from({ length: 5 }).map((_, index) => {
                         const starValue = index + 1;
@@ -770,6 +951,17 @@ export function ProductDetailPage() {
                   </div>
 
                   <div className="space-y-2">
+                    <Label htmlFor="review-title">Review title</Label>
+                    <Input
+                      id="review-title"
+                      placeholder="Excellent quality and flavour"
+                      value={reviewTitle}
+                      onChange={(event) => setReviewTitle(event.target.value.slice(0, 120))}
+                    />
+                    <p className="text-xs text-gray-500">{reviewTitle.length}/120 characters</p>
+                  </div>
+
+                  <div className="space-y-2">
                     <Label htmlFor="review-comment">Comment</Label>
                     <Textarea
                       id="review-comment"
@@ -781,10 +973,33 @@ export function ProductDetailPage() {
                     <p className="text-xs text-gray-500">{reviewComment.length}/500 characters</p>
                   </div>
 
+                  <div className="rounded-lg border border-gray-200 bg-white px-4 py-3">
+                    <div className="flex items-start gap-3">
+                      <Checkbox
+                        id="review-anonymous"
+                        checked={reviewIsAnonymous}
+                        onCheckedChange={(checked) => setReviewIsAnonymous(checked === true)}
+                        aria-label="Post review anonymously"
+                        className="mt-0.5"
+                      />
+                      <div className="space-y-1">
+                        <Label htmlFor="review-anonymous" className="font-medium">
+                          Post this review anonymously
+                        </Label>
+                        <p className="text-xs text-gray-600">
+                          If selected, other customers will see “Anonymous” instead of your name.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
                   {reviewFormError && <p className="text-sm text-red-600">{reviewFormError}</p>}
 
                   <div className="flex justify-end">
-                    <Button onClick={handleReviewSubmit} disabled={isSubmittingReview || reviewRating === 0}>
+                    <Button
+                      onClick={handleReviewSubmit}
+                      disabled={isSubmittingReview || reviewRating === 0 || !reviewTitle.trim()}
+                    >
                       {isSubmittingReview ? 'Posting review...' : 'Post review'}
                     </Button>
                   </div>
@@ -820,17 +1035,64 @@ export function ProductDetailPage() {
                         <div className="flex-1">
                           <div className="mb-1 flex flex-wrap items-center gap-2">
                             <span className="font-medium">{review.reviewerName}</span>
-                            {review.verifiedPurchase && (
-                              <Badge variant="secondary" className="text-xs">
-                                Verified purchase
-                              </Badge>
-                            )}
+                            <Badge variant="secondary" className="text-xs">
+                              {review.verifiedPurchase ? 'Verified purchase' : 'Unverified purchase'}
+                            </Badge>
                           </div>
+                          {review.title && <p className="text-sm font-semibold text-gray-900">{review.title}</p>}
                           <div className="mb-2 flex flex-wrap items-center gap-2">
                             <ReviewStars rating={review.rating} />
                             <span className="text-sm text-gray-500">{formatReviewDate(review.createdAt)}</span>
                           </div>
                           <p className="text-sm text-gray-700">{review.comment || 'No written comment.'}</p>
+                          {review.producerResponse && (
+                            <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-sm font-medium text-emerald-900">Producer response</span>
+                                {review.producerResponseAt && (
+                                  <span className="text-xs text-emerald-800">
+                                    {formatReviewDate(review.producerResponseAt)}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="mt-2 text-sm text-emerald-900">{review.producerResponse}</p>
+                            </div>
+                          )}
+                          {canRespondToReviews && (
+                            <div className="mt-4 rounded-lg border bg-gray-50 p-4 space-y-3">
+                              <div>
+                                <p className="text-sm font-medium text-gray-900">
+                                  {review.producerResponse ? 'Update producer response' : 'Respond as producer'}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  Producer replies help customers understand how feedback is being addressed.
+                                </p>
+                              </div>
+                              <Textarea
+                                value={producerReplyDrafts[review.id] ?? ''}
+                                onChange={(event) =>
+                                  setProducerReplyDrafts((current) => ({
+                                    ...current,
+                                    [review.id]: event.target.value.slice(0, 1000),
+                                  }))
+                                }
+                                rows={3}
+                                placeholder="Write a helpful response to this review."
+                              />
+                              {producerReplyErrors[review.id] && (
+                                <p className="text-sm text-red-600">{producerReplyErrors[review.id]}</p>
+                              )}
+                              <div className="flex justify-end">
+                                <Button
+                                  variant="outline"
+                                  onClick={() => void handleProducerResponseSubmit(review.id)}
+                                  disabled={activeProducerReplyId === review.id}
+                                >
+                                  {activeProducerReplyId === review.id ? 'Saving response...' : 'Save response'}
+                                </Button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>

@@ -1,10 +1,18 @@
 from decimal import Decimal
 
+from django.db.models import Avg, Count, Q
 from rest_framework import serializers
 
+from apps.community.models import ProductReview
+from apps.community.review_policy import find_matching_orders_product, resolve_verified_purchase_status
 from apps.geo.services import get_postcode_coordinates, haversine_miles
 
-from .marketplace_sync import default_marketplace_image_url, matching_producer_portal_product, product_is_organic
+from .marketplace_sync import (
+    default_marketplace_image_url,
+    get_or_create_catalog_product_mirror,
+    matching_producer_portal_product,
+    product_is_organic,
+)
 from .models import (
     CartItem,
     CustomerProfile,
@@ -53,6 +61,8 @@ class ProductSerializer(serializers.ModelSerializer):
             "stock_quantity",
             "is_available",
             "in_season",
+            "season_start_month",
+            "season_end_month",
             "harvest_date",
             "allergen_info",
         ]
@@ -69,6 +79,8 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
     producer_longitude = serializers.SerializerMethodField()
     availability = serializers.SerializerMethodField()
     seasonal_dates = serializers.SerializerMethodField()
+    season_start_month = serializers.IntegerField(read_only=True)
+    season_end_month = serializers.IntegerField(read_only=True)
     is_organic = serializers.SerializerMethodField()
     organic_certification = serializers.SerializerMethodField()
     allergens = serializers.SerializerMethodField()
@@ -82,6 +94,9 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
     surplus_best_before = serializers.SerializerMethodField()
     storage_tips = serializers.SerializerMethodField()
     recipe_ideas = serializers.SerializerMethodField()
+    average_rating = serializers.SerializerMethodField()
+    review_count = serializers.SerializerMethodField()
+    verified_review_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
@@ -103,6 +118,8 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
             "harvest_date",
             "availability",
             "seasonal_dates",
+            "season_start_month",
+            "season_end_month",
             "is_organic",
             "organic_certification",
             "allergens",
@@ -116,6 +133,9 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
             "surplus_best_before",
             "storage_tips",
             "recipe_ideas",
+            "average_rating",
+            "review_count",
+            "verified_review_count",
         ]
 
     def _producer_product(self, obj: Product):
@@ -124,6 +144,24 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
             cache[obj.id] = matching_producer_portal_product(obj)
         return cache[obj.id]
 
+    def _review_summary(self, obj: Product) -> dict:
+        cache = self.context.setdefault("_review_summary_cache", {})
+        if obj.id not in cache:
+            catalog_product = get_or_create_catalog_product_mirror(obj)
+            summary = ProductReview.objects.filter(
+                product=catalog_product,
+                moderation_status=ProductReview.ModerationStatus.PUBLISHED,
+            ).aggregate(
+                average_rating=Avg("rating"),
+                review_count=Count("id"),
+                verified_review_count=Count("id", filter=Q(verified_purchase=True)),
+            )
+            cache[obj.id] = {
+                "average_rating": summary["average_rating"],
+                "review_count": summary["review_count"] or 0,
+                "verified_review_count": summary["verified_review_count"] or 0,
+            }
+        return cache[obj.id]
     def get_producer_location(self, obj: Product) -> str:
         producer_user = getattr(obj.producer, "user", None)
         producer_profile = getattr(producer_user, "producer_profile", None) if producer_user else None
@@ -154,13 +192,11 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
         return coordinates[1]
 
     def get_availability(self, obj: Product) -> str:
-        if not obj.is_available or obj.stock_quantity <= Decimal("0.00"):
-            return "unavailable"
-        if obj.in_season:
-            return "in-season"
-        return "year-round"
+        return obj.effective_availability()
 
     def get_seasonal_dates(self, obj: Product) -> str:
+        if obj.seasonal_window_label:
+            return obj.seasonal_window_label
         return "Current season" if obj.in_season else "Year-round"
 
     def get_is_organic(self, obj: Product) -> bool:
@@ -233,6 +269,62 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
             .values_list("recipe__title", flat=True)
         )
 
+    def get_average_rating(self, obj: Product):
+        average_rating = self._review_summary(obj)["average_rating"]
+        return round(float(average_rating), 1) if average_rating is not None else None
+
+    def get_review_count(self, obj: Product) -> int:
+        return int(self._review_summary(obj)["review_count"])
+
+    def get_verified_review_count(self, obj: Product) -> int:
+        return int(self._review_summary(obj)["verified_review_count"])
+
+
+class PendingReviewModerationSerializer(serializers.ModelSerializer):
+    order_product_id = serializers.SerializerMethodField()
+    product_name = serializers.CharField(source="product.name", read_only=True)
+    producer_name = serializers.CharField(source="product.producer.name", read_only=True)
+    has_verified_purchase = serializers.SerializerMethodField()
+    purchase_label = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ProductReview
+        fields = [
+            "id",
+            "order_product_id",
+            "product_name",
+            "producer_name",
+            "title",
+            "reviewer_name",
+            "rating",
+            "comment",
+            "moderation_status",
+            "moderation_reason",
+            "has_verified_purchase",
+            "purchase_label",
+            "created_at",
+        ]
+
+    def _matching_order_product(self, obj: ProductReview):
+        cache = self.context.setdefault("_pending_review_order_product_cache", {})
+        if obj.product_id not in cache:
+            cache[obj.product_id] = find_matching_orders_product(obj.product)
+        return cache[obj.product_id]
+
+    def get_order_product_id(self, obj: ProductReview) -> int | None:
+        order_product = self._matching_order_product(obj)
+        return getattr(order_product, "id", None)
+
+    def get_has_verified_purchase(self, obj: ProductReview) -> bool:
+        order_product = self._matching_order_product(obj)
+        return resolve_verified_purchase_status(
+            user=obj.user,
+            catalog_product=obj.product,
+            order_product=order_product,
+        )
+
+    def get_purchase_label(self, obj: ProductReview) -> str:
+        return "Verified purchase" if self.get_has_verified_purchase(obj) else "Unverified purchase"
 
 class CustomerProfileSerializer(serializers.ModelSerializer):
     class Meta:
@@ -309,10 +401,13 @@ class ProducerSubOrderSerializer(serializers.ModelSerializer):
 
 
 class OrderItemSerializer(serializers.ModelSerializer):
+    product_id = serializers.IntegerField(source="product.id", read_only=True)
+
     class Meta:
         model = OrderItem
         fields = [
             "id",
+            "product_id",
             "product_name",
             "producer_name",
             "unit",

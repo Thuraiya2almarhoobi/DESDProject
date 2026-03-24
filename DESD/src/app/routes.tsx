@@ -72,6 +72,10 @@ export const router = createBrowserRouter([
             element: <PortalSelectPage />,
           },
           {
+            path: '/landing',
+            element: <LandingPage />,
+          },
+          {
             path: '/portal/customer',
             element: <StakeholderPortalPage role="CUSTOMER" />,
           },

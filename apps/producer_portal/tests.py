@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from calendar import month_abbr
 from datetime import timedelta
 from decimal import Decimal
 
@@ -70,6 +71,8 @@ class ProducerPortalCriticalTestCases(APITestCase):
             "price": "3.50",
             "unit": "dozen",
             "availability": ProductAvailability.IN_SEASON,
+            "season_start_month": 1,
+            "season_end_month": 3,
             "stock_quantity": 50,
             "allergen_information": "Contains eggs",
             "harvest_date": timezone.localdate().isoformat(),
@@ -268,6 +271,55 @@ class ProducerPortalCriticalTestCases(APITestCase):
                 name="Synced Beetroot Renamed",
             ).exists()
         )
+
+    def test_seasonal_product_requires_start_and_end_months(self):
+        payload = {
+            "name": "Spring Asparagus",
+            "category": "Vegetables",
+            "description": "Seasonal asparagus",
+            "price": "4.10",
+            "unit": "kg",
+            "availability": ProductAvailability.IN_SEASON,
+            "stock_quantity": 12,
+            "allergen_information": "",
+            "harvest_date": timezone.localdate().isoformat(),
+        }
+
+        response = self.client.post("/api/producer/products/", payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("season_start_month", response.data)
+
+    def test_future_season_product_exposes_reminder_and_stays_hidden_from_public_feed(self):
+        today = timezone.localdate()
+        start_month = (today.month % 12) + 1
+        end_month = ((today.month + 2) % 12) + 1
+        payload = {
+            "name": "Summer Courgettes",
+            "category": "Vegetables",
+            "description": "Courgettes for the next season window.",
+            "price": "2.70",
+            "unit": "kg",
+            "availability": ProductAvailability.IN_SEASON,
+            "season_start_month": start_month,
+            "season_end_month": end_month,
+            "stock_quantity": 25,
+            "allergen_information": "",
+            "harvest_date": today.isoformat(),
+        }
+
+        create_response = self.client.post("/api/producer/products/", payload, format="json")
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+
+        producer_list = self.client.get("/api/producer/products/")
+        self.assertEqual(producer_list.status_code, status.HTTP_200_OK)
+        created = next(item for item in producer_list.data if item["name"] == "Summer Courgettes")
+        self.assertEqual(created["effective_availability"], ProductAvailability.UNAVAILABLE)
+        self.assertEqual(created["seasonal_window_label"], f"{month_abbr[start_month]} - {month_abbr[end_month]}")
+        self.assertTrue(created["season_reminder_message"])
+
+        public_feed = self.client.get("/api/producer/public/products/")
+        self.assertEqual(public_feed.status_code, status.HTTP_200_OK)
+        self.assertFalse(any(item["name"] == "Summer Courgettes" for item in public_feed.data))
     def test_delivered_producer_order_reduces_inventory_only_when_completed(self):
         payload = {
             "name": "Inventory Reduction Potatoes",
@@ -339,4 +391,3 @@ class ProducerPortalCriticalTestCases(APITestCase):
         self.assertEqual(delivered_again_response.status_code, status.HTTP_200_OK)
         product.refresh_from_db()
         self.assertEqual(product.stock_quantity, 95)
-

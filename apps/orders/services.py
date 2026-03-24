@@ -82,6 +82,8 @@ def build_cart_payload(cart: Cart) -> dict:
                         "unit_price": item.unit_price,
                         "line_total": item.line_total,
                         "available_stock": item.product.stock_quantity,
+                        "availability": item.product.effective_availability(),
+                        "seasonal_dates": item.product.seasonal_window_label or ("Current season" if item.product.in_season else "Year-round"),
                     }
                     for item in group.items
                 ],
@@ -159,8 +161,9 @@ def _prepare_checkout_state(
 
     for group in groups:
         for item in group.items:
-            if not item.product.is_available or item.product.stock_quantity < item.quantity:
-                raise ValueError(f"Product '{item.product.name}' is unavailable in requested quantity.")
+            if not item.product.is_orderable() or item.product.stock_quantity < item.quantity:
+                reason = "is out of season" if item.product.is_available and item.product.stock_quantity > 0 else "is unavailable"
+                raise ValueError(f"Product '{item.product.name}' {reason} in the requested quantity.")
 
     delivery_dates = _resolve_delivery_dates(groups, payload)
     return cart, unique_selected_ids, groups, special_instructions, delivery_dates
@@ -458,8 +461,9 @@ def reorder_order_to_cart(user, order: Order) -> dict:
             continue
 
         product = item.product
-        if not product.is_available or product.stock_quantity <= Decimal("0.00"):
-            unavailable.append({"product_name": product.name, "reason": "Product unavailable."})
+        if not product.is_orderable() or product.stock_quantity <= Decimal("0.00"):
+            reason = "Product out of season." if product.is_available and product.stock_quantity > Decimal("0.00") else "Product unavailable."
+            unavailable.append({"product_name": product.name, "reason": reason})
             continue
 
         quantity_to_add = min(item.quantity, product.stock_quantity)

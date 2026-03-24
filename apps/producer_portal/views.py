@@ -24,6 +24,14 @@ from .serializers import (
 User = get_user_model()
 
 
+def _effective_customer_visible_ids(queryset):
+    matching_ids = []
+    for product in queryset:
+        if product.effective_availability in {ProductAvailability.IN_SEASON, ProductAvailability.YEAR_ROUND}:
+            matching_ids.append(product.id)
+    return matching_ids
+
+
 def _get_or_create_demo_user(email: str):
     normalized_email = (email or "producer@example.com").strip().lower()
     existing = User.objects.filter(email__iexact=normalized_email).first()
@@ -78,11 +86,15 @@ class PublicMarketplaceProductsAPIView(generics.ListAPIView):
     permission_classes = [permissions.AllowAny]
 
     def get_queryset(self):
-        queryset = ProducerProduct.objects.filter(
-            availability__in=[ProductAvailability.IN_SEASON, ProductAvailability.YEAR_ROUND],
-            stock_quantity__gt=0,
-        ).select_related("producer")
-        return queryset.order_by("-created_at")
+        queryset = (
+            ProducerProduct.objects.filter(
+                availability__in=[ProductAvailability.IN_SEASON, ProductAvailability.YEAR_ROUND],
+                stock_quantity__gt=0,
+            )
+            .select_related("producer")
+            .order_by("-created_at")
+        )
+        return queryset.filter(id__in=_effective_customer_visible_ids(queryset))
 
 
 class PublicMarketplaceProductDetailAPIView(generics.RetrieveAPIView):
@@ -90,10 +102,14 @@ class PublicMarketplaceProductDetailAPIView(generics.RetrieveAPIView):
     permission_classes = [permissions.AllowAny]
 
     def get_queryset(self):
-        return ProducerProduct.objects.filter(
-            availability__in=[ProductAvailability.IN_SEASON, ProductAvailability.YEAR_ROUND],
-            stock_quantity__gt=0,
-        ).select_related("producer")
+        queryset = (
+            ProducerProduct.objects.filter(
+                availability__in=[ProductAvailability.IN_SEASON, ProductAvailability.YEAR_ROUND],
+                stock_quantity__gt=0,
+            )
+            .select_related("producer")
+        )
+        return queryset.filter(id__in=_effective_customer_visible_ids(queryset))
 
 
 class ProducerProductListCreateAPIView(generics.ListCreateAPIView):

@@ -18,7 +18,7 @@ npm run dev
 
 Notes:
 - Frontend default API base URL is `/api`.
-- Vite proxy forwards `/api` to `http://localhost:8000`.
+- Vite proxy forwards `/api` to `http://127.0.0.1:8000`.
 - Mock catalog fallback is opt-in only (`VITE_USE_MOCK_PRODUCTS=true`).
 
 ## Docker (web + PostgreSQL + Stripe + Stuart microservice containers)
