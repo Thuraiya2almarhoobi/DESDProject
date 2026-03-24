@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from django.db import transaction
 from django.utils.text import slugify
 from django.utils import timezone
 
@@ -181,6 +182,75 @@ def _catalog_product_defaults(order_product: Product) -> dict:
     }
 
 
+def _merge_catalog_product_reviews(*, canonical_product, duplicate_products) -> None:
+    from apps.community.models import ProductReview
+
+    for duplicate_product in duplicate_products:
+        duplicate_reviews = ProductReview.objects.filter(product=duplicate_product).order_by("-created_at", "-id")
+        for duplicate_review in duplicate_reviews:
+            if duplicate_review.user_id is not None:
+                canonical_review = ProductReview.objects.filter(
+                    product=canonical_product,
+                    user_id=duplicate_review.user_id,
+                ).first()
+                if canonical_review is not None:
+                    if duplicate_review.created_at > canonical_review.created_at:
+                        canonical_review.title = duplicate_review.title
+                        canonical_review.reviewer_name = duplicate_review.reviewer_name
+                        canonical_review.is_anonymous = duplicate_review.is_anonymous
+                        canonical_review.rating = duplicate_review.rating
+                        canonical_review.comment = duplicate_review.comment
+                        canonical_review.verified_purchase = duplicate_review.verified_purchase
+                        canonical_review.moderation_status = duplicate_review.moderation_status
+                        canonical_review.moderation_reason = duplicate_review.moderation_reason
+                        canonical_review.producer_response = duplicate_review.producer_response
+                        canonical_review.producer_response_at = duplicate_review.producer_response_at
+                        canonical_review.created_at = duplicate_review.created_at
+                        canonical_review.save(
+                            update_fields=[
+                                "title",
+                                "reviewer_name",
+                                "is_anonymous",
+                                "rating",
+                                "comment",
+                                "verified_purchase",
+                                "moderation_status",
+                                "moderation_reason",
+                                "producer_response",
+                                "producer_response_at",
+                                "created_at",
+                            ]
+                        )
+                    duplicate_review.delete()
+                    continue
+
+            duplicate_review.product = canonical_product
+            duplicate_review.save(update_fields=["product"])
+
+
+def _upsert_catalog_product(*, catalog_product_model, lookup: dict, defaults: dict):
+    matching_products = list(
+        catalog_product_model.objects.filter(**lookup).order_by("-updated_at", "-id")
+    )
+    if not matching_products:
+        create_values = {**defaults, **lookup}
+        return catalog_product_model.objects.create(**create_values), True
+
+    canonical_product = matching_products[0]
+    duplicate_products = matching_products[1:]
+    if duplicate_products:
+        _merge_catalog_product_reviews(
+            canonical_product=canonical_product,
+            duplicate_products=duplicate_products,
+        )
+        catalog_product_model.objects.filter(id__in=[product.id for product in duplicate_products]).delete()
+
+    for field_name, value in defaults.items():
+        setattr(canonical_product, field_name, value)
+    canonical_product.save()
+    return canonical_product, False
+
+
 def get_or_create_catalog_product_mirror(order_product: Product):
     from apps.catalog.models import Category, Producer as CatalogProducer, Product as CatalogProduct
 
@@ -246,11 +316,16 @@ def get_or_create_catalog_product_mirror(order_product: Product):
                 order_product.price / (Decimal("1.00") - (discount / Decimal("100.00")))
             ).quantize(Decimal("0.01"))
 
-    catalog_product, _ = CatalogProduct.objects.update_or_create(
-        producer=catalog_producer,
-        name=order_product.name,
-        defaults=defaults,
-    )
+    with transaction.atomic():
+        catalog_product, _ = _upsert_catalog_product(
+            catalog_product_model=CatalogProduct,
+            lookup={
+                "producer": catalog_producer,
+                "name": order_product.name,
+                "unit": order_product.unit,
+            },
+            defaults=defaults,
+        )
     return catalog_product
 
 
@@ -264,6 +339,7 @@ def delete_catalog_product_for_orders_product(order_product: Product) -> None:
     CatalogProduct.objects.filter(
         producer__name=order_product.producer.business_name,
         name=order_product.name,
+        unit=order_product.unit,
     ).delete()
 
 
@@ -280,10 +356,10 @@ def sync_orders_product_from_producer_product(producer_product):
     order_product, _ = OrdersProduct.objects.update_or_create(
         producer=orders_producer,
         name=producer_product.name,
+        unit=producer_product.unit,
         defaults={
             "category": producer_product.category,
             "description": producer_product.description,
-            "unit": producer_product.unit,
             "price": producer_product.price,
             "stock_quantity": producer_product.stock_quantity,
             "is_available": is_available,
@@ -305,6 +381,7 @@ def delete_orders_and_catalog_products_for_producer_product(producer_product) ->
         OrdersProduct.objects.filter(
             producer__user=producer_product.producer,
             name=producer_product.name,
+            unit=producer_product.unit,
         )
         .order_by("-updated_at", "-id")
         .first()

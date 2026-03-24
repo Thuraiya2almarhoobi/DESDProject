@@ -7,8 +7,11 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
+from apps.catalog.models import Product as CatalogProduct
+from apps.community.models import ProductReview
 from apps.producer_portal.models import ProducerProduct, ProductAvailability
 
+from .marketplace_sync import get_or_create_catalog_product_mirror
 from .models import Cart, CustomerProfile, Order, OrderItem, Producer, ProducerSubOrder, Product
 
 
@@ -382,6 +385,57 @@ class OrdersCriticalFlowTests(APITestCase):
         reviewed_product = next(product for product in updated_list_response.data if product["id"] == self.product_a1.id)
         self.assertEqual(reviewed_product["review_count"], 1)
         self.assertEqual(reviewed_product["average_rating"], 5.0)
+
+    def test_orders_product_list_heals_duplicate_catalog_mirrors(self):
+        catalog_product = get_or_create_catalog_product_mirror(self.product_b1)
+        duplicate_product = CatalogProduct.objects.create(
+            producer=catalog_product.producer,
+            category=catalog_product.category,
+            name=catalog_product.name,
+            description=catalog_product.description,
+            price=catalog_product.price,
+            unit=catalog_product.unit,
+            harvest_date=catalog_product.harvest_date,
+            availability=catalog_product.availability,
+            seasonal_dates=catalog_product.seasonal_dates,
+            is_organic=catalog_product.is_organic,
+            organic_certification=catalog_product.organic_certification,
+            allergens=catalog_product.allergens,
+            image_url=catalog_product.image_url,
+            stock=catalog_product.stock,
+            food_miles=catalog_product.food_miles,
+            is_surplus=catalog_product.is_surplus,
+            surplus_discount=catalog_product.surplus_discount,
+            surplus_original_price=catalog_product.surplus_original_price,
+            surplus_expires_at=catalog_product.surplus_expires_at,
+            surplus_best_before=catalog_product.surplus_best_before,
+            storage_tips=catalog_product.storage_tips,
+            recipe_ideas=catalog_product.recipe_ideas,
+        )
+        ProductReview.objects.create(
+            product=duplicate_product,
+            user=self.customer,
+            reviewer_name="customer_tc",
+            rating=4,
+            title="Still works",
+            comment="Duplicate catalog mirrors should not break marketplace loading.",
+            verified_purchase=True,
+        )
+
+        list_response = self.client.get("/api/orders/products/", {"available": "true"})
+
+        self.assertEqual(list_response.status_code, status.HTTP_200_OK)
+        reviewed_product = next(product for product in list_response.data if product["id"] == self.product_b1.id)
+        self.assertEqual(reviewed_product["review_count"], 1)
+        self.assertEqual(reviewed_product["average_rating"], 4.0)
+        self.assertEqual(
+            CatalogProduct.objects.filter(
+                producer=catalog_product.producer,
+                name=catalog_product.name,
+                unit=catalog_product.unit,
+            ).count(),
+            1,
+        )
 
     def test_review_submission_requires_delivered_purchase(self):
         response = self.client.post(
