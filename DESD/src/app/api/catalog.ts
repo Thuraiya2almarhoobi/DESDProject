@@ -1,10 +1,11 @@
 import { mockProducts } from "../data/mockData";
+import { resolveApiPathBase } from "../lib/apiBase";
 import { getBasicAuthToken } from "../lib/api";
 import { getAccessToken } from "../lib/tokenStorage";
-import { AvailabilityType, Product, ProductReview, ProductUnit } from "../types";
+import { AvailabilityType, Product, ProductReview, ProductUnit, ReviewEligibility } from "../types";
 
-const API_BASE_URL =
-  ((import.meta.env.VITE_API_BASE_URL as string | undefined) || "/api").replace(/\/+$/, "");
+const API_BASE_URL = resolveApiPathBase(import.meta.env.VITE_API_BASE_URL as string | undefined, "/api");
+const ORDERS_API_BASE_URL = `${API_BASE_URL}/orders`;
 const USE_MOCK_PRODUCTS =
   ((import.meta.env.VITE_USE_MOCK_PRODUCTS as string | undefined) || "").toLowerCase() === "true";
 const DEFAULT_IMAGE_URL =
@@ -27,16 +28,40 @@ interface ApiCategory {
 interface ApiReview {
   id: number;
   user_id?: number | null;
+  title?: string;
   reviewer_name?: string;
+  is_anonymous?: boolean;
   rating?: number;
   comment?: string;
   verified_purchase?: boolean;
+  moderation_status?: "published" | "pending" | "rejected";
+  moderation_reason?: string;
+  producer_response?: string;
+  producer_response_at?: string | null;
   created_at?: string;
 }
 
 interface CreateReviewPayload {
   rating: number;
+  title: string;
   comment: string;
+  isAnonymous?: boolean;
+}
+
+interface ProducerResponsePayload {
+  producer_response: string;
+}
+
+interface ApiReviewEligibility {
+  can_submit?: boolean;
+  reason?: string;
+  has_verified_purchase?: boolean;
+  has_existing_review?: boolean;
+  daily_limit_reached?: boolean;
+  is_customer?: boolean;
+  is_authenticated?: boolean;
+  can_respond?: boolean;
+  response_reason?: string;
 }
 
 interface ApiProduct {
@@ -71,6 +96,9 @@ interface ApiProduct {
   surplus_best_before?: string;
   storage_tips?: string;
   recipe_ideas?: unknown;
+  average_rating?: number | string | null;
+  review_count?: number | string;
+  verified_review_count?: number | string;
 }
 
 function toNumber(value: unknown): number | null {
@@ -163,6 +191,9 @@ function mapProduct(apiProduct: ApiProduct): Product {
     surplusBestBefore: apiProduct.surplus_best_before || undefined,
     storageTips: apiProduct.storage_tips || undefined,
     recipeIdeas: normalizeRecipeIdeas(apiProduct.recipe_ideas),
+    averageRating: toNumber(apiProduct.average_rating) ?? undefined,
+    reviewCount: toNumber(apiProduct.review_count) ?? undefined,
+    verifiedReviewCount: toNumber(apiProduct.verified_review_count) ?? undefined,
   };
 }
 
@@ -170,11 +201,31 @@ function mapReview(review: ApiReview): ProductReview {
   return {
     id: String(review.id),
     userId: review.user_id === null || review.user_id === undefined ? undefined : String(review.user_id),
+    title: review.title || undefined,
     reviewerName: review.reviewer_name || "Anonymous",
+    isAnonymous: Boolean(review.is_anonymous),
     rating: review.rating || 0,
     comment: review.comment || "",
     verifiedPurchase: Boolean(review.verified_purchase),
+    moderationStatus: review.moderation_status,
+    moderationReason: review.moderation_reason || undefined,
+    producerResponse: review.producer_response || undefined,
+    producerResponseAt: review.producer_response_at || undefined,
     createdAt: review.created_at || new Date().toISOString(),
+  };
+}
+
+function mapReviewEligibility(payload: ApiReviewEligibility): ReviewEligibility {
+  return {
+    canSubmit: Boolean(payload.can_submit),
+    reason: payload.reason || "Review eligibility is currently unavailable.",
+    hasVerifiedPurchase: Boolean(payload.has_verified_purchase),
+    hasExistingReview: Boolean(payload.has_existing_review),
+    dailyLimitReached: Boolean(payload.daily_limit_reached),
+    isCustomer: Boolean(payload.is_customer),
+    isAuthenticated: Boolean(payload.is_authenticated),
+    canRespond: Boolean(payload.can_respond),
+    responseReason: payload.response_reason || "",
   };
 }
 
@@ -304,7 +355,8 @@ export async function fetchProducts(params: ProductQueryParams = {}): Promise<Pr
   }
 
   const queryString = buildProductsQueryString(params);
-  const url = queryString ? `${API_BASE_URL}/products?${queryString}` : `${API_BASE_URL}/products`;
+  const baseUrl = `${ORDERS_API_BASE_URL}/products`;
+  const url = queryString ? `${baseUrl}?available=true&${queryString}` : `${baseUrl}?available=true`;
   const data = await requestJson<ApiProduct[]>(url);
   return data.map(mapProduct);
 }
@@ -318,7 +370,7 @@ export async function fetchProductById(productId: string): Promise<Product> {
     return product;
   }
 
-  const data = await requestJson<ApiProduct>(`${API_BASE_URL}/products/${productId}`);
+  const data = await requestJson<ApiProduct>(`${ORDERS_API_BASE_URL}/products/${productId}/`);
   return mapProduct(data);
 }
 
@@ -327,8 +379,8 @@ export async function fetchCategories(): Promise<string[]> {
     return Array.from(new Set(mockProducts.map((product) => product.category))).sort();
   }
 
-  const categories = await requestJson<ApiCategory[]>(`${API_BASE_URL}/categories`);
-  return categories.map((category) => category.name);
+  const products = await requestJson<ApiProduct[]>(`${ORDERS_API_BASE_URL}/products/?available=true`);
+  return Array.from(new Set(products.map((product) => product.category || "Uncategorised"))).sort();
 }
 
 export async function fetchProductReviews(productId: string): Promise<ProductReview[]> {
@@ -336,7 +388,7 @@ export async function fetchProductReviews(productId: string): Promise<ProductRev
     return [];
   }
 
-  const reviews = await requestJson<ApiReview[]>(`${API_BASE_URL}/products/${productId}/reviews`);
+  const reviews = await requestJson<ApiReview[]>(`${ORDERS_API_BASE_URL}/products/${productId}/reviews/`);
   return reviews.map(mapReview);
 }
 
@@ -348,9 +400,54 @@ export async function createProductReview(
     throw new Error("Review submission is unavailable while mock catalog data is enabled.");
   }
 
-  const review = await requestJson<ApiReview>(`${API_BASE_URL}/products/${productId}/reviews`, {
+  const review = await requestJson<ApiReview>(`${ORDERS_API_BASE_URL}/products/${productId}/reviews/`, {
     method: "POST",
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      rating: payload.rating,
+      title: payload.title,
+      comment: payload.comment,
+      is_anonymous: Boolean(payload.isAnonymous),
+    }),
   });
+  return mapReview(review);
+}
+
+export async function fetchProductReviewEligibility(productId: string): Promise<ReviewEligibility> {
+  if (USE_MOCK_PRODUCTS) {
+    return {
+      canSubmit: false,
+      reason: "Review eligibility is unavailable while mock catalog data is enabled.",
+      hasVerifiedPurchase: false,
+      hasExistingReview: false,
+      dailyLimitReached: false,
+      isCustomer: false,
+      isAuthenticated: false,
+      canRespond: false,
+      responseReason: "",
+    };
+  }
+
+  const payload = await requestJson<ApiReviewEligibility>(
+    `${ORDERS_API_BASE_URL}/products/${productId}/reviews/eligibility/`,
+  );
+  return mapReviewEligibility(payload);
+}
+
+export async function respondToProductReview(
+  productId: string,
+  reviewId: string,
+  payload: ProducerResponsePayload,
+): Promise<ProductReview> {
+  if (USE_MOCK_PRODUCTS) {
+    throw new Error("Producer review responses are unavailable while mock catalog data is enabled.");
+  }
+
+  const review = await requestJson<ApiReview>(
+    `${ORDERS_API_BASE_URL}/products/${productId}/reviews/${reviewId}/response/`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
   return mapReview(review);
 }

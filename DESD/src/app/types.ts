@@ -35,7 +35,14 @@ export interface Product {
   category: string;
   harvestDate: string;
   availability: AvailabilityType;
+  configuredAvailability?: AvailabilityType;
+  effectiveAvailability?: AvailabilityType;
   seasonalDates?: string; // e.g., "May - September"
+  seasonStartMonth?: number;
+  seasonEndMonth?: number;
+  seasonalStatusMessage?: string;
+  seasonalReminderMessage?: string;
+  isCurrentlyInSeason?: boolean;
   isOrganic: boolean;
   organicCertification?: string;
   allergens: string[];
@@ -49,16 +56,39 @@ export interface Product {
   surplusBestBefore?: string; // e.g., "3 days"
   storageTips?: string;
   recipeIdeas?: string[];
+  averageRating?: number;
+  reviewCount?: number;
+  verifiedReviewCount?: number;
 }
+
+export type ReviewModerationStatus = 'published' | 'pending' | 'rejected';
 
 export interface ProductReview {
   id: string;
   userId?: string;
+  title?: string;
   reviewerName: string;
+  isAnonymous?: boolean;
   rating: number;
   comment: string;
   verifiedPurchase: boolean;
+  moderationStatus?: ReviewModerationStatus;
+  moderationReason?: string;
+  producerResponse?: string;
+  producerResponseAt?: string;
   createdAt: string;
+}
+
+export interface ReviewEligibility {
+  canSubmit: boolean;
+  reason: string;
+  hasVerifiedPurchase: boolean;
+  hasExistingReview: boolean;
+  dailyLimitReached: boolean;
+  isCustomer: boolean;
+  isAuthenticated: boolean;
+  canRespond: boolean;
+  responseReason: string;
 }
 
 // Cart Types

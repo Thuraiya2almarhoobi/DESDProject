@@ -140,14 +140,29 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [
     BASE_DIR / "DESD" / "dist",
 ]
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
 
 # Vite frontend output location used by Django template view.
 FRONTEND_DIST_DIR = BASE_DIR / "DESD" / "dist"
 
 AUTH_USER_MODEL = "accounts.User"
 
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
-
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://127.0.0.1:8000")
+STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY", "")
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
+PAYMENT_SERVICE_BASE_URL = os.getenv("PAYMENT_SERVICE_BASE_URL", "http://payments:8010")
+PAYMENT_SERVICE_SHARED_SECRET = os.getenv("PAYMENT_SERVICE_SHARED_SECRET", "local-payment-service-secret")
+PAYMENT_SERVICE_TIMEOUT_SECONDS = int(os.getenv("PAYMENT_SERVICE_TIMEOUT_SECONDS", "15"))
+STRIPE_SUCCESS_URL = os.getenv(
+    "STRIPE_SUCCESS_URL",
+    f"{FRONTEND_URL.rstrip('/')}/checkout/success?session_id={{CHECKOUT_SESSION_ID}}",
+)
+STRIPE_CANCEL_URL = os.getenv(
+    "STRIPE_CANCEL_URL",
+    f"{FRONTEND_URL.rstrip('/')}/checkout/cancel",
+)
 JWT_ACCESS_TOKEN_MINUTES = int(os.getenv("JWT_ACCESS_TOKEN_MINUTES", "15"))
 JWT_DEFAULT_REFRESH_DAYS = int(os.getenv("JWT_DEFAULT_REFRESH_DAYS", "1"))
 JWT_REMEMBER_ME_REFRESH_DAYS = int(os.getenv("JWT_REMEMBER_ME_REFRESH_DAYS", "30"))
@@ -213,7 +228,7 @@ CORS_ALLOWED_ORIGINS = [
     origin.strip()
     for origin in os.getenv(
         "CORS_ALLOWED_ORIGINS",
-        "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000",
+        "http://localhost:8000,http://127.0.0.1:8000,http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000",
     ).split(",")
     if origin.strip()
 ]

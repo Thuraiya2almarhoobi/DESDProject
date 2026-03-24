@@ -1,8 +1,9 @@
 import { Product } from '../types';
+import { resolveApiOriginBase } from './apiBase';
 import { getAccessToken } from './tokenStorage';
 
 const AUTH_STORAGE_KEY = 'desd_basic_auth_token';
-const API_BASE = import.meta.env.VITE_API_BASE || '';
+const API_BASE = resolveApiOriginBase(import.meta.env.VITE_API_BASE, '');
 
 export class ApiError extends Error {
   status: number;
@@ -48,6 +49,8 @@ export interface ApiCartItem {
   unit_price: string;
   line_total: string;
   available_stock: string;
+  availability?: Product['availability'];
+  seasonal_dates?: string;
 }
 
 export interface ApiCartGroup {
@@ -84,6 +87,7 @@ export interface ApiOrderSummary {
 
 export interface ApiOrderItem {
   id: number;
+  product_id?: number | null;
   product_name: string;
   producer_name: string;
   unit: string;

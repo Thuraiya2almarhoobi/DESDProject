@@ -1,13 +1,13 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router';
+﻿import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router';
 import {
   AlertCircle,
   AlertTriangle,
   ArrowLeft,
   Calendar,
   CheckCircle2,
+  ChevronDown,
   Edit,
-  Eye,
   HelpCircle,
   Loader2,
   Plus,
@@ -17,10 +17,14 @@ import {
 import { differenceInCalendarDays, format, isValid, parseISO } from 'date-fns';
 import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
+import { useSafeBack } from '../../lib/navigation';
 import { AvailabilityBadge, OrganicBadge, SurplusBadge } from '../../components/ProductBadges';
+import { ImageSourceField } from '../../components/ImageSourceField';
+import { SiteHeader } from '../../components/SiteHeader';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
+import { Checkbox } from '../../components/ui/checkbox';
 import { Input } from '../../components/ui/input';
 import { Switch } from '../../components/ui/switch';
 import { Label } from '../../components/ui/label';
@@ -45,6 +49,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../../components/ui/dialog';
+import { Popover, PopoverContent, PopoverTrigger } from '../../components/ui/popover';
+import { ScrollArea } from '../../components/ui/scroll-area';
 import { Separator } from '../../components/ui/separator';
 import { AvailabilityType, Product, ProductUnit } from '../../types';
 import {
@@ -53,12 +59,15 @@ import {
   patchProducerProductInApi,
 } from '../../services/productApi';
 
-type HealthFilter = 'all' | 'low-stock' | 'out-of-stock' | 'season-ending';
+type HealthFilter = 'all' | 'low-stock' | 'out-of-stock' | 'season-ending' | 'season-starting';
+type MonthOption = { value: number; label: string };
 
 interface ProductDraft {
   stock: string;
   availability: AvailabilityType;
   harvestDate: string;
+  seasonStartMonth: string;
+  seasonEndMonth: string;
   isSurplus: boolean;
   surplusDiscountPercent: string;
 }
@@ -71,20 +80,82 @@ interface NewProductForm {
   unit: ProductUnit;
   availability: AvailabilityType;
   stock: string;
-  allergens: string;
+  allergens: string[];
   harvestDate: string;
+  seasonStartMonth: string;
+  seasonEndMonth: string;
   imageUrl: string;
   isSurplus: boolean;
   surplusDiscountPercent: string;
 }
 
 const UNIT_OPTIONS: ProductUnit[] = ['kg', 'litre', 'dozen', 'each'];
+const MONTH_OPTIONS: MonthOption[] = [
+  { value: 1, label: 'January' },
+  { value: 2, label: 'February' },
+  { value: 3, label: 'March' },
+  { value: 4, label: 'April' },
+  { value: 5, label: 'May' },
+  { value: 6, label: 'June' },
+  { value: 7, label: 'July' },
+  { value: 8, label: 'August' },
+  { value: 9, label: 'September' },
+  { value: 10, label: 'October' },
+  { value: 11, label: 'November' },
+  { value: 12, label: 'December' },
+];
+const ALLERGEN_OPTIONS = [
+  'Celery',
+  'Cereals containing gluten (such as wheat, rye, barley, and oats)',
+  'Crustaceans (such as prawns, crabs, and lobsters)',
+  'Eggs',
+  'Fish',
+  'Lupin',
+  'Milk',
+  'Molluscs (such as mussels and oysters)',
+  'Mustard',
+  'Peanuts',
+  'Sesame',
+  'Soybeans',
+  'Sulphur dioxide and sulphites (at concentrations of more than 10 parts per million)',
+  'Tree nuts (almonds, hazelnuts, walnuts, brazil nuts, cashews, pecans, pistachios, and macadamia nuts)',
+] as const;
+
+function toggleSelectedAllergen(selected: string[], allergen: string, checked: boolean): string[] {
+  if (checked) {
+    return selected.includes(allergen) ? selected : [...selected, allergen];
+  }
+  return selected.filter((item) => item !== allergen);
+}
+
+function getSelectedAllergenSummary(allergens: string[]): string {
+  if (allergens.length === 0) {
+    return 'Select allergens';
+  }
+  if (allergens.length <= 2) {
+    return allergens.join(', ');
+  }
+  return `${allergens.length} allergens selected`;
+}
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+function currentMonthNumber(): number {
+  return new Date().getMonth() + 1;
+}
+
+function defaultSeasonEndMonth(startMonth: number): number {
+  return ((startMonth + 2 - 1) % 12) + 1;
+}
+
+function getEffectiveAvailability(product: Product): AvailabilityType {
+  return product.effectiveAvailability ?? product.availability;
+}
+
 function initialNewProductForm(): NewProductForm {
+  const startMonth = currentMonthNumber();
   return {
     name: '',
     category: 'Vegetables',
@@ -93,8 +164,10 @@ function initialNewProductForm(): NewProductForm {
     unit: 'kg',
     availability: 'in-season',
     stock: '0',
-    allergens: '',
+    allergens: [],
     harvestDate: todayIso(),
+    seasonStartMonth: String(startMonth),
+    seasonEndMonth: String(defaultSeasonEndMonth(startMonth)),
     imageUrl: '',
     isSurplus: false,
     surplusDiscountPercent: '20',
@@ -102,25 +175,59 @@ function initialNewProductForm(): NewProductForm {
 }
 
 function toDraft(product: Product): ProductDraft {
+  const configuredAvailability = product.configuredAvailability ?? product.availability;
+  const startMonth = product.seasonStartMonth ?? currentMonthNumber();
   return {
     stock: String(product.stock),
-    availability: product.availability,
+    availability: configuredAvailability,
     harvestDate: product.harvestDate || todayIso(),
+    seasonStartMonth: String(startMonth),
+    seasonEndMonth: String(product.seasonEndMonth ?? defaultSeasonEndMonth(startMonth)),
     isSurplus: Boolean(product.isSurplus),
     surplusDiscountPercent: String(product.surplusDiscount ?? 20),
   };
 }
 
 function isSeasonEndingSoon(product: Product): boolean {
-  if (product.availability !== 'in-season' || !product.harvestDate) {
+  if (getEffectiveAvailability(product) !== 'in-season') {
     return false;
   }
-  const parsed = parseISO(product.harvestDate);
-  if (!isValid(parsed)) {
-    return false;
+  if (!product.seasonEndMonth) {
+    if (!product.harvestDate) {
+      return false;
+    }
+    const parsed = parseISO(product.harvestDate);
+    if (!isValid(parsed)) {
+      return false;
+    }
+    const days = differenceInCalendarDays(parsed, new Date());
+    return days >= 0 && days <= 14;
   }
-  const days = differenceInCalendarDays(parsed, new Date());
-  return days >= 0 && days <= 14;
+
+  const today = new Date();
+  const currentYear = today.getFullYear();
+  const currentMonth = today.getMonth() + 1;
+  let endYear = currentYear;
+  if (product.seasonStartMonth && product.seasonStartMonth > product.seasonEndMonth && currentMonth <= product.seasonEndMonth) {
+    endYear = currentYear;
+  } else if (product.seasonStartMonth && product.seasonStartMonth > product.seasonEndMonth && currentMonth > product.seasonStartMonth) {
+    endYear = currentYear + 1;
+  }
+  const seasonEndDate = new Date(endYear, product.seasonEndMonth, 0);
+  const days = differenceInCalendarDays(seasonEndDate, today);
+  return days >= 0 && days <= 30;
+}
+
+function isSeasonStartingSoon(product: Product): boolean {
+  return Boolean(product.seasonalReminderMessage);
+}
+
+function parseMonthInput(value: string): number | undefined {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 1 || parsed > 12) {
+    return undefined;
+  }
+  return parsed;
 }
 
 function formatHarvestDate(value: string): string {
@@ -130,9 +237,10 @@ function formatHarvestDate(value: string): string {
   }
   return format(parsed, 'MMM d, yyyy');
 }
-
 export function ProducerInventoryPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const goBack = useSafeBack('/producer/dashboard');
   const { user } = useAuth();
   const demoUserEmail = (user?.email || 'producer@example.com').trim().toLowerCase();
 
@@ -177,9 +285,27 @@ export function ProducerInventoryPage() {
     };
   }, [demoUserEmail]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('create') === 'product') {
+      setCreateDialogOpen(true);
+    }
+  }, [location.search]);
+
+  const handleCreateDialogChange = (open: boolean) => {
+    setCreateDialogOpen(open);
+    if (!open) {
+      const params = new URLSearchParams(location.search);
+      if (params.get('create') === 'product') {
+        navigate('/producer/inventory', { replace: true });
+      }
+    }
+  };
+
   const lowStockItems = useMemo(() => products.filter((product) => product.stock > 0 && product.stock < 10), [products]);
   const outOfStockItems = useMemo(() => products.filter((product) => product.stock === 0), [products]);
   const seasonEndingItems = useMemo(() => products.filter((product) => isSeasonEndingSoon(product)), [products]);
+  const seasonStartingItems = useMemo(() => products.filter((product) => isSeasonStartingSoon(product)), [products]);
 
   const filteredProducts = useMemo(() => {
     if (filterHealthStatus === 'low-stock') {
@@ -191,8 +317,11 @@ export function ProducerInventoryPage() {
     if (filterHealthStatus === 'season-ending') {
       return seasonEndingItems;
     }
+    if (filterHealthStatus === 'season-starting') {
+      return seasonStartingItems;
+    }
     return products;
-  }, [filterHealthStatus, lowStockItems, outOfStockItems, products, seasonEndingItems]);
+  }, [filterHealthStatus, lowStockItems, outOfStockItems, products, seasonEndingItems, seasonStartingItems]);
 
   const openEditor = (product: Product) => {
     if (editingId === product.id) {
@@ -238,6 +367,8 @@ export function ProducerInventoryPage() {
       stock: number;
       availability: AvailabilityType;
       harvestDate: string;
+      seasonStartMonth?: number;
+      seasonEndMonth?: number;
       isSurplus: boolean;
       surplusDiscountPercent?: number;
     } = {
@@ -246,6 +377,17 @@ export function ProducerInventoryPage() {
       harvestDate: draft.harvestDate || todayIso(),
       isSurplus: draft.isSurplus,
     };
+
+    if (draft.availability === 'in-season') {
+      const seasonStartMonth = parseMonthInput(draft.seasonStartMonth);
+      const seasonEndMonth = parseMonthInput(draft.seasonEndMonth);
+      if (!seasonStartMonth || !seasonEndMonth) {
+        toast.error('Choose a season start and end month for seasonal products.');
+        return;
+      }
+      payload.seasonStartMonth = seasonStartMonth;
+      payload.seasonEndMonth = seasonEndMonth;
+    }
 
     if (draft.isSurplus) {
       const parsedDiscount = Number.parseInt(draft.surplusDiscountPercent, 10);
@@ -274,8 +416,13 @@ export function ProducerInventoryPage() {
 
   const toggleInStock = async (product: Product) => {
     const newStock = product.stock === 0 ? 10 : 0;
+    const currentConfiguredAvailability = product.configuredAvailability ?? product.availability;
     const newAvailability: AvailabilityType =
-      newStock === 0 ? 'unavailable' : product.availability === 'unavailable' ? 'year-round' : product.availability;
+      newStock === 0
+        ? currentConfiguredAvailability
+        : currentConfiguredAvailability === 'unavailable'
+          ? 'year-round'
+          : currentConfiguredAvailability;
 
     try {
       const updated = await patchProducerProductInApi(
@@ -315,7 +462,7 @@ export function ProducerInventoryPage() {
             product.id,
             {
               stock: 0,
-              availability: 'unavailable',
+              availability: product.configuredAvailability ?? product.availability,
             },
             demoUserEmail,
           ),
@@ -357,6 +504,14 @@ export function ProducerInventoryPage() {
       toast.error('Stock must be zero or greater.');
       return;
     }
+    if (newProduct.availability === 'in-season') {
+      const seasonStartMonth = parseMonthInput(newProduct.seasonStartMonth);
+      const seasonEndMonth = parseMonthInput(newProduct.seasonEndMonth);
+      if (!seasonStartMonth || !seasonEndMonth) {
+        toast.error('Choose a season start and end month for seasonal products.');
+        return;
+      }
+    }
 
     let parsedDiscount: number | undefined;
     if (newProduct.isSurplus) {
@@ -378,8 +533,12 @@ export function ProducerInventoryPage() {
           unit: newProduct.unit,
           availability: newProduct.availability,
           stock,
-          allergens: newProduct.allergens.trim(),
+          allergens: newProduct.allergens,
           harvestDate: newProduct.harvestDate || todayIso(),
+          seasonStartMonth:
+            newProduct.availability === 'in-season' ? parseMonthInput(newProduct.seasonStartMonth) : undefined,
+          seasonEndMonth:
+            newProduct.availability === 'in-season' ? parseMonthInput(newProduct.seasonEndMonth) : undefined,
           imageUrl: newProduct.imageUrl.trim(),
           isSurplus: newProduct.isSurplus,
           surplusDiscountPercent: parsedDiscount,
@@ -401,30 +560,20 @@ export function ProducerInventoryPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[oklch(0.98_0.01_145)] to-[oklch(0.96_0.02_150)]">
-      <header className="bg-white/80 backdrop-blur-sm border-b border-[oklch(0.88_0.02_145)] shadow-sm">
-        <div className="max-w-6xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <Button
-              variant="ghost"
-              onClick={() => navigate('/producer/dashboard')}
-              className="focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
-            >
-              <ArrowLeft className="size-4 mr-2" />
-              Back to Dashboard
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => navigate('/marketplace')}
-              className="gap-2 focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
-            >
-              <Eye className="size-4" />
-              Preview as customer
-            </Button>
-          </div>
-        </div>
-      </header>
+      <SiteHeader />
 
       <main className="max-w-6xl mx-auto px-4 py-8">
+        <div className="mb-6">
+          <Button
+            variant="ghost"
+            onClick={goBack}
+            className="focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
+          >
+            <ArrowLeft className="size-4 mr-2" />
+            Back to Dashboard
+          </Button>
+        </div>
+
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-3xl font-semibold">Inventory Management</h1>
@@ -449,7 +598,7 @@ export function ProducerInventoryPage() {
           </div>
         </div>
 
-        <div className="grid md:grid-cols-4 gap-4 mb-6">
+        <div className="grid md:grid-cols-5 gap-4 mb-6">
           <Card
             className={`cursor-pointer transition-all hover:shadow-md ${filterHealthStatus === 'all' ? 'ring-2 ring-green-600' : ''}`}
             onClick={() => setFilterHealthStatus('all')}
@@ -506,6 +655,21 @@ export function ProducerInventoryPage() {
                   <p className="text-2xl font-semibold text-blue-700">{seasonEndingItems.length}</p>
                 </div>
                 <Calendar className="size-8 text-blue-600" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card
+            className={`cursor-pointer transition-all hover:shadow-md border-emerald-200 bg-emerald-50/30 ${filterHealthStatus === 'season-starting' ? 'ring-2 ring-emerald-600' : ''}`}
+            onClick={() => setFilterHealthStatus('season-starting')}
+          >
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-700">Season starting soon</p>
+                  <p className="text-2xl font-semibold text-emerald-700">{seasonStartingItems.length}</p>
+                </div>
+                <Calendar className="size-8 text-emerald-600" />
               </div>
             </CardContent>
           </Card>
@@ -599,7 +763,7 @@ export function ProducerInventoryPage() {
                           <div>
                             <CardTitle className="text-lg mb-2">{product.name}</CardTitle>
                             <div className="flex gap-2 flex-wrap">
-                              <AvailabilityBadge availability={product.availability} />
+                              <AvailabilityBadge availability={getEffectiveAvailability(product)} />
                               {product.isOrganic && <OrganicBadge />}
                               {product.isSurplus && <SurplusBadge />}
                               {product.stock === 0 && (
@@ -669,6 +833,19 @@ export function ProducerInventoryPage() {
                         <p className="font-medium">{formatHarvestDate(product.harvestDate)}</p>
                       </div>
                     </div>
+                    {(product.seasonalDates || product.seasonalStatusMessage || product.seasonalReminderMessage) && (
+                      <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-4 space-y-1">
+                        <p className="text-sm font-medium text-emerald-900">
+                          Seasonal window: {product.seasonalDates || 'Configured from producer settings'}
+                        </p>
+                        {product.seasonalStatusMessage && (
+                          <p className="text-sm text-emerald-800">{product.seasonalStatusMessage}</p>
+                        )}
+                        {product.seasonalReminderMessage && (
+                          <p className="text-sm font-medium text-emerald-700">{product.seasonalReminderMessage}</p>
+                        )}
+                      </div>
+                    )}
 
                     {editingId === product.id && (
                       <div className="pt-4 border-t space-y-6">
@@ -728,6 +905,49 @@ export function ProducerInventoryPage() {
                               className="focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
                             />
                           </div>
+                          {draft.availability === 'in-season' && (
+                            <div className="space-y-2">
+                              <Label className="flex items-center gap-2">
+                                Seasonal window
+                                <HelpCircle className="size-3 text-gray-400" />
+                              </Label>
+                              <div className="grid grid-cols-2 gap-3">
+                                <Select
+                                  value={draft.seasonStartMonth}
+                                  onValueChange={(value) => updateDraft(product.id, 'seasonStartMonth', value)}
+                                >
+                                  <SelectTrigger className="focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2">
+                                    <SelectValue placeholder="Start month" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {MONTH_OPTIONS.map((month) => (
+                                      <SelectItem key={`start-${month.value}`} value={String(month.value)}>
+                                        {month.label}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <Select
+                                  value={draft.seasonEndMonth}
+                                  onValueChange={(value) => updateDraft(product.id, 'seasonEndMonth', value)}
+                                >
+                                  <SelectTrigger className="focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2">
+                                    <SelectValue placeholder="End month" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {MONTH_OPTIONS.map((month) => (
+                                      <SelectItem key={`end-${month.value}`} value={String(month.value)}>
+                                        {month.label}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <p className="text-xs text-gray-500">
+                                Customers can order this product only during the chosen months.
+                              </p>
+                            </div>
+                          )}
                           <div className="space-y-3">
                             <div className="flex items-center gap-2 pt-6">
                               <Switch
@@ -771,7 +991,7 @@ export function ProducerInventoryPage() {
                               <p className="font-medium">Quick tips:</p>
                               <ul className="space-y-1 text-blue-800">
                                 <li>Stock level 0 hides products from customer search.</li>
-                                <li>Use harvest date + in-season status for seasonal visibility.</li>
+                                <li>Use a seasonal window for produce that should automatically appear and disappear through the year.</li>
                                 <li>Use surplus deals to move low-stock or short-life items quickly.</li>
                               </ul>
                             </div>
@@ -787,8 +1007,8 @@ export function ProducerInventoryPage() {
         )}
       </main>
 
-      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-        <DialogContent className="sm:max-w-2xl">
+      <Dialog open={createDialogOpen} onOpenChange={handleCreateDialogChange}>
+        <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add New Product</DialogTitle>
             <DialogDescription>
@@ -902,25 +1122,115 @@ export function ProducerInventoryPage() {
               </div>
             </div>
 
-            <div className="grid md:grid-cols-2 gap-4">
+            {newProduct.availability === 'in-season' && (
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="new-season-start">Season starts</Label>
+                  <Select
+                    value={newProduct.seasonStartMonth}
+                    onValueChange={(value) => setNewProduct((previous) => ({ ...previous, seasonStartMonth: value }))}
+                  >
+                    <SelectTrigger id="new-season-start">
+                      <SelectValue placeholder="Select start month" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MONTH_OPTIONS.map((month) => (
+                        <SelectItem key={`new-start-${month.value}`} value={String(month.value)}>
+                          {month.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="new-season-end">Season ends</Label>
+                  <Select
+                    value={newProduct.seasonEndMonth}
+                    onValueChange={(value) => setNewProduct((previous) => ({ ...previous, seasonEndMonth: value }))}
+                  >
+                    <SelectTrigger id="new-season-end">
+                      <SelectValue placeholder="Select end month" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MONTH_OPTIONS.map((month) => (
+                        <SelectItem key={`new-end-${month.value}`} value={String(month.value)}>
+                          {month.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+
+            <div className="grid md:grid-cols-2 gap-4 items-start">
               <div className="space-y-2">
                 <Label htmlFor="new-allergens">Allergen Information</Label>
-                <Input
-                  id="new-allergens"
-                  value={newProduct.allergens}
-                  onChange={(event) => setNewProduct((previous) => ({ ...previous, allergens: event.target.value }))}
-                  placeholder="e.g., Milk, Nuts"
-                />
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      id="new-allergens"
+                      type="button"
+                      variant="outline"
+                      className="w-full items-start justify-between gap-3 text-left font-normal whitespace-normal"
+                    >
+                      <span>{getSelectedAllergenSummary(newProduct.allergens)}</span>
+                      <ChevronDown className="size-4 shrink-0 opacity-60" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" className="w-[min(32rem,calc(100vw-3rem))] p-0">
+                    <div className="border-b px-4 py-3">
+                      <p className="text-sm font-medium text-slate-900">UK allergen checklist</p>
+                      <p className="text-sm text-slate-600">Tick every allergen present in this product. Leave all unchecked if none apply.</p>
+                    </div>
+                    <ScrollArea className="h-64">
+                      <div className="space-y-1 p-2">
+                        {ALLERGEN_OPTIONS.map((allergen, index) => {
+                          const checkboxId = `new-allergen-${index}`;
+                          return (
+                            <label
+                              key={allergen}
+                              htmlFor={checkboxId}
+                              className="flex cursor-pointer items-start gap-3 rounded-md px-3 py-2 hover:bg-slate-50"
+                            >
+                              <Checkbox
+                                id={checkboxId}
+                                checked={newProduct.allergens.includes(allergen)}
+                                onCheckedChange={(checked) =>
+                                  setNewProduct((previous) => ({
+                                    ...previous,
+                                    allergens: toggleSelectedAllergen(previous.allergens, allergen, checked === true),
+                                  }))
+                                }
+                                className="mt-0.5"
+                              />
+                              <span className="text-sm leading-5 text-slate-700">{allergen}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </ScrollArea>
+                  </PopoverContent>
+                </Popover>
+                <p className="text-sm text-gray-500">Choose from the 14 UK law allergens instead of typing them manually.</p>
+                {newProduct.allergens.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {newProduct.allergens.map((allergen) => (
+                      <Badge key={allergen} variant="secondary" className="max-w-full whitespace-normal">
+                        {allergen}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="new-image">Image URL (optional)</Label>
-                <Input
-                  id="new-image"
-                  value={newProduct.imageUrl}
-                  onChange={(event) => setNewProduct((previous) => ({ ...previous, imageUrl: event.target.value }))}
-                  placeholder="https://..."
-                />
-              </div>
+              <ImageSourceField
+                id="new-image"
+                label="Image URL (optional)"
+                value={newProduct.imageUrl}
+                onChange={(value) => setNewProduct((previous) => ({ ...previous, imageUrl: value }))}
+                uploadScope="products"
+                helpText="Paste an image URL or upload a product photo from your computer."
+              />
             </div>
 
             <div className="grid md:grid-cols-2 gap-4">

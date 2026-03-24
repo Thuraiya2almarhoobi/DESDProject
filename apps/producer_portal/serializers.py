@@ -16,6 +16,11 @@ class ProducerProductSerializer(serializers.ModelSerializer):
     producer_email = serializers.EmailField(source="producer.email", read_only=True)
     producer_location = serializers.SerializerMethodField()
     is_visible_to_customers = serializers.BooleanField(read_only=True)
+    effective_availability = serializers.CharField(read_only=True)
+    seasonal_window_label = serializers.CharField(read_only=True)
+    season_status_message = serializers.CharField(read_only=True)
+    season_reminder_message = serializers.CharField(read_only=True)
+    is_currently_in_season = serializers.SerializerMethodField()
 
     class Meta:
         model = ProducerProduct
@@ -31,6 +36,13 @@ class ProducerProductSerializer(serializers.ModelSerializer):
             "price",
             "unit",
             "availability",
+            "effective_availability",
+            "season_start_month",
+            "season_end_month",
+            "seasonal_window_label",
+            "season_status_message",
+            "season_reminder_message",
+            "is_currently_in_season",
             "stock_quantity",
             "allergen_information",
             "harvest_date",
@@ -58,6 +70,26 @@ class ProducerProductSerializer(serializers.ModelSerializer):
         if email == "producer@example.com":
             return "Kent, UK"
         return "Bristol, UK"
+
+    def get_is_currently_in_season(self, obj: ProducerProduct) -> bool:
+        return obj.is_currently_in_season()
+
+    def validate(self, attrs):
+        instance = getattr(self, "instance", None)
+        availability = attrs.get("availability", getattr(instance, "availability", None))
+        season_start_month = attrs.get("season_start_month", getattr(instance, "season_start_month", None))
+        season_end_month = attrs.get("season_end_month", getattr(instance, "season_end_month", None))
+
+        if availability == "in_season":
+            errors = {}
+            if not season_start_month:
+                errors["season_start_month"] = "Season start month is required for seasonal products."
+            if not season_end_month:
+                errors["season_end_month"] = "Season end month is required for seasonal products."
+            if errors:
+                raise serializers.ValidationError(errors)
+
+        return attrs
 
 
 class ProducerOrderItemSerializer(serializers.ModelSerializer):

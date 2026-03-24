@@ -57,7 +57,10 @@ interface ProducerProductApiView {
   name: string;
   stock: number;
   availability: 'in-season' | 'year-round' | 'unavailable';
+  configuredAvailability?: 'in-season' | 'year-round' | 'unavailable';
+  effectiveAvailability?: 'in-season' | 'year-round' | 'unavailable';
   isSurplus?: boolean;
+  seasonalReminderMessage?: string;
 }
 
 interface WeeklySettlementApi {
@@ -120,7 +123,10 @@ export function ProducerDashboardPage() {
             name: product.name,
             stock: product.stock,
             availability: product.availability,
+            configuredAvailability: product.configuredAvailability,
+            effectiveAvailability: product.effectiveAvailability,
             isSurplus: product.isSurplus,
+            seasonalReminderMessage: product.seasonalReminderMessage,
           })),
         );
         setSettlements(settlementPayload);
@@ -154,7 +160,11 @@ export function ProducerDashboardPage() {
   const lowStockProducts = useMemo(() => products.filter((product) => product.stock > 0 && product.stock < 10), [products]);
   const outOfStockProducts = useMemo(() => products.filter((product) => product.stock === 0), [products]);
   const unavailableProducts = useMemo(
-    () => products.filter((product) => product.availability === 'unavailable'),
+    () => products.filter((product) => (product.effectiveAvailability ?? product.availability) === 'unavailable'),
+    [products],
+  );
+  const seasonStartingSoonProducts = useMemo(
+    () => products.filter((product) => Boolean(product.seasonalReminderMessage)),
     [products],
   );
   const activeSurplusDeals = useMemo(() => products.filter((product) => product.isSurplus && product.stock > 0), [products]);
@@ -234,6 +244,18 @@ export function ProducerDashboardPage() {
       });
     }
 
+    if (seasonStartingSoonProducts.length > 0) {
+      queue.push({
+        id: 'season-starting',
+        title: `${seasonStartingSoonProducts.length} seasonal product${seasonStartingSoonProducts.length === 1 ? '' : 's'} starting soon`,
+        description: seasonStartingSoonProducts[0]?.seasonalReminderMessage || 'Check seasonal windows before products go live',
+        path: '/producer/inventory',
+        variant: 'outline',
+        icon: Calendar,
+        action: 'Review season plan',
+      });
+    }
+
     queue.push({
       id: 'payments',
       title: latestSettlement
@@ -257,6 +279,7 @@ export function ProducerDashboardPage() {
     latestSettlement,
     latestSettlementNet,
     latestSettlementWeek,
+    seasonStartingSoonProducts,
   ]);
 
   const primaryActions = [

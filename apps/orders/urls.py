@@ -14,13 +14,41 @@ from .views import (
     ProducerListCreateAPIView,
     ProducerSubOrderListAPIView,
     ProducerSubOrderStatusUpdateAPIView,
+    ProductDetailAPIView,
+    ProductReviewEligibilityAPIView,
+    ProductReviewModerationAPIView,
+    PendingReviewModerationQueueAPIView,
+    ProductReviewResponseAPIView,
     ProductListCreateAPIView,
+    ProductReviewsAPIView,
 )
 
 urlpatterns = [
     path("profile/", CustomerProfileAPIView.as_view(), name="orders-profile"),
     path("producers/", ProducerListCreateAPIView.as_view(), name="orders-producers"),
     path("products/", ProductListCreateAPIView.as_view(), name="orders-products"),
+    path("products/<int:pk>/", ProductDetailAPIView.as_view(), name="orders-product-detail"),
+    path("products/<int:product_id>/reviews/", ProductReviewsAPIView.as_view(), name="orders-product-reviews"),
+    path(
+        "products/<int:product_id>/reviews/eligibility/",
+        ProductReviewEligibilityAPIView.as_view(),
+        name="orders-product-review-eligibility",
+    ),
+    path(
+        "products/<int:product_id>/reviews/<int:review_id>/response/",
+        ProductReviewResponseAPIView.as_view(),
+        name="orders-product-review-response",
+    ),
+    path(
+        "products/<int:product_id>/reviews/<int:review_id>/moderate/",
+        ProductReviewModerationAPIView.as_view(),
+        name="orders-product-review-moderate",
+    ),
+    path(
+        "reviews/moderation-queue/",
+        PendingReviewModerationQueueAPIView.as_view(),
+        name="orders-review-moderation-queue",
+    ),
     path("cart/", CartAPIView.as_view(), name="orders-cart"),
     path("cart/items/", CartItemAddAPIView.as_view(), name="orders-cart-item-add"),
     path("cart/items/<int:item_id>/", CartItemDetailAPIView.as_view(), name="orders-cart-item-detail"),

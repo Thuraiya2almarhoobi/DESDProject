@@ -1,5 +1,6 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 
+import { resolveApiPathBase } from './apiBase';
 import {
   clearAuthStorage,
   getAccessToken,
@@ -12,8 +13,7 @@ type ExtendedRequestConfig = InternalAxiosRequestConfig & {
 };
 
 const env = import.meta.env as Record<string, string | undefined>;
-const rawApiBaseUrl = env.VITE_API_URL ?? env.REACT_APP_API_URL ?? 'http://127.0.0.1:8000/api';
-const apiBaseUrl = rawApiBaseUrl.replace(/\/$/, '');
+const apiBaseUrl = resolveApiPathBase(env.VITE_API_URL ?? env.REACT_APP_API_URL, '/api');
 
 const apiClient = axios.create({
   baseURL: apiBaseUrl,

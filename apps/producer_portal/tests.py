@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from calendar import month_abbr
 from datetime import timedelta
 from decimal import Decimal
 
@@ -8,6 +9,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from apps.catalog.models import Product as CatalogProduct
 from apps.orders.models import Producer as OrdersProducer
 from apps.orders.models import Product as OrdersProduct
 from apps.producer_portal.models import (
@@ -69,6 +71,8 @@ class ProducerPortalCriticalTestCases(APITestCase):
             "price": "3.50",
             "unit": "dozen",
             "availability": ProductAvailability.IN_SEASON,
+            "season_start_month": 1,
+            "season_end_month": 3,
             "stock_quantity": 50,
             "allergen_information": "Contains eggs",
             "harvest_date": timezone.localdate().isoformat(),
@@ -212,6 +216,13 @@ class ProducerPortalCriticalTestCases(APITestCase):
                 is_available=True,
             ).exists()
         )
+        self.assertTrue(
+            CatalogProduct.objects.filter(
+                producer__name=orders_producer.business_name,
+                name="Sync Ready Beetroot",
+                stock=14,
+            ).exists()
+        )
 
         patch_response = self.client.patch(
             f"/api/producer/products/{create_response.data['id']}/",
@@ -237,6 +248,14 @@ class ProducerPortalCriticalTestCases(APITestCase):
                 is_available=False,
             ).exists()
         )
+        self.assertTrue(
+            CatalogProduct.objects.filter(
+                producer__name=orders_producer.business_name,
+                name="Synced Beetroot Renamed",
+                stock=0,
+                availability="unavailable",
+            ).exists()
+        )
 
         delete_response = self.client.delete(f"/api/producer/products/{create_response.data['id']}/")
         self.assertEqual(delete_response.status_code, status.HTTP_204_NO_CONTENT)
@@ -246,3 +265,129 @@ class ProducerPortalCriticalTestCases(APITestCase):
                 name="Synced Beetroot Renamed",
             ).exists()
         )
+        self.assertFalse(
+            CatalogProduct.objects.filter(
+                producer__name=orders_producer.business_name,
+                name="Synced Beetroot Renamed",
+            ).exists()
+        )
+
+    def test_seasonal_product_requires_start_and_end_months(self):
+        payload = {
+            "name": "Spring Asparagus",
+            "category": "Vegetables",
+            "description": "Seasonal asparagus",
+            "price": "4.10",
+            "unit": "kg",
+            "availability": ProductAvailability.IN_SEASON,
+            "stock_quantity": 12,
+            "allergen_information": "",
+            "harvest_date": timezone.localdate().isoformat(),
+        }
+
+        response = self.client.post("/api/producer/products/", payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("season_start_month", response.data)
+
+    def test_future_season_product_exposes_reminder_and_stays_hidden_from_public_feed(self):
+        today = timezone.localdate()
+        start_month = (today.month % 12) + 1
+        end_month = ((today.month + 2) % 12) + 1
+        payload = {
+            "name": "Summer Courgettes",
+            "category": "Vegetables",
+            "description": "Courgettes for the next season window.",
+            "price": "2.70",
+            "unit": "kg",
+            "availability": ProductAvailability.IN_SEASON,
+            "season_start_month": start_month,
+            "season_end_month": end_month,
+            "stock_quantity": 25,
+            "allergen_information": "",
+            "harvest_date": today.isoformat(),
+        }
+
+        create_response = self.client.post("/api/producer/products/", payload, format="json")
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+
+        producer_list = self.client.get("/api/producer/products/")
+        self.assertEqual(producer_list.status_code, status.HTTP_200_OK)
+        created = next(item for item in producer_list.data if item["name"] == "Summer Courgettes")
+        self.assertEqual(created["effective_availability"], ProductAvailability.UNAVAILABLE)
+        self.assertEqual(created["seasonal_window_label"], f"{month_abbr[start_month]} - {month_abbr[end_month]}")
+        self.assertTrue(created["season_reminder_message"])
+
+        public_feed = self.client.get("/api/producer/public/products/")
+        self.assertEqual(public_feed.status_code, status.HTTP_200_OK)
+        self.assertFalse(any(item["name"] == "Summer Courgettes" for item in public_feed.data))
+    def test_delivered_producer_order_reduces_inventory_only_when_completed(self):
+        payload = {
+            "name": "Inventory Reduction Potatoes",
+            "category": "Vegetables",
+            "description": "Stock deduction verification",
+            "price": "2.00",
+            "unit": "kg",
+            "availability": ProductAvailability.YEAR_ROUND,
+            "stock_quantity": 100,
+            "allergen_information": "",
+            "harvest_date": timezone.localdate().isoformat(),
+        }
+        create_response = self.client.post("/api/producer/products/", payload, format="json")
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+
+        product = ProducerProduct.objects.get(id=create_response.data["id"])
+        orders_producer = OrdersProducer.objects.get(user=self.producer)
+        synced_orders_product = OrdersProduct.objects.get(
+            producer=orders_producer,
+            name=payload["name"],
+        )
+
+        order = self._create_order(
+            self.producer,
+            "ORD-DELIVER-STOCK-1",
+            delivery_offset_hours=72,
+            customer_name="Inventory Customer",
+        )
+        ProducerOrderItem.objects.create(
+            order=order,
+            product=product,
+            product_name=product.name,
+            quantity=Decimal("5.00"),
+            unit_price=Decimal("2.00"),
+        )
+
+        for next_status in [OrderStatus.CONFIRMED, OrderStatus.PREPARING, OrderStatus.READY]:
+            response_ = self.client.patch(
+                f"/api/producer/orders/{order.id}/status/",
+                {"status": next_status},
+                format="json",
+            )
+            self.assertEqual(response_.status_code, status.HTTP_200_OK)
+            product.refresh_from_db()
+            synced_orders_product.refresh_from_db()
+            self.assertEqual(product.stock_quantity, 100)
+            self.assertEqual(synced_orders_product.stock_quantity, Decimal("100.00"))
+
+        delivered_response = self.client.patch(
+            f"/api/producer/orders/{order.id}/status/",
+            {"status": OrderStatus.DELIVERED},
+            format="json",
+        )
+        self.assertEqual(delivered_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(delivered_response.data["status"], OrderStatus.DELIVERED)
+
+        product.refresh_from_db()
+        synced_orders_product.refresh_from_db()
+        order.refresh_from_db()
+        self.assertEqual(order.status, OrderStatus.DELIVERED)
+        self.assertEqual(product.stock_quantity, 95)
+        self.assertEqual(synced_orders_product.stock_quantity, Decimal("95.00"))
+
+        delivered_again_response = self.client.patch(
+            f"/api/producer/orders/{order.id}/status/",
+            {"status": OrderStatus.DELIVERED},
+            format="json",
+        )
+        self.assertEqual(delivered_again_response.status_code, status.HTTP_200_OK)
+        product.refresh_from_db()
+        self.assertEqual(product.stock_quantity, 95)

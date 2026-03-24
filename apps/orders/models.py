@@ -5,6 +5,8 @@ from django.conf import settings
 from django.core.validators import MinValueValidator
 from django.db import models
 
+from bristol_marketplace.seasonality import format_month_range, is_current_month_in_range
+
 
 def _generate_order_number() -> str:
     return f"ORD-{uuid4().hex[:10].upper()}"
@@ -62,6 +64,16 @@ class Product(models.Model):
     )
     is_available = models.BooleanField(default=True)
     in_season = models.BooleanField(default=True)
+    season_start_month = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1), MaxValueValidator(12)],
+    )
+    season_end_month = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1), MaxValueValidator(12)],
+    )
     harvest_date = models.DateField(null=True, blank=True)
     allergen_info = models.CharField(max_length=255, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -69,6 +81,27 @@ class Product(models.Model):
 
     class Meta:
         ordering = ["name"]
+
+    @property
+    def seasonal_window_label(self) -> str:
+        return format_month_range(self.season_start_month, self.season_end_month)
+
+    def is_currently_in_season(self, reference_date=None) -> bool:
+        if self.season_start_month and self.season_end_month:
+            return is_current_month_in_range(self.season_start_month, self.season_end_month, reference_date)
+        return bool(self.in_season)
+
+    def effective_availability(self, reference_date=None) -> str:
+        if not self.is_available or self.stock_quantity <= Decimal("0.00"):
+            return "unavailable"
+        if self.season_start_month and self.season_end_month:
+            return "in-season" if self.is_currently_in_season(reference_date) else "unavailable"
+        if self.in_season:
+            return "in-season"
+        return "year-round"
+
+    def is_orderable(self, reference_date=None) -> bool:
+        return self.effective_availability(reference_date) != "unavailable"
 
     def __str__(self) -> str:
         return f"{self.name} ({self.producer.business_name})"

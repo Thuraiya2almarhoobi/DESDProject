@@ -6,7 +6,21 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from apps.content.models import FarmStory, Recipe, RecipeProduct
-from apps.orders.models import CustomerProfile, Producer, Product
+from apps.community.models import ProductReview
+from apps.orders.models import (
+    CustomerProfile,
+    Order,
+    OrderItem,
+    PaymentTransaction,
+    Producer,
+    ProducerSubOrder,
+    Product,
+)
+from apps.orders.marketplace_sync import (
+    _available_orders_business_name,
+    get_or_create_catalog_product_mirror,
+    sync_orders_product_from_producer_product,
+)
 from apps.payments.services import get_previous_week_range, process_weekly_settlements
 from apps.producer_portal.models import (
     OrderStatus,
@@ -75,6 +89,24 @@ class Command(BaseCommand):
             is_staff=True,
             is_superuser=True,
         )
+        finance_admin_user, finance_admin_created = upsert_user(
+            "finance.admin@example.com",
+            role=User.Role.ADMIN,
+            is_staff=True,
+            is_superuser=True,
+        )
+        operations_admin_user, operations_admin_created = upsert_user(
+            "operations.admin@example.com",
+            role=User.Role.ADMIN,
+            is_staff=True,
+            is_superuser=True,
+        )
+        audit_admin_user, audit_admin_created = upsert_user(
+            "audit.admin@example.com",
+            role=User.Role.ADMIN,
+            is_staff=True,
+            is_superuser=True,
+        )
 
         CustomerProfile.objects.update_or_create(
             user=customer_user,
@@ -86,28 +118,20 @@ class Command(BaseCommand):
             },
         )
 
-        bristol_farm, _ = Producer.objects.update_or_create(
-            business_name="Bristol Valley Farm",
-            defaults={
-                "user": producer_user,
-                "contact_email": producer_user.email,
-                "phone": "01179123456",
-                "postcode": "BS1 4DJ",
-                "lead_time_hours": 48,
-                "is_active": True,
-            },
+        bristol_farm = self._upsert_orders_producer(
+            user=producer_user,
+            desired_business_name="Bristol Valley Farm",
+            phone="01179123456",
+            postcode="BS1 4DJ",
+            lead_time_hours=48,
         )
 
-        hillside_dairy, _ = Producer.objects.update_or_create(
-            business_name="Hillside Dairy",
-            defaults={
-                "user": producer_two_user,
-                "contact_email": producer_two_user.email,
-                "phone": "01179001122",
-                "postcode": "BS3 2AA",
-                "lead_time_hours": 72,
-                "is_active": True,
-            },
+        hillside_dairy = self._upsert_orders_producer(
+            user=producer_two_user,
+            desired_business_name="Hillside Dairy",
+            phone="01179001122",
+            postcode="BS3 2AA",
+            lead_time_hours=72,
         )
 
         product_specs = [
@@ -121,6 +145,23 @@ class Command(BaseCommand):
                 "stock_quantity": Decimal("120.00"),
                 "is_available": True,
                 "in_season": True,
+                "season_start_month": 1,
+                "season_end_month": 3,
+                "harvest_date": date.today(),
+                "allergen_info": "",
+            },
+            {
+                "producer": bristol_farm,
+                "name": "Organic Tomatoes",
+                "category": "Vegetables",
+                "description": "Vine-ripened tomatoes with rich flavour for salads, sandwiches, and family meals.",
+                "unit": "kg",
+                "price": Decimal("2.60"),
+                "stock_quantity": Decimal("90.00"),
+                "is_available": True,
+                "in_season": True,
+                "season_start_month": 6,
+                "season_end_month": 8,
                 "harvest_date": date.today(),
                 "allergen_info": "",
             },
@@ -134,6 +175,8 @@ class Command(BaseCommand):
                 "stock_quantity": Decimal("80.00"),
                 "is_available": True,
                 "in_season": True,
+                "season_start_month": 4,
+                "season_end_month": 6,
                 "harvest_date": date.today(),
                 "allergen_info": "",
             },
@@ -214,10 +257,29 @@ class Command(BaseCommand):
                     "price": Decimal("1.80"),
                     "unit": "kg",
                     "availability": ProductAvailability.IN_SEASON,
+                    "season_start_month": 1,
+                    "season_end_month": 3,
                     "stock_quantity": 120,
                     "allergen_information": "",
                     "harvest_date": date.today(),
                     "image_url": "https://images.unsplash.com/photo-1447175008436-054170c2e979?w=800",
+                },
+            ),
+            (
+                producer_user,
+                {
+                    "name": "Organic Tomatoes",
+                    "category": "Vegetables",
+                    "description": "Vine-ripened tomatoes with rich flavour for salads, sandwiches, and family meals.",
+                    "price": Decimal("2.60"),
+                    "unit": "kg",
+                    "availability": ProductAvailability.IN_SEASON,
+                    "season_start_month": 6,
+                    "season_end_month": 8,
+                    "stock_quantity": 90,
+                    "allergen_information": "",
+                    "harvest_date": date.today(),
+                    "image_url": "https://images.unsplash.com/photo-1546094096-0df4bcaaa337?w=800",
                 },
             ),
             (
@@ -229,10 +291,27 @@ class Command(BaseCommand):
                     "price": Decimal("2.10"),
                     "unit": "kg",
                     "availability": ProductAvailability.IN_SEASON,
+                    "season_start_month": 4,
+                    "season_end_month": 6,
                     "stock_quantity": 80,
                     "allergen_information": "",
                     "harvest_date": date.today(),
                     "image_url": "https://images.unsplash.com/photo-1518843875459-f738682238a6?w=800",
+                },
+            ),
+            (
+                producer_user,
+                {
+                    "name": "Potatoes",
+                    "category": "Vegetables",
+                    "description": "Locally grown potatoes suitable for bulk and household orders.",
+                    "price": Decimal("1.40"),
+                    "unit": "kg",
+                    "availability": ProductAvailability.YEAR_ROUND,
+                    "stock_quantity": 300,
+                    "allergen_information": "",
+                    "harvest_date": date.today(),
+                    "image_url": "https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=800",
                 },
             ),
             (
@@ -254,7 +333,7 @@ class Command(BaseCommand):
                 producer_two_user,
                 {
                     "name": "Organic Free Range Eggs",
-                    "category": "Dairy & Eggs",
+                    "category": "Eggs",
                     "description": "Free-range eggs collected daily.",
                     "price": Decimal("3.50"),
                     "unit": "dozen",
@@ -263,6 +342,21 @@ class Command(BaseCommand):
                     "allergen_information": "Eggs",
                     "harvest_date": date.today(),
                     "image_url": "https://images.unsplash.com/photo-1518569656558-1f25e69d93d7?w=800",
+                },
+            ),
+            (
+                producer_two_user,
+                {
+                    "name": "Walnut Bread",
+                    "category": "Bakery",
+                    "description": "Artisan bread loaf with walnuts and whole wheat flour.",
+                    "price": Decimal("4.20"),
+                    "unit": "each",
+                    "availability": ProductAvailability.YEAR_ROUND,
+                    "stock_quantity": 60,
+                    "allergen_information": "Gluten, Nuts",
+                    "harvest_date": date.today(),
+                    "image_url": "https://images.unsplash.com/photo-1509440159596-0249088772ff?w=800",
                 },
             ),
         ]
@@ -274,6 +368,7 @@ class Command(BaseCommand):
                 defaults=defaults,
             )
             producer_products_by_name[f"{producer_user_obj.email}:{product.name}"] = product
+            sync_orders_product_from_producer_product(product)
 
         def upsert_portal_order(
             *,
@@ -378,6 +473,140 @@ class Command(BaseCommand):
         )
         process_weekly_settlements(reference_date=timezone.localdate())
 
+        def upsert_commission_report_order(
+            *,
+            order_number: str,
+            created_at,
+            delivery_address: str,
+            postcode: str,
+            total_amount: Decimal,
+            commission_amount: Decimal,
+            producer_payout_total: Decimal,
+            payment_reference: str,
+            sub_order_specs: list[dict],
+        ):
+            order, _ = Order.objects.update_or_create(
+                order_number=order_number,
+                defaults={
+                    "customer": customer_user,
+                    "status": Order.Status.DELIVERED,
+                    "payment_status": Order.PaymentStatus.PAID,
+                    "delivery_address": delivery_address,
+                    "customer_postcode": postcode,
+                    "special_instructions": "Admin reporting reference order",
+                    "subtotal_amount": total_amount,
+                    "commission_rate": Decimal("0.05"),
+                    "commission_amount": commission_amount,
+                    "total_amount": total_amount,
+                    "producer_payout_total": producer_payout_total,
+                    "payment_method": "test_card",
+                    "payment_reference": payment_reference,
+                },
+            )
+
+            ProducerSubOrder.objects.filter(order=order).delete()
+            OrderItem.objects.filter(order=order).delete()
+
+            for spec in sub_order_specs:
+                sub_order = ProducerSubOrder.objects.create(
+                    order=order,
+                    producer=spec["producer"],
+                    status=Order.Status.DELIVERED,
+                    delivery_date=created_at.date() + timedelta(days=2),
+                    subtotal_amount=spec["subtotal_amount"],
+                    commission_amount=spec["commission_amount"],
+                    payout_amount=spec["payout_amount"],
+                    notes="Seeded commission reporting data",
+                )
+                OrderItem.objects.create(
+                    order=order,
+                    sub_order=sub_order,
+                    product=spec["product"],
+                    product_name=spec["product_name"],
+                    producer_name=spec["producer"].business_name,
+                    unit=spec.get("unit", "kg"),
+                    quantity=spec["quantity"],
+                    unit_price=spec["unit_price"],
+                    line_total=spec["line_total"],
+                )
+
+            payment, _ = PaymentTransaction.objects.update_or_create(
+                order=order,
+                defaults={
+                    "provider": "mock",
+                    "provider_reference": payment_reference,
+                    "amount": total_amount,
+                    "currency": "GBP",
+                    "status": "succeeded",
+                    "test_mode": True,
+                    "raw_payload": {"seeded": True, "source": "seed_demo_data"},
+                },
+            )
+            Order.objects.filter(id=order.id).update(created_at=created_at, updated_at=created_at)
+            PaymentTransaction.objects.filter(id=payment.id).update(created_at=created_at + timedelta(minutes=5))
+
+        commission_now = timezone.now()
+        upsert_commission_report_order(
+            order_number="ORD-COMM-100",
+            created_at=commission_now - timedelta(days=10),
+            delivery_address="1 Report Street, Bristol",
+            postcode="BS1 2AA",
+            total_amount=Decimal("100.00"),
+            commission_amount=Decimal("5.00"),
+            producer_payout_total=Decimal("95.00"),
+            payment_reference="PAY-REF-100",
+            sub_order_specs=[
+                {
+                    "producer": bristol_farm,
+                    "product": products_by_name["Organic Tomatoes"],
+                    "product_name": "Organic Tomatoes",
+                    "subtotal_amount": Decimal("100.00"),
+                    "commission_amount": Decimal("5.00"),
+                    "payout_amount": Decimal("95.00"),
+                    "quantity": Decimal("50.00"),
+                    "unit_price": Decimal("2.00"),
+                    "line_total": Decimal("100.00"),
+                    "unit": "kg",
+                }
+            ],
+        )
+        upsert_commission_report_order(
+            order_number="ORD-COMM-150",
+            created_at=commission_now - timedelta(days=3),
+            delivery_address="2 Report Street, Bristol",
+            postcode="BS1 2AA",
+            total_amount=Decimal("150.00"),
+            commission_amount=Decimal("7.50"),
+            producer_payout_total=Decimal("142.50"),
+            payment_reference="PAY-REF-150",
+            sub_order_specs=[
+                {
+                    "producer": bristol_farm,
+                    "product": products_by_name["Organic Carrots"],
+                    "product_name": "Organic Carrots",
+                    "subtotal_amount": Decimal("80.00"),
+                    "commission_amount": Decimal("4.00"),
+                    "payout_amount": Decimal("76.00"),
+                    "quantity": Decimal("80.00"),
+                    "unit_price": Decimal("1.00"),
+                    "line_total": Decimal("80.00"),
+                    "unit": "kg",
+                },
+                {
+                    "producer": hillside_dairy,
+                    "product": products_by_name["Fresh Milk"],
+                    "product_name": "Fresh Milk",
+                    "subtotal_amount": Decimal("70.00"),
+                    "commission_amount": Decimal("3.50"),
+                    "payout_amount": Decimal("66.50"),
+                    "quantity": Decimal("70.00"),
+                    "unit_price": Decimal("1.00"),
+                    "line_total": Decimal("70.00"),
+                    "unit": "litre",
+                },
+            ],
+        )
+
         recipe, _ = Recipe.objects.update_or_create(
             producer=bristol_farm,
             title="Roasted Root Vegetable Medley",
@@ -417,15 +646,85 @@ class Command(BaseCommand):
             },
         )
 
+        fresh_milk_catalog_product = get_or_create_catalog_product_mirror(products_by_name["Fresh Milk"])
+        ProductReview.objects.update_or_create(
+            product=fresh_milk_catalog_product,
+            reviewer_name="North Bristol Cafe",
+            defaults={
+                "title": "Reliable weekly milk",
+                "rating": 4,
+                "comment": "Reliable milk quality and smooth delivery handoff every week.",
+                "verified_purchase": True,
+                "moderation_status": ProductReview.ModerationStatus.PUBLISHED,
+                "moderation_reason": "",
+                "producer_response": "Thanks for the feedback. We are keeping the weekly chilling schedule the same so your deliveries stay consistent.",
+                "producer_response_at": timezone.now(),
+            },
+        )
+
         self.stdout.write(self.style.SUCCESS("Demo data seeded successfully."))
         self.stdout.write(
             self.style.WARNING(
-                "Accounts: customer@example.com, producer@example.com, producer2@example.com, admin@example.com"
+                "Accounts: customer@example.com, producer@example.com, producer2@example.com, "
+                "admin@example.com, finance.admin@example.com, operations.admin@example.com, audit.admin@example.com"
             )
         )
         self.stdout.write(self.style.WARNING(f"Password for all accounts: {password}"))
         self.stdout.write(
             "Users created/updated: "
             f"customer={customer_created}, producer={producer_created}, "
-            f"producer2={producer_two_created}, admin={admin_created}"
+            f"producer2={producer_two_created}, admin={admin_created}, "
+            f"finance_admin={finance_admin_created}, operations_admin={operations_admin_created}, "
+            f"audit_admin={audit_admin_created}"
         )
+
+    def _upsert_orders_producer(
+        self,
+        *,
+        user,
+        desired_business_name: str,
+        phone: str,
+        postcode: str,
+        lead_time_hours: int,
+    ) -> Producer:
+        producer = Producer.objects.filter(user=user).first()
+        if producer is None:
+            producer = Producer.objects.filter(business_name=desired_business_name).first()
+
+        unique_business_name = _available_orders_business_name(
+            desired_business_name,
+            user=user,
+            exclude_pk=producer.pk if producer else None,
+        )
+
+        if producer is None:
+            return Producer.objects.create(
+                user=user,
+                business_name=unique_business_name,
+                contact_email=user.email,
+                phone=phone,
+                postcode=postcode,
+                lead_time_hours=lead_time_hours,
+                is_active=True,
+            )
+
+        producer.user = user
+        producer.business_name = unique_business_name
+        producer.contact_email = user.email
+        producer.phone = phone
+        producer.postcode = postcode
+        producer.lead_time_hours = lead_time_hours
+        producer.is_active = True
+        producer.save(
+            update_fields=[
+                "user",
+                "business_name",
+                "contact_email",
+                "phone",
+                "postcode",
+                "lead_time_hours",
+                "is_active",
+                "updated_at",
+            ]
+        )
+        return producer

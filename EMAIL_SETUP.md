@@ -12,7 +12,7 @@ Use this as a starting point:
 ```env
 DJANGO_DEBUG=true
 DJANGO_ALLOWED_HOSTS=127.0.0.1,localhost,0.0.0.0
-FRONTEND_URL=http://localhost:5173
+FRONTEND_URL=http://127.0.0.1:8000
 
 # PostgreSQL (docker-compose db service)
 POSTGRES_DB=bristol_marketplace

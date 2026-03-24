@@ -117,7 +117,10 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
     def reviews(self, request, pk=None):
         product = self.get_object()
         if request.method.lower() == "get":
-            reviews = ProductReview.objects.filter(product=product).order_by("-created_at")
+            reviews = ProductReview.objects.filter(
+                product=product,
+                moderation_status=ProductReview.ModerationStatus.PUBLISHED,
+            ).order_by("-created_at")
             serializer = ProductReviewSerializer(reviews, many=True)
             return Response(serializer.data)
 
@@ -135,9 +138,18 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
 
         serializer = ProductReviewCreateSerializer(
             data=request.data,
-            context={"request": request, "product": product},
+            context={
+                "request": request,
+                "product": product,
+                "require_verified_purchase": True,
+            },
         )
         serializer.is_valid(raise_exception=True)
         review = serializer.save()
         response_serializer = ProductReviewSerializer(review)
-        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+        response_status = (
+            status.HTTP_202_ACCEPTED
+            if review.moderation_status == ProductReview.ModerationStatus.PENDING
+            else status.HTTP_201_CREATED
+        )
+        return Response(response_serializer.data, status=response_status)
