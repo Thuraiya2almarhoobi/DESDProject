@@ -1,10 +1,10 @@
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Sprout } from 'lucide-react';
 import { Link } from 'react-router';
 
-import { SiteHeader } from '../SiteHeader';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
+import { cn } from '../ui/utils';
 
 interface PublicPortalShellProps {
   eyebrow: string;
@@ -14,6 +14,8 @@ interface PublicPortalShellProps {
   backHref?: string;
   backLabel?: string;
   insight?: string;
+  compact?: boolean;
+  centered?: boolean;
   children: React.ReactNode;
 }
 
@@ -25,6 +27,8 @@ export function PublicPortalShell({
   backHref,
   backLabel = 'Back',
   insight,
+  compact = false,
+  centered = false,
   children,
 }: PublicPortalShellProps) {
   return (
@@ -35,73 +39,156 @@ export function PublicPortalShell({
         <div className="absolute bottom-[-7rem] left-1/3 h-80 w-80 rounded-full bg-[oklch(0.88_0.05_200/.2)] blur-3xl" />
       </div>
 
-      <SiteHeader />
+      <header className="relative z-10 border-b border-[oklch(0.88_0.02_145)] bg-white/70 backdrop-blur">
+        <div className={cn('mx-auto flex max-w-6xl items-center justify-between px-4', compact ? 'py-3' : 'py-4')}>
+          <Link to="/" className="flex items-center gap-3">
+            <div
+              className={cn(
+                'flex items-center justify-center rounded-2xl bg-[linear-gradient(135deg,oklch(0.43_0.11_155),oklch(0.57_0.08_140))] shadow-sm',
+                compact ? 'h-10 w-10' : 'h-11 w-11',
+              )}
+            >
+              <Sprout className="size-5 text-white" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold tracking-[0.18em] text-[oklch(0.42_0.06_150)] uppercase">
+                Bristol Marketplace
+              </p>
+              <p className={cn('text-sm text-[oklch(0.35_0.03_145)]', compact ? 'hidden sm:block' : '')}>
+                Local produce portals for buyers, producers, and institutions
+              </p>
+            </div>
+          </Link>
 
-      <main className="relative z-10 mx-auto grid max-w-6xl gap-8 px-4 py-10 lg:grid-cols-[1.1fr_0.9fr] lg:py-16">
-        <section className="space-y-6">
-          <div className="flex flex-wrap items-center gap-3">
-            {backHref ? (
-              <Button asChild variant="ghost">
-                <Link to={backHref}>
-                  <ArrowLeft className="mr-2 size-4" />
-                  {backLabel}
-                </Link>
-              </Button>
-            ) : (
-              <Button asChild variant="ghost">
-                <Link to="/login">Generic Login</Link>
-              </Button>
-            )}
-          </div>
+          {backHref ? (
+            <Button asChild variant="ghost">
+              <Link to={backHref}>
+                <ArrowLeft className="mr-2 size-4" />
+                {backLabel}
+              </Link>
+            </Button>
+          ) : (
+            <Button asChild variant="ghost">
+              <Link to="/login">Generic Login</Link>
+            </Button>
+          )}
+        </div>
+      </header>
 
-          <Badge className="rounded-full border border-[oklch(0.82_0.03_145)] bg-white/80 px-4 py-1 text-[0.7rem] font-semibold tracking-[0.22em] text-[oklch(0.42_0.05_145)] uppercase shadow-sm">
-            {eyebrow}
-          </Badge>
-
-          <div className="space-y-4">
-            <h1 className="max-w-2xl text-4xl font-semibold tracking-tight text-[oklch(0.24_0.02_145)] sm:text-5xl">
-              {title}
-            </h1>
-            <p className="max-w-xl text-lg leading-8 text-[oklch(0.36_0.03_145)]">
-              {description}
-            </p>
-          </div>
-
-          <Card className={`border bg-white/82 shadow-lg ${accentClassName ?? ''}`}>
-            <CardContent className="space-y-4 p-6">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div>
-                  <p className="text-xs font-semibold tracking-[0.2em] text-[oklch(0.45_0.05_145)] uppercase">
-                    Portal Experience
-                  </p>
-                  <p className="mt-2 text-sm leading-6 text-[oklch(0.34_0.03_145)]">
-                    Each stakeholder signs in through a dedicated portal while the existing platform authentication and RBAC stay unchanged.
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold tracking-[0.2em] text-[oklch(0.45_0.05_145)] uppercase">
-                    Platform Focus
-                  </p>
-                  <p className="mt-2 text-sm leading-6 text-[oklch(0.34_0.03_145)]">
-                    Shared backend, role-matched portal access, and stakeholder-specific copy and entry points.
-                  </p>
-                </div>
+      <main
+        className={cn(
+          'relative z-10 mx-auto w-full px-4',
+          centered
+            ? 'max-w-5xl min-h-[calc(100vh-4.5rem)] py-4 pb-16 lg:min-h-[calc(100vh-5rem)] lg:py-6 lg:pb-20'
+            : compact
+              ? 'max-w-7xl py-6 lg:py-8'
+              : 'max-w-6xl py-10 lg:py-16',
+        )}
+      >
+        {centered ? (
+          <div className="mx-auto flex w-full max-w-4xl flex-col items-center gap-4">
+            <section className="w-full max-w-3xl space-y-3 text-center">
+              <div className="flex justify-center">
+                <Badge className="rounded-full border border-[oklch(0.82_0.03_145)] bg-white/80 px-4 py-1 text-[0.7rem] font-semibold tracking-[0.22em] text-[oklch(0.42_0.05_145)] uppercase shadow-sm">
+                  {eyebrow}
+                </Badge>
               </div>
 
-              {insight ? (
-                <div className="rounded-2xl border border-white/70 bg-white/75 p-4 text-sm leading-6 text-[oklch(0.3_0.03_145)] shadow-sm">
-                  {insight}
-                </div>
-              ) : null}
-            </CardContent>
-          </Card>
-        </section>
+              <div className={cn(compact ? 'space-y-2.5' : 'space-y-4')}>
+                <h1
+                  className={cn(
+                    'mx-auto max-w-2xl font-semibold tracking-tight text-[oklch(0.24_0.02_145)]',
+                    compact ? 'text-2xl sm:text-3xl' : 'text-4xl sm:text-5xl',
+                  )}
+                >
+                  {title}
+                </h1>
+                <p
+                  className={cn(
+                    'mx-auto max-w-2xl text-[oklch(0.36_0.03_145)]',
+                    compact ? 'text-sm leading-6 sm:text-base' : 'text-lg leading-8',
+                  )}
+                >
+                  {description}
+                </p>
+                {insight ? <p className="mx-auto max-w-2xl text-sm leading-5 text-[oklch(0.34_0.03_145)]">{insight}</p> : null}
+              </div>
+            </section>
 
-        <section>
-          <Card className="border-[oklch(0.87_0.02_145)] bg-white/90 shadow-xl">
-            <CardContent className="p-6 sm:p-8">{children}</CardContent>
-          </Card>
-        </section>
+            <section className="w-full max-w-4xl">
+              <Card className={`border-[oklch(0.87_0.02_145)] bg-white/90 shadow-xl ${accentClassName ?? ''}`}>
+                <CardContent className={cn(compact ? 'p-4 sm:p-5' : 'p-6 sm:p-8')}>{children}</CardContent>
+              </Card>
+            </section>
+          </div>
+        ) : (
+          <div
+            className={cn(
+              'grid',
+              compact ? 'gap-5 lg:grid-cols-[0.78fr_1.22fr]' : 'gap-8 lg:grid-cols-[1.1fr_0.9fr]',
+            )}
+          >
+            <section className={cn(compact ? 'space-y-4' : 'space-y-6')}>
+              <Badge className="rounded-full border border-[oklch(0.82_0.03_145)] bg-white/80 px-4 py-1 text-[0.7rem] font-semibold tracking-[0.22em] text-[oklch(0.42_0.05_145)] uppercase shadow-sm">
+                {eyebrow}
+              </Badge>
+
+              <div className={cn(compact ? 'space-y-3' : 'space-y-4')}>
+                <h1
+                  className={cn(
+                    'max-w-2xl font-semibold tracking-tight text-[oklch(0.24_0.02_145)]',
+                    compact ? 'text-3xl sm:text-4xl' : 'text-4xl sm:text-5xl',
+                  )}
+                >
+                  {title}
+                </h1>
+                <p className={cn('max-w-xl text-[oklch(0.36_0.03_145)]', compact ? 'text-base leading-7' : 'text-lg leading-8')}>
+                  {description}
+                </p>
+              </div>
+
+              <Card className={`border bg-white/82 shadow-lg ${accentClassName ?? ''}`}>
+                <CardContent className={cn(compact ? 'space-y-3 p-5' : 'space-y-4 p-6')}>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <p className="text-xs font-semibold tracking-[0.2em] text-[oklch(0.45_0.05_145)] uppercase">
+                        Portal Experience
+                      </p>
+                      <p className="mt-2 text-sm leading-6 text-[oklch(0.34_0.03_145)]">
+                        Each stakeholder signs in through a dedicated portal while the existing platform authentication and RBAC stay unchanged.
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold tracking-[0.2em] text-[oklch(0.45_0.05_145)] uppercase">
+                        Platform Focus
+                      </p>
+                      <p className="mt-2 text-sm leading-6 text-[oklch(0.34_0.03_145)]">
+                        Shared backend, role-matched portal access, and stakeholder-specific copy and entry points.
+                      </p>
+                    </div>
+                  </div>
+
+                  {insight ? (
+                    <div
+                      className={cn(
+                        'rounded-2xl border border-white/70 bg-white/75 text-sm text-[oklch(0.3_0.03_145)] shadow-sm',
+                        compact ? 'p-3 leading-5' : 'p-4 leading-6',
+                      )}
+                    >
+                      {insight}
+                    </div>
+                  ) : null}
+                </CardContent>
+              </Card>
+            </section>
+
+            <section>
+              <Card className="border-[oklch(0.87_0.02_145)] bg-white/90 shadow-xl">
+                <CardContent className={cn(compact ? 'p-5 sm:p-6' : 'p-6 sm:p-8')}>{children}</CardContent>
+              </Card>
+            </section>
+          </div>
+        )}
       </main>
     </div>
   );
