@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { toast } from 'sonner';
 
+import { SiteHeader } from '../../components/SiteHeader';
 import { Alert, AlertDescription } from '../../components/ui/alert';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
@@ -53,8 +54,9 @@ export function AdminLoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.16),_transparent_32%),radial-gradient(circle_at_bottom_right,_rgba(15,23,42,0.18),_transparent_30%),linear-gradient(135deg,_#08110f_0%,_#0f172a_52%,_#122c22_100%)] px-4 py-10 text-white sm:px-6 lg:px-8">
-      <div className="mx-auto grid min-h-[calc(100vh-5rem)] max-w-7xl gap-8 lg:grid-cols-[1.15fr_0.85fr] lg:items-center">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.16),_transparent_32%),radial-gradient(circle_at_bottom_right,_rgba(15,23,42,0.18),_transparent_30%),linear-gradient(135deg,_#08110f_0%,_#0f172a_52%,_#122c22_100%)] text-white">
+      <SiteHeader showNavigation={false} />
+      <div className="mx-auto grid min-h-[calc(100vh-5rem)] max-w-7xl gap-8 px-4 py-10 sm:px-6 lg:grid-cols-[1.15fr_0.85fr] lg:items-center lg:px-8">
         <section className="rounded-[2rem] border border-white/10 bg-white/6 p-8 shadow-[0_32px_90px_rgba(2,6,23,0.38)] backdrop-blur-xl sm:p-10 lg:p-12">
           <Badge className="rounded-full bg-emerald-400/15 px-4 py-1 text-xs uppercase tracking-[0.35em] text-emerald-100 shadow-none hover:bg-emerald-400/15">
             Administrator access

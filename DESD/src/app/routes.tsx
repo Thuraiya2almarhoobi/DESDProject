@@ -7,11 +7,14 @@ import { SiteShell } from './components/SiteShell';
 
 // Pages
 import { LandingPage } from './pages/LandingPage';
+import { AboutPage } from './pages/AboutPage';
 import { LoginPage } from './pages/LoginPage';
 import { VerifyEmailPage } from './pages/VerifyEmailPage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { AccessDeniedPage } from './pages/AccessDeniedPage';
+import { PublicBrowsePage } from './pages/PublicBrowsePage';
+import { PublicProductDetailPage } from './pages/PublicProductDetailPage';
 import { MarketplacePage } from './pages/MarketplacePage';
 import { ProductDetailPage } from './pages/ProductDetailPage';
 import { CartPage } from './pages/CartPage';
@@ -33,6 +36,7 @@ import { RoleLoginPage } from './pages/portal/RoleLoginPage';
 import { PortalSelectPage } from './pages/portal/PortalSelectPage';
 import { RoleRegisterPage } from './pages/portal/RoleRegisterPage';
 import { StakeholderPortalPage } from './pages/portal/StakeholderPortalPage';
+import { ProducersPage } from './pages/ProducersPage';
 import { RestaurantDashboardPage } from './pages/restaurant/RestaurantDashboardPage';
 import { RestaurantRecurringOrdersPage } from './pages/restaurant/RestaurantRecurringOrdersPage';
 
@@ -46,6 +50,22 @@ export const router = createBrowserRouter([
           {
             path: '/',
             element: <LandingPage />,
+          },
+          {
+            path: '/about',
+            element: <AboutPage />,
+          },
+          {
+            path: '/producers',
+            element: <ProducersPage />,
+          },
+          {
+            path: '/browse',
+            element: <PublicBrowsePage />,
+          },
+          {
+            path: '/browse/product/:id',
+            element: <PublicProductDetailPage />,
           },
           {
             path: '/select-portal',

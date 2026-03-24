@@ -166,7 +166,11 @@ def _deduct_producer_portal_stock_for_delivery(sub_order: ProducerSubOrder) -> N
 
 
 def _producer_sub_order_payload(sub_order: ProducerSubOrder) -> dict:
+    from apps.delivery.serializers import DeliveryJobSerializer
+    from apps.delivery.services import latest_delivery_job
+
     order = sub_order.order
+    delivery_job = latest_delivery_job(sub_order, sync_for_read=True)
     return {
         "id": sub_order.id,
         "order_number": order.order_number,
@@ -184,6 +188,7 @@ def _producer_sub_order_payload(sub_order: ProducerSubOrder) -> dict:
         "lead_time_hours": sub_order.producer.lead_time_hours,
         "notes": sub_order.notes,
         "order_created_at": order.created_at,
+        "delivery": DeliveryJobSerializer(delivery_job).data if delivery_job else None,
         "items": [
             {
                 "product_name": item.product_name,
@@ -589,7 +594,7 @@ class ProducerSubOrderStatusUpdateAPIView(APIView):
     def patch(self, request, sub_order_id: int):
         producer = get_object_or_404(Producer, user=request.user, is_active=True)
         sub_order = get_object_or_404(
-            ProducerSubOrder.objects.select_for_update().select_related("order", "producer").prefetch_related("items"),
+            ProducerSubOrder.objects.select_for_update().select_related("order", "producer").prefetch_related("items", "delivery_jobs"),
             id=sub_order_id,
             producer=producer,
         )
@@ -605,6 +610,13 @@ class ProducerSubOrderStatusUpdateAPIView(APIView):
                     {"detail": f"Invalid status transition from '{sub_order.status}' to '{next_status}'."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+            if next_status == Order.Status.READY:
+                from apps.delivery.services import dispatch_sub_order_to_stuart
+
+                try:
+                    dispatch_sub_order_to_stuart(sub_order)
+                except ValueError as exc:
+                    return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
             sub_order.status = next_status
             sub_order.save(update_fields=["status", "updated_at"])
             if next_status == Order.Status.DELIVERED:

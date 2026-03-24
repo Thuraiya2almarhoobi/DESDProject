@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { CheckCircle2, XCircle } from 'lucide-react';
 
+import { SiteHeader } from '../components/SiteHeader';
 import { Alert, AlertDescription } from '../components/ui/alert';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
@@ -76,63 +77,66 @@ export function ResetPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[oklch(0.96_0.02_145)] via-[oklch(0.94_0.03_142)] to-[oklch(0.92_0.04_150)] p-4">
-      <Card className="w-full max-w-md shadow-lg">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl">Reset Password</CardTitle>
-          <CardDescription>Choose a strong new password for your account.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {!!message && (
-            <Alert>
-              <AlertDescription>{message}</AlertDescription>
-            </Alert>
-          )}
-          {!!error && (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
+    <div className="min-h-screen bg-gradient-to-br from-[oklch(0.96_0.02_145)] via-[oklch(0.94_0.03_142)] to-[oklch(0.92_0.04_150)]">
+      <SiteHeader />
+      <main className="flex items-center justify-center p-4 pt-10">
+        <Card className="w-full max-w-md shadow-lg">
+          <CardHeader className="text-center">
+            <CardTitle className="text-2xl">Reset Password</CardTitle>
+            <CardDescription>Choose a strong new password for your account.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {!!message && (
+              <Alert>
+                <AlertDescription>{message}</AlertDescription>
+              </Alert>
+            )}
+            {!!error && (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="new-password">New Password</Label>
-              <Input
-                id="new-password"
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                required
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {renderRule(`At least ${PASSWORD_MIN_LENGTH} characters`, passwordChecks.minLength)}
-              {renderRule('One uppercase letter', passwordChecks.uppercase)}
-              {renderRule('One lowercase letter', passwordChecks.lowercase)}
-              {renderRule('One number', passwordChecks.number)}
-              {renderRule('One special character', passwordChecks.special)}
-            </div>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="new-password">New Password</Label>
+                <Input
+                  id="new-password"
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  required
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {renderRule(`At least ${PASSWORD_MIN_LENGTH} characters`, passwordChecks.minLength)}
+                {renderRule('One uppercase letter', passwordChecks.uppercase)}
+                {renderRule('One lowercase letter', passwordChecks.lowercase)}
+                {renderRule('One number', passwordChecks.number)}
+                {renderRule('One special character', passwordChecks.special)}
+              </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="confirm-password">Confirm Password</Label>
-              <Input
-                id="confirm-password"
-                type="password"
-                value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
-                required
-              />
-            </div>
+              <div className="space-y-2">
+                <Label htmlFor="confirm-password">Confirm Password</Label>
+                <Input
+                  id="confirm-password"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  required
+                />
+              </div>
 
-            <Button type="submit" className="w-full" disabled={!canSubmit}>
-              {loading ? 'Resetting...' : 'Reset password'}
-            </Button>
-            <Button type="button" variant="outline" className="w-full" onClick={() => navigate('/login')}>
-              Back to login
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+              <Button type="submit" className="w-full" disabled={!canSubmit}>
+                {loading ? 'Resetting...' : 'Reset password'}
+              </Button>
+              <Button type="button" variant="outline" className="w-full" onClick={() => navigate('/login')}>
+                Back to login
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </main>
     </div>
   );
 }

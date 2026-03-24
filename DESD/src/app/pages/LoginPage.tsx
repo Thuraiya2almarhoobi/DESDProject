@@ -104,7 +104,7 @@ export function LoginPage() {
               Create Account
             </Link>
 
-            <Link to="/" className="lfm-btn" style={{ width: '100%', border: '1px solid var(--lfm-border)' }}>
+            <Link to="/browse" className="lfm-btn" style={{ width: '100%', border: '1px solid var(--lfm-border)' }}>
               Browse Marketplace First
             </Link>
           </form>

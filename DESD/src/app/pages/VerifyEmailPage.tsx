@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
+import { SiteHeader } from '../components/SiteHeader';
 import { Alert, AlertDescription } from '../components/ui/alert';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
@@ -41,29 +42,32 @@ export function VerifyEmailPage() {
   }, [location.search]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[oklch(0.96_0.02_145)] via-[oklch(0.94_0.03_142)] to-[oklch(0.92_0.04_150)] p-4">
-      <Card className="w-full max-w-md shadow-lg">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl">Verify Email</CardTitle>
-          <CardDescription>Confirm your account email to complete setup.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {loading && <p className="text-sm text-muted-foreground">Verifying token...</p>}
-          {!!message && (
-            <Alert>
-              <AlertDescription>{message}</AlertDescription>
-            </Alert>
-          )}
-          {!!error && (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-          <Button className="w-full" onClick={() => navigate('/login')}>
-            Back to login
-          </Button>
-        </CardContent>
-      </Card>
+    <div className="min-h-screen bg-gradient-to-br from-[oklch(0.96_0.02_145)] via-[oklch(0.94_0.03_142)] to-[oklch(0.92_0.04_150)]">
+      <SiteHeader />
+      <main className="flex items-center justify-center p-4 pt-10">
+        <Card className="w-full max-w-md shadow-lg">
+          <CardHeader className="text-center">
+            <CardTitle className="text-2xl">Verify Email</CardTitle>
+            <CardDescription>Confirm your account email to complete setup.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {loading && <p className="text-sm text-muted-foreground">Verifying token...</p>}
+            {!!message && (
+              <Alert>
+                <AlertDescription>{message}</AlertDescription>
+              </Alert>
+            )}
+            {!!error && (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+            <Button className="w-full" onClick={() => navigate('/login')}>
+              Back to login
+            </Button>
+          </CardContent>
+        </Card>
+      </main>
     </div>
   );
 }

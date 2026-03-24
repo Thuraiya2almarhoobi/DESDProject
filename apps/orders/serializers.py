@@ -280,6 +280,7 @@ class ProducerSubOrderSerializer(serializers.ModelSerializer):
     producer = ProducerSerializer(read_only=True)
     producer_contact_email = serializers.CharField(source="producer.contact_email", read_only=True)
     producer_contact_phone = serializers.CharField(source="producer.phone", read_only=True)
+    delivery = serializers.SerializerMethodField()
 
     class Meta:
         model = ProducerSubOrder
@@ -294,7 +295,17 @@ class ProducerSubOrderSerializer(serializers.ModelSerializer):
             "commission_amount",
             "payout_amount",
             "notes",
+            "delivery",
         ]
+
+    def get_delivery(self, obj: ProducerSubOrder):
+        from apps.delivery.serializers import DeliveryJobSerializer
+        from apps.delivery.services import latest_delivery_job
+
+        delivery_job = latest_delivery_job(obj, sync_for_read=True)
+        if delivery_job is None:
+            return None
+        return DeliveryJobSerializer(delivery_job).data
 
 
 class OrderItemSerializer(serializers.ModelSerializer):

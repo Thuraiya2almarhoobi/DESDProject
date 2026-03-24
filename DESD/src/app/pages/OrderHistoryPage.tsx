@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
   ArrowLeft,
@@ -7,6 +7,7 @@ import {
   ChevronUp,
   Clock3,
   Download,
+  ExternalLink,
   ReceiptText,
   RotateCcw,
   Route,
@@ -15,9 +16,17 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
-import { ApiOrderDetail, ApiOrderSummary, apiBlob, apiJson } from '../lib/api';
-import { getGoogleMapsDirectionsEmbedUrl, getGoogleMapsDirectionsUrl } from '../lib/googleMaps';
+import { ApiDeliveryInfo, ApiOrderDetail, ApiOrderSummary, apiBlob, apiJson } from '../lib/api';
+import { getDeliverySimulationPollMs } from '../lib/deliverySimulation';
+import {
+  getEffectiveDeliveryEta,
+  getEffectiveDeliveryStatus,
+  getSimulationCompletionMs,
+  isSimulatedSandboxDelivery,
+  isTerminalDeliveryStatus,
+} from '../lib/deliveryTracking';
 import { useSafeBack } from '../lib/navigation';
+import { LiveDeliveryMap } from '../components/LiveDeliveryMap';
 import { SiteHeader } from '../components/SiteHeader';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
@@ -33,9 +42,12 @@ const CURRENT_ORDER_STATUSES = new Set(['pending', 'confirmed', 'ready']);
 const TRACKING_STEPS = [
   { key: 'pending', label: 'Placed' },
   { key: 'confirmed', label: 'Confirmed' },
-  { key: 'ready', label: 'Out for Delivery' },
+  { key: 'assigned', label: 'Assigned' },
+  { key: 'picking_up', label: 'Picking Up' },
+  { key: 'delivering', label: 'Out for Delivery' },
   { key: 'delivered', label: 'Delivered' },
 ] as const;
+const DELIVERY_POLL_MS = getDeliverySimulationPollMs();
 
 function maskPaymentReference(reference: string): string {
   if (!reference || reference.length < 6) {
@@ -58,7 +70,28 @@ function isCurrentOrderStatus(status: string): boolean {
   return CURRENT_ORDER_STATUSES.has(status);
 }
 
-function getTrackingMessage(status: string): string {
+function hasActiveDelivery(delivery?: ApiDeliveryInfo | null, nowMs = Date.now()): boolean {
+  const effectiveStatus = getEffectiveDeliveryStatus(delivery, nowMs) || delivery?.status;
+  return Boolean(effectiveStatus && !isTerminalDeliveryStatus(effectiveStatus));
+}
+
+function getTrackingMessage(status: string, deliveryStatus?: string | null): string {
+  switch (deliveryStatus) {
+    case 'assigned':
+      return 'A rider has been assigned and is preparing to collect the order from the producer.';
+    case 'waiting_pickup':
+    case 'picking_up':
+      return 'The rider is at the producer pickup point and preparing the collection.';
+    case 'picked_up':
+      return 'The order has been collected and is about to start the delivery route.';
+    case 'delivering':
+      return 'Out for delivery. The rider is currently on the way to the delivery address.';
+    case 'delivered':
+      return 'This order has been delivered successfully.';
+    default:
+      break;
+  }
+
   switch (status) {
     case 'pending':
       return 'Order placed. The producer still needs to confirm and prepare the delivery.';
@@ -75,16 +108,31 @@ function getTrackingMessage(status: string): string {
   }
 }
 
-function getTrackingStepIndex(status: string): number {
+function getTrackingStepIndex(status: string, deliveryStatus?: string | null): number {
+  switch (deliveryStatus) {
+    case 'assigned':
+      return 2;
+    case 'waiting_pickup':
+    case 'picking_up':
+    case 'picked_up':
+      return 3;
+    case 'delivering':
+      return 4;
+    case 'delivered':
+      return 5;
+    default:
+      break;
+  }
+
   switch (status) {
     case 'pending':
       return 0;
     case 'confirmed':
       return 1;
     case 'ready':
-      return 2;
+      return 1;
     case 'delivered':
-      return 3;
+      return 5;
     default:
       return -1;
   }
@@ -111,6 +159,129 @@ function formatReceiptDate(value: string): string {
   return format(new Date(value), 'MMM d, yyyy, h:mm a');
 }
 
+function formatDeliveryStatusLabel(status?: string | null): string {
+  if (!status) {
+    return 'No delivery job';
+  }
+  if (status === 'delivering') {
+    return 'Out for Delivery';
+  }
+  return status.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function getDisplayStatusLabel(status?: string | null): string {
+  if (!status) {
+    return 'Unknown';
+  }
+  const deliveryStatuses = new Set([
+    'created',
+    'assigned',
+    'waiting_pickup',
+    'picking_up',
+    'picked_up',
+    'delivering',
+    'delivered',
+    'cancelled',
+    'failed',
+  ]);
+  return deliveryStatuses.has(status) ? formatDeliveryStatusLabel(status) : formatStatusLabel(status);
+}
+
+function getDisplayStatusBadgeClass(status?: string | null): string {
+  if (!status) {
+    return getStatusBadgeClass('');
+  }
+  const deliveryStatuses = new Set([
+    'created',
+    'assigned',
+    'waiting_pickup',
+    'picking_up',
+    'picked_up',
+    'delivering',
+    'delivered',
+    'cancelled',
+    'failed',
+  ]);
+  return deliveryStatuses.has(status) ? getDeliveryStatusBadgeClass(status) : getStatusBadgeClass(status);
+}
+
+function getSubOrderDisplayStatus(
+  subOrder: ApiOrderDetail['sub_orders'][number],
+  nowMs: number,
+): string {
+  return getEffectiveDeliveryStatus(subOrder.delivery, nowMs) || subOrder.delivery?.status || subOrder.status;
+}
+
+function getPrimaryDeliveryStatus(
+  subOrders: ApiOrderDetail['sub_orders'],
+  nowMs: number,
+): string | null {
+  const activeSubOrder = subOrders.find((subOrder) => hasActiveDelivery(subOrder.delivery, nowMs));
+  if (activeSubOrder?.delivery) {
+    return getEffectiveDeliveryStatus(activeSubOrder.delivery, nowMs) || activeSubOrder.delivery.status;
+  }
+
+  const latestDelivery = subOrders.find((subOrder) => subOrder.delivery)?.delivery;
+  if (!latestDelivery) {
+    return null;
+  }
+  return getEffectiveDeliveryStatus(latestDelivery, nowMs) || latestDelivery.status;
+}
+
+function getOrderDisplayStatus(detail: ApiOrderDetail, nowMs: number): string {
+  const statuses = detail.sub_orders.map((subOrder) => getSubOrderDisplayStatus(subOrder, nowMs));
+  if (statuses.length === 0) {
+    return detail.status;
+  }
+
+  if (statuses.every((status) => status === 'delivered')) {
+    return 'delivered';
+  }
+  if (statuses.some((status) => status === 'delivering')) {
+    return 'delivering';
+  }
+  if (statuses.some((status) => ['picked_up', 'picking_up', 'waiting_pickup'].includes(status))) {
+    return 'picking_up';
+  }
+  if (statuses.some((status) => ['assigned', 'created'].includes(status))) {
+    return 'assigned';
+  }
+  if (statuses.some((status) => status === 'ready')) {
+    return 'ready';
+  }
+  if (statuses.some((status) => status === 'confirmed')) {
+    return 'confirmed';
+  }
+  if (statuses.some((status) => status === 'pending')) {
+    return 'pending';
+  }
+  if (statuses.every((status) => status === 'cancelled')) {
+    return 'cancelled';
+  }
+  return detail.status;
+}
+
+function getDeliveryStatusBadgeClass(status?: string | null): string {
+  switch (status) {
+    case 'delivered':
+      return 'bg-emerald-100 text-emerald-800 border-emerald-200';
+    case 'delivering':
+    case 'picked_up':
+    case 'picking_up':
+    case 'assigned':
+      return 'bg-blue-100 text-blue-800 border-blue-200';
+    case 'created':
+    case 'waiting_pickup':
+      return 'bg-amber-100 text-amber-800 border-amber-200';
+    case 'cancelled':
+      return 'bg-red-100 text-red-700 border-red-200';
+    case 'failed':
+      return 'bg-rose-100 text-rose-700 border-rose-200';
+    default:
+      return 'bg-gray-100 text-gray-700 border-gray-200';
+  }
+}
+
 export function OrderHistoryPage() {
   const navigate = useNavigate();
   const goBack = useSafeBack('/marketplace');
@@ -126,6 +297,7 @@ export function OrderHistoryPage() {
   const [producerOptions, setProducerOptions] = useState<string[]>([]);
   const [currentOrdersOpen, setCurrentOrdersOpen] = useState(true);
   const [previousOrdersOpen, setPreviousOrdersOpen] = useState(true);
+  const [simulationNow, setSimulationNow] = useState(() => Date.now());
   const backToMarketplaceButton = (
     <Button variant="ghost" onClick={goBack}>
       <ArrowLeft className="mr-2 size-4" />
@@ -192,6 +364,96 @@ export function OrderHistoryPage() {
     };
   }, [queryString]);
 
+  const loadOrderDetail = useCallback(async (orderId: number, background = false) => {
+    if (!background) {
+      setDetailLoading(true);
+    }
+    try {
+      const detail = await apiJson<ApiOrderDetail>(`/api/orders/history/${orderId}/`);
+      setSelectedOrder(detail);
+      setOrders((previous) =>
+        previous.map((order) =>
+          order.id === detail.id
+            ? {
+                ...order,
+                status: detail.status,
+              }
+            : order,
+        ),
+      );
+      return detail;
+    } finally {
+      if (!background) {
+        setDetailLoading(false);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (
+      activeOrderView !== 'tracking' ||
+      !selectedOrder?.sub_orders.some((subOrder) => isSimulatedSandboxDelivery(subOrder.delivery))
+    ) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setSimulationNow(Date.now());
+    }, 500);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [activeOrderView, selectedOrder]);
+
+  useEffect(() => {
+    if (activeOrderView !== 'tracking' || !activeOrderId || !selectedOrder) {
+      return;
+    }
+
+    if (
+      !selectedOrder.sub_orders.some(
+        (subOrder) =>
+          subOrder.delivery &&
+          !isSimulatedSandboxDelivery(subOrder.delivery) &&
+          hasActiveDelivery(subOrder.delivery, Date.now()),
+      )
+    ) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      void loadOrderDetail(activeOrderId, true);
+    }, DELIVERY_POLL_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [activeOrderId, activeOrderView, loadOrderDetail, selectedOrder]);
+
+  useEffect(() => {
+    if (activeOrderView !== 'tracking' || !activeOrderId || !selectedOrder) {
+      return;
+    }
+
+    const upcomingCompletionTimes = selectedOrder.sub_orders
+      .map((subOrder) => getSimulationCompletionMs(subOrder.delivery))
+      .filter((value): value is number => Boolean(value && value > simulationNow));
+
+    if (upcomingCompletionTimes.length === 0) {
+      return;
+    }
+
+    const nextRefreshInMs = Math.max(500, Math.min(...upcomingCompletionTimes) - simulationNow + 1000);
+    const timeoutId = window.setTimeout(() => {
+      void loadOrderDetail(activeOrderId, true);
+    }, nextRefreshInMs);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [activeOrderId, activeOrderView, loadOrderDetail, selectedOrder, simulationNow]);
+
   const openOrderPanel = async (orderId: number, view: 'details' | 'tracking') => {
     if (activeOrderId === orderId && activeOrderView === view) {
       setActiveOrderId(null);
@@ -207,17 +469,13 @@ export function OrderHistoryPage() {
       return;
     }
 
-    setDetailLoading(true);
     try {
-      const detail = await apiJson<ApiOrderDetail>(`/api/orders/history/${orderId}/`);
-      setSelectedOrder(detail);
+      await loadOrderDetail(orderId, false);
     } catch (error) {
       toast.error('Unable to load order details.');
       setActiveOrderId(null);
       setActiveOrderView(null);
       setSelectedOrder(null);
-    } finally {
-      setDetailLoading(false);
     }
   };
 
@@ -277,9 +535,12 @@ export function OrderHistoryPage() {
   );
 
   const renderTrackingMap = (order: ApiOrderDetail, subOrder: ApiOrderDetail['sub_orders'][number]) => {
-    const mapUrl = getGoogleMapsDirectionsEmbedUrl(subOrder.producer.postcode, order.customer_postcode);
-    const routeUrl = getGoogleMapsDirectionsUrl(subOrder.producer.postcode, order.customer_postcode);
-    const stepIndex = getTrackingStepIndex(subOrder.status);
+    const delivery = subOrder.delivery;
+    const displayDeliveryStatus = getEffectiveDeliveryStatus(delivery, simulationNow) || delivery?.status;
+    const displaySubOrderStatus = getSubOrderDisplayStatus(subOrder, simulationNow);
+    const displayDeliveryEta = getEffectiveDeliveryEta(delivery, simulationNow);
+    const stepIndex = getTrackingStepIndex(displaySubOrderStatus, displayDeliveryStatus);
+    const deliveryEta = displayDeliveryEta ? new Date(displayDeliveryEta) : null;
 
     return (
       <div key={subOrder.id} className="rounded-xl border border-[oklch(0.88_0.02_145)] bg-white p-4 shadow-sm">
@@ -290,19 +551,85 @@ export function OrderHistoryPage() {
               Tracking route: {subOrder.producer.postcode} to {order.customer_postcode}
             </p>
           </div>
-          <Badge className={cn('border', getStatusBadgeClass(subOrder.status))}>
-            {formatStatusLabel(subOrder.status)}
-          </Badge>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge className={cn('border', getDisplayStatusBadgeClass(displaySubOrderStatus))}>
+              {getDisplayStatusLabel(displaySubOrderStatus)}
+            </Badge>
+            {delivery && (
+              <Badge className={cn('border', getDeliveryStatusBadgeClass(displayDeliveryStatus))}>
+                Stuart {formatDeliveryStatusLabel(displayDeliveryStatus)}
+              </Badge>
+            )}
+          </div>
         </div>
 
         <div className="mt-3 rounded-lg bg-[oklch(0.985_0.01_145)] p-3 text-sm text-gray-700">
-          {getTrackingMessage(subOrder.status)}
+          {getTrackingMessage(displaySubOrderStatus, displayDeliveryStatus)}
         </div>
 
-        <div className="mt-4 grid gap-2 sm:grid-cols-4">
+        {delivery && (
+          <div className="mt-4 rounded-xl border border-[oklch(0.88_0.02_145)] bg-[oklch(0.99_0.005_145)] p-4">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4 text-sm">
+              <div>
+                <p className="text-gray-500">Stuart Job</p>
+                <p className="font-medium">{delivery.provider_reference || 'Pending'}</p>
+              </div>
+              <div>
+                <p className="text-gray-500">ETA</p>
+                <p className="font-medium">
+                  {deliveryEta && !Number.isNaN(deliveryEta.getTime())
+                    ? format(deliveryEta, 'MMM d, yyyy h:mm a')
+                    : 'Awaiting courier ETA'}
+                </p>
+              </div>
+              <div>
+                <p className="text-gray-500">Courier</p>
+                <p className="font-medium">
+                  {delivery.courier?.name || 'Courier pending'}
+                  {delivery.courier?.transport_type ? ` • ${delivery.courier.transport_type}` : ''}
+                </p>
+              </div>
+              <div>
+                <p className="text-gray-500">Last Update</p>
+                <p className="font-medium">
+                  {delivery.updated_at ? format(new Date(delivery.updated_at), 'MMM d, h:mm a') : 'N/A'}
+                </p>
+              </div>
+            </div>
+
+            {delivery.last_error && (
+              <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                {delivery.last_error}
+              </div>
+            )}
+
+            {(delivery.tracking_url || delivery.client_tracking_url) && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {delivery.tracking_url && (
+                  <Button variant="outline" size="sm" asChild>
+                    <a href={delivery.tracking_url} target="_blank" rel="noopener noreferrer">
+                      <ExternalLink className="mr-2 size-4" />
+                      Customer Tracking Link
+                    </a>
+                  </Button>
+                )}
+                {delivery.client_tracking_url && (
+                  <Button variant="outline" size="sm" asChild>
+                    <a href={delivery.client_tracking_url} target="_blank" rel="noopener noreferrer">
+                      <ExternalLink className="mr-2 size-4" />
+                      Stuart Live Tracking
+                    </a>
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="mt-4 grid gap-2 sm:grid-cols-3 xl:grid-cols-6">
           {TRACKING_STEPS.map((step, index) => {
             const isComplete = stepIndex >= index;
-            const isCancelled = subOrder.status === 'cancelled';
+            const isCancelled = displaySubOrderStatus === 'cancelled';
 
             return (
               <div
@@ -322,35 +649,31 @@ export function OrderHistoryPage() {
           })}
         </div>
 
-        <div className="mt-4 overflow-hidden rounded-xl border bg-gray-50">
-          <div className="aspect-[16/7]">
-            {mapUrl ? (
-              <iframe
-                title={`Tracking map for ${subOrder.producer.business_name}`}
-                src={mapUrl}
-                className="h-full w-full border-0"
-                loading="lazy"
-                referrerPolicy="no-referrer-when-downgrade"
-                allowFullScreen
-              />
-            ) : (
-              <div className="flex h-full items-center justify-center px-6 text-center text-sm text-gray-600">
-                Tracking map is unavailable right now, but the route details are still shown for this order.
-              </div>
-            )}
-          </div>
+        <div className="mt-4">
+          <LiveDeliveryMap
+            pickup={delivery?.pickup_address_snapshot || { postcode: subOrder.producer.postcode }}
+            dropoff={delivery?.dropoff_address_snapshot || { full_address: order.delivery_address, postcode: order.customer_postcode }}
+            courierCoordinates={delivery?.last_coordinates}
+            pickupLabel={subOrder.producer.business_name}
+            dropoffLabel="Delivery Address"
+            courierLabel={delivery?.courier?.name || 'Sandbox Rider'}
+            deliveryStatus={formatDeliveryStatusLabel(displayDeliveryStatus || subOrder.status)}
+            simulationStartedAt={delivery?.simulation_started_at}
+            simulationDurationSeconds={delivery?.simulation_duration_seconds}
+            testMode={delivery?.test_mode}
+          />
         </div>
 
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-600">
           <span>Delivery target: {format(new Date(subOrder.delivery_date), 'MMM d, yyyy')}</span>
-          {routeUrl && (
+          {delivery?.client_tracking_url && (
             <a
-              href={routeUrl}
+              href={delivery.client_tracking_url}
               target="_blank"
               rel="noopener noreferrer"
               className="font-medium text-green-700 underline"
             >
-              Open route in Google Maps
+              Stuart tracking fallback
             </a>
           )}
         </div>
@@ -359,6 +682,8 @@ export function OrderHistoryPage() {
   };
 
   const renderOrderCard = (order: ApiOrderSummary, sectionLabel: 'current' | 'previous') => {
+    const displayOrderStatus =
+      selectedOrder?.id === order.id ? getOrderDisplayStatus(selectedOrder, simulationNow) : order.status;
     const isCurrent = sectionLabel === 'current';
     const isDetailsOpen = activeOrderId === order.id && activeOrderView === 'details';
     const isTrackingOpen = activeOrderId === order.id && activeOrderView === 'tracking';
@@ -375,8 +700,8 @@ export function OrderHistoryPage() {
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <Badge className={cn('border', getStatusBadgeClass(order.status))}>
-                {formatStatusLabel(order.status)}
+              <Badge className={cn('border', getDisplayStatusBadgeClass(displayOrderStatus))}>
+                {getDisplayStatusLabel(displayOrderStatus)}
               </Badge>
               <Badge variant="outline">{formatStatusLabel(order.payment_status)}</Badge>
             </div>
@@ -395,7 +720,11 @@ export function OrderHistoryPage() {
             <div>
               <p className="text-gray-500">Order Status</p>
               <p className="font-medium text-gray-800">
-                {isCurrent ? 'Still in progress' : order.status === 'cancelled' ? 'Order closed' : 'Completed'}
+                {displayOrderStatus === 'delivered'
+                  ? 'Completed'
+                  : displayOrderStatus === 'cancelled'
+                    ? 'Order closed'
+                    : getDisplayStatusLabel(displayOrderStatus)}
               </p>
             </div>
             <div>
@@ -452,6 +781,25 @@ export function OrderHistoryPage() {
                 <>
                   {activeOrderView === 'details' && (
                     <div className="space-y-5">
+                      {(() => {
+                        const primaryDeliveryStatus = getPrimaryDeliveryStatus(selectedOrder.sub_orders, simulationNow);
+                        return (
+                          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[oklch(0.88_0.02_145)] bg-[oklch(0.985_0.01_145)] p-4">
+                            <div>
+                              <p className="text-sm font-medium text-green-900">Live Order Status</p>
+                              <p className="mt-1 text-sm text-gray-700">
+                                {getTrackingMessage(selectedOrder.status, primaryDeliveryStatus)}
+                              </p>
+                            </div>
+                            {primaryDeliveryStatus && (
+                              <Badge className={cn('border', getDeliveryStatusBadgeClass(primaryDeliveryStatus))}>
+                                {formatDeliveryStatusLabel(primaryDeliveryStatus)}
+                              </Badge>
+                            )}
+                          </div>
+                        );
+                      })()}
+
                       <div className="grid sm:grid-cols-3 gap-4 text-sm">
                         <div>
                           <p className="text-gray-500">Delivery Address</p>
@@ -488,14 +836,28 @@ export function OrderHistoryPage() {
                       <div>
                         <p className="text-sm font-medium mb-2">Producer Sub-orders</p>
                         <div className="space-y-2">
-                          {selectedOrder.sub_orders.map((subOrder) => (
-                            <div key={subOrder.id} className="border-l-4 border-green-500 pl-3">
-                              <p className="font-medium">{subOrder.producer.business_name}</p>
-                              <p className="text-xs text-gray-600">
-                                Delivery {format(new Date(subOrder.delivery_date), 'MMM d, yyyy')} • Status {formatStatusLabel(subOrder.status)}
-                              </p>
-                            </div>
-                          ))}
+                            {selectedOrder.sub_orders.map((subOrder) => {
+                              const delivery = subOrder.delivery;
+                              const displaySubOrderStatus = getSubOrderDisplayStatus(subOrder, simulationNow);
+                              const displayDeliveryStatus =
+                                getEffectiveDeliveryStatus(delivery, simulationNow) || delivery?.status;
+                              const displayDeliveryEta = getEffectiveDeliveryEta(delivery, simulationNow);
+
+                              return (
+                                <div key={subOrder.id} className="border-l-4 border-green-500 pl-3">
+                                  <p className="font-medium">{subOrder.producer.business_name}</p>
+                                  <p className="text-xs text-gray-600">
+                                  Delivery {format(new Date(subOrder.delivery_date), 'MMM d, yyyy')} • Status {getDisplayStatusLabel(displaySubOrderStatus)}
+                                  </p>
+                                  {delivery && (
+                                    <p className="text-xs text-gray-600">
+                                      Stuart {formatDeliveryStatusLabel(displayDeliveryStatus)}
+                                    {displayDeliveryEta ? ` • ETA ${format(new Date(displayDeliveryEta), 'MMM d, h:mm a')}` : ''}
+                                  </p>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
 
@@ -588,11 +950,27 @@ export function OrderHistoryPage() {
                   {activeOrderView === 'tracking' && isCurrent && (
                     <div className="space-y-5">
                       <div className="rounded-xl border border-[oklch(0.88_0.02_145)] bg-[oklch(0.985_0.01_145)] p-4">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Truck className="size-4 text-green-700" />
-                          <p className="text-sm font-medium text-green-900">Current order tracking</p>
-                        </div>
-                        <p className="mt-2 text-sm text-gray-700">{getTrackingMessage(selectedOrder.status)}</p>
+                        {(() => {
+                          const primaryDeliveryStatus = getPrimaryDeliveryStatus(selectedOrder.sub_orders, simulationNow);
+                          return (
+                            <>
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  <Truck className="size-4 text-green-700" />
+                                  <p className="text-sm font-medium text-green-900">Current order tracking</p>
+                                </div>
+                                {primaryDeliveryStatus && (
+                                  <Badge className={cn('border', getDeliveryStatusBadgeClass(primaryDeliveryStatus))}>
+                                    {formatDeliveryStatusLabel(primaryDeliveryStatus)}
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="mt-2 text-sm text-gray-700">
+                                {getTrackingMessage(selectedOrder.status, primaryDeliveryStatus)}
+                              </p>
+                            </>
+                          );
+                        })()}
                       </div>
 
                       <div>

@@ -29,7 +29,7 @@ DEBUG = os.getenv("DJANGO_DEBUG", "true").lower() in {"1", "true", "yes", "on"}
 
 ALLOWED_HOSTS = [
     host.strip()
-    for host in os.getenv("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost,0.0.0.0,testserver").split(",")
+    for host in os.getenv("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost,0.0.0.0,testserver,.trycloudflare.com").split(",")
     if host.strip()
 ]
 
@@ -56,6 +56,7 @@ INSTALLED_APPS = [
     "apps.geo",
     "apps.producer_portal",
     "apps.payments",
+    "apps.delivery",
     "apps.community",
     "apps.content",
 ]
@@ -155,6 +156,13 @@ STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
 PAYMENT_SERVICE_BASE_URL = os.getenv("PAYMENT_SERVICE_BASE_URL", "http://payments:8010")
 PAYMENT_SERVICE_SHARED_SECRET = os.getenv("PAYMENT_SERVICE_SHARED_SECRET", "local-payment-service-secret")
 PAYMENT_SERVICE_TIMEOUT_SECONDS = int(os.getenv("PAYMENT_SERVICE_TIMEOUT_SECONDS", "15"))
+STUART_SERVICE_BASE_URL = os.getenv("STUART_SERVICE_BASE_URL", "http://stuart:8020")
+STUART_SERVICE_SHARED_SECRET = os.getenv("STUART_SERVICE_SHARED_SECRET", "local-stuart-service-secret")
+STUART_SERVICE_TIMEOUT_SECONDS = int(os.getenv("STUART_SERVICE_TIMEOUT_SECONDS", "15"))
+STUART_WEBHOOK_SECRET = os.getenv("STUART_WEBHOOK_SECRET", "")
+DELIVERY_SIMULATION_ENABLED = os.getenv("DELIVERY_SIMULATION_ENABLED", "true").lower() in {"1", "true", "yes", "on"}
+DELIVERY_SIMULATION_TOTAL_SECONDS = int(os.getenv("DELIVERY_SIMULATION_TOTAL_SECONDS", "120"))
+DELIVERY_SIMULATION_POLL_SECONDS = int(os.getenv("DELIVERY_SIMULATION_POLL_SECONDS", "15"))
 STRIPE_SUCCESS_URL = os.getenv(
     "STRIPE_SUCCESS_URL",
     f"{FRONTEND_URL.rstrip('/')}/checkout/success?session_id={{CHECKOUT_SESSION_ID}}",

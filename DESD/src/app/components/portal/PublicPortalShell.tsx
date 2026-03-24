@@ -1,6 +1,7 @@
-import { ArrowLeft, Sprout } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router';
 
+import { SiteHeader } from '../SiteHeader';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
@@ -34,39 +35,25 @@ export function PublicPortalShell({
         <div className="absolute bottom-[-7rem] left-1/3 h-80 w-80 rounded-full bg-[oklch(0.88_0.05_200/.2)] blur-3xl" />
       </div>
 
-      <header className="relative z-10 border-b border-[oklch(0.88_0.02_145)] bg-white/70 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
-          <Link to="/" className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,oklch(0.43_0.11_155),oklch(0.57_0.08_140))] shadow-sm">
-              <Sprout className="size-5 text-white" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold tracking-[0.18em] text-[oklch(0.42_0.06_150)] uppercase">
-                Bristol Marketplace
-              </p>
-              <p className="text-sm text-[oklch(0.35_0.03_145)]">
-                Local produce portals for buyers, producers, and institutions
-              </p>
-            </div>
-          </Link>
-
-          {backHref ? (
-            <Button asChild variant="ghost">
-              <Link to={backHref}>
-                <ArrowLeft className="mr-2 size-4" />
-                {backLabel}
-              </Link>
-            </Button>
-          ) : (
-            <Button asChild variant="ghost">
-              <Link to="/login">Generic Login</Link>
-            </Button>
-          )}
-        </div>
-      </header>
+      <SiteHeader />
 
       <main className="relative z-10 mx-auto grid max-w-6xl gap-8 px-4 py-10 lg:grid-cols-[1.1fr_0.9fr] lg:py-16">
         <section className="space-y-6">
+          <div className="flex flex-wrap items-center gap-3">
+            {backHref ? (
+              <Button asChild variant="ghost">
+                <Link to={backHref}>
+                  <ArrowLeft className="mr-2 size-4" />
+                  {backLabel}
+                </Link>
+              </Button>
+            ) : (
+              <Button asChild variant="ghost">
+                <Link to="/login">Generic Login</Link>
+              </Button>
+            )}
+          </div>
+
           <Badge className="rounded-full border border-[oklch(0.82_0.03_145)] bg-white/80 px-4 py-1 text-[0.7rem] font-semibold tracking-[0.22em] text-[oklch(0.42_0.05_145)] uppercase shadow-sm">
             {eyebrow}
           </Badge>

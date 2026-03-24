@@ -1,5 +1,5 @@
 import { Product } from '../types';
-import { getAccessToken } from './tokenStorage';
+import { clearAuthStorage, getAccessToken, getRefreshToken, setAuthTokens } from './tokenStorage';
 
 const AUTH_STORAGE_KEY = 'desd_basic_auth_token';
 const API_BASE = import.meta.env.VITE_API_BASE || '';
@@ -21,6 +21,54 @@ export interface ApiProducer {
   business_name: string;
   postcode: string;
   lead_time_hours: number;
+}
+
+export interface ApiDeliveryInfo {
+  id: number;
+  provider: string;
+  provider_reference: string;
+  package_reference: string;
+  client_reference: string;
+  status: string;
+  tracking_url: string;
+  client_tracking_url: string;
+  eta?: string | null;
+  courier?: {
+    name?: string;
+    phone?: string;
+    transport_type?: string;
+  } | null;
+  last_coordinates?: {
+    lat: number;
+    lng: number;
+  } | null;
+  pickup_address_snapshot?: {
+    full_address?: string;
+    postcode?: string;
+    coordinates?: {
+      lat: number;
+      lng: number;
+    } | null;
+  } | null;
+  dropoff_address_snapshot?: {
+    full_address?: string;
+    postcode?: string;
+    coordinates?: {
+      lat: number;
+      lng: number;
+    } | null;
+  } | null;
+  quote_amount?: string | null;
+  quote_currency?: string;
+  last_error?: string;
+  test_mode: boolean;
+  simulation_started_at?: string | null;
+  simulation_duration_seconds?: number;
+  created_at: string;
+  updated_at: string;
+  dispatched_at?: string | null;
+  delivered_at?: string | null;
+  cancelled_at?: string | null;
 }
 
 export interface ApiProduct {
@@ -103,6 +151,7 @@ export interface ApiProducerSubOrder {
   commission_amount: string;
   payout_amount: string;
   notes?: string;
+  delivery?: ApiDeliveryInfo | null;
 }
 
 export interface ApiOrderDetail {
@@ -213,6 +262,79 @@ function buildHeaders(inputHeaders?: HeadersInit): Headers {
   return headers;
 }
 
+function isAuthEndpoint(url: string): boolean {
+  return (
+    url.includes('/accounts/auth/login/')
+    || url.includes('/accounts/auth/refresh/')
+    || url.includes('/accounts/auth/register/')
+  );
+}
+
+async function tryRefreshAccessToken(): Promise<string | null> {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) {
+    clearAuthStorage();
+    setBasicAuthToken(null);
+    return null;
+  }
+
+  const response = await fetch(toUrl('/api/accounts/auth/refresh/'), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ refresh: refreshToken }),
+  });
+
+  const payload = await readResponseBody(response);
+  const nextAccessToken =
+    payload && typeof payload === 'object' ? (payload as { access?: unknown }).access : undefined;
+
+  if (!response.ok || typeof nextAccessToken !== 'string' || !nextAccessToken.trim()) {
+    clearAuthStorage();
+    setBasicAuthToken(null);
+    return null;
+  }
+
+  setAuthTokens(nextAccessToken, refreshToken);
+  return nextAccessToken;
+}
+
+async function performApiRequest(path: string, init: RequestInit = {}, allowRefresh = true): Promise<Response> {
+  const url = toUrl(path);
+  const headers = buildHeaders(init.headers);
+
+  if (init.body && !headers.has('Content-Type') && !(init.body instanceof FormData)) {
+    headers.set('Content-Type', 'application/json');
+  }
+
+  let response = await fetch(url, {
+    ...init,
+    headers,
+  });
+
+  if (response.status !== 401 || !allowRefresh || isAuthEndpoint(url)) {
+    return response;
+  }
+
+  const nextAccessToken = await tryRefreshAccessToken();
+  if (!nextAccessToken) {
+    return response;
+  }
+
+  const retryHeaders = buildHeaders(init.headers);
+  retryHeaders.set('Authorization', `Bearer ${nextAccessToken}`);
+  if (init.body && !retryHeaders.has('Content-Type') && !(init.body instanceof FormData)) {
+    retryHeaders.set('Content-Type', 'application/json');
+  }
+
+  response = await fetch(url, {
+    ...init,
+    headers: retryHeaders,
+  });
+  return response;
+}
+
 function parseApiErrorMessage(payload: unknown, fallback: string): string {
   if (payload && typeof payload === 'object') {
     const detail = (payload as { detail?: unknown }).detail;
@@ -237,17 +359,7 @@ async function readResponseBody(response: Response): Promise<unknown> {
 }
 
 export async function apiJson<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const headers = buildHeaders(init.headers);
-
-  if (init.body && !headers.has('Content-Type') && !(init.body instanceof FormData)) {
-    headers.set('Content-Type', 'application/json');
-  }
-
-  const response = await fetch(toUrl(path), {
-    ...init,
-    headers,
-  });
-
+  const response = await performApiRequest(path, init);
   const payload = await readResponseBody(response);
 
   if (!response.ok) {
@@ -262,11 +374,7 @@ export async function apiJson<T>(path: string, init: RequestInit = {}): Promise<
 }
 
 export async function apiBlob(path: string, init: RequestInit = {}): Promise<Blob> {
-  const headers = buildHeaders(init.headers);
-  const response = await fetch(toUrl(path), {
-    ...init,
-    headers,
-  });
+  const response = await performApiRequest(path, init);
 
   if (!response.ok) {
     const payload = await readResponseBody(response);
