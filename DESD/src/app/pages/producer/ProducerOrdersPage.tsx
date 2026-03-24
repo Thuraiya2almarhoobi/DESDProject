@@ -1,21 +1,33 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
   ArrowLeft,
   Calendar,
   Clock,
+  ExternalLink,
   FileText,
   Loader2,
   MapPin,
   MessageCircle,
   Package,
+  RefreshCw,
   TrendingUp,
+  Truck,
+  XCircle,
 } from 'lucide-react';
 import { differenceInHours, format, isValid, parseISO } from 'date-fns';
 import { toast } from 'sonner';
-import { apiJson } from '../../lib/api';
+import { ApiDeliveryInfo, apiJson } from '../../lib/api';
+import { getDeliverySimulationPollMs } from '../../lib/deliverySimulation';
+import {
+  getEffectiveDeliveryEta,
+  getEffectiveDeliveryStatus,
+  getSimulationCompletionMs,
+  isSimulatedSandboxDelivery,
+  isTerminalDeliveryStatus,
+} from '../../lib/deliveryTracking';
 import { useSafeBack } from '../../lib/navigation';
+import { LiveDeliveryMap } from '../../components/LiveDeliveryMap';
 import { SiteHeader } from '../../components/SiteHeader';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
@@ -24,6 +36,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Separator } from '../../components/ui/separator';
 
 type ProducerOrderStatus = 'pending' | 'confirmed' | 'ready' | 'delivered' | 'cancelled';
+const DELIVERY_POLL_MS = getDeliverySimulationPollMs();
 
 interface ProducerSubOrderItemApi {
   product_name: string;
@@ -48,11 +61,16 @@ interface ProducerSubOrderApi {
   lead_time_hours: number;
   order_created_at: string;
   items: ProducerSubOrderItemApi[];
+  delivery?: ApiDeliveryInfo | null;
 }
 
 function toNumber(value: string): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatBusinessStatus(status: ProducerOrderStatus): string {
+  return status.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function isOrderUrgent(order: ProducerSubOrderApi): boolean {
@@ -70,42 +88,59 @@ function isOrderUrgent(order: ProducerSubOrderApi): boolean {
 }
 
 export function ProducerOrdersPage() {
-  const navigate = useNavigate();
   const goBack = useSafeBack('/producer/dashboard');
   const [orders, setOrders] = useState<ProducerSubOrderApi[]>([]);
   const [loading, setLoading] = useState(true);
+  const [simulationNow, setSimulationNow] = useState(() => Date.now());
   const [statusFilter, setStatusFilter] = useState<ProducerOrderStatus | 'all'>('all');
   const [updatingOrderId, setUpdatingOrderId] = useState<number | null>(null);
+  const [deliveryActionOrderId, setDeliveryActionOrderId] = useState<number | null>(null);
+  const [deliveryErrors, setDeliveryErrors] = useState<Record<number, string>>({});
+
+  const loadOrders = useCallback(async (background = false) => {
+    if (!background) {
+      setLoading(true);
+    }
+    try {
+      const payload = await apiJson<ProducerSubOrderApi[]>('/api/orders/producer/sub-orders/');
+      setOrders(payload);
+      setDeliveryErrors((previous) => {
+        const next = { ...previous };
+        for (const order of payload) {
+          if (order.delivery?.last_error) {
+            next[order.id] = order.delivery.last_error;
+          } else if (order.delivery) {
+            delete next[order.id];
+          }
+        }
+        return next;
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to load producer orders.';
+      toast.error(message);
+      setOrders([]);
+    } finally {
+      if (!background) {
+        setLoading(false);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     let mounted = true;
 
-    const loadOrders = async () => {
-      setLoading(true);
-      try {
-        const payload = await apiJson<ProducerSubOrderApi[]>('/api/orders/producer/sub-orders/');
-        if (!mounted) {
-          return;
-        }
-        setOrders(payload);
-      } catch (error) {
-        if (mounted) {
-          const message = error instanceof Error ? error.message : 'Unable to load producer orders.';
-          toast.error(message);
-          setOrders([]);
-        }
-      } finally {
-        if (mounted) {
-          setLoading(false);
-        }
+    const run = async () => {
+      if (!mounted) {
+        return;
       }
+      await loadOrders(false);
     };
 
-    void loadOrders();
+    void run();
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [loadOrders]);
 
   const statusCounts = useMemo(
     () => ({
@@ -136,12 +171,135 @@ export function ProducerOrdersPage() {
         body: JSON.stringify({ status: nextStatus }),
       });
       setOrders((previous) => previous.map((row) => (row.id === updated.id ? updated : row)));
+      setDeliveryErrors((previous) => {
+        const next = { ...previous };
+        delete next[order.id];
+        return next;
+      });
       toast.success(`Order ${updated.order_number} updated to ${updated.status}.`);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to update order status.';
+      if (nextStatus === 'ready') {
+        setDeliveryErrors((previous) => ({
+          ...previous,
+          [order.id]: message,
+        }));
+      }
       toast.error(message);
     } finally {
       setUpdatingOrderId(null);
+    }
+  };
+
+  const retryDelivery = async (order: ProducerSubOrderApi) => {
+    setDeliveryActionOrderId(order.id);
+    try {
+      await apiJson<{ delivery: ApiDeliveryInfo; sub_order_status: string }>(
+        `/api/delivery/producer/sub-orders/${order.id}/delivery/retry/`,
+        {
+          method: 'POST',
+        },
+      );
+      setDeliveryErrors((previous) => {
+        const next = { ...previous };
+        delete next[order.id];
+        return next;
+      });
+      toast.success(`Stuart dispatch created for ${order.order_number}.`);
+      await loadOrders(true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to retry Stuart dispatch.';
+      setDeliveryErrors((previous) => ({
+        ...previous,
+        [order.id]: message,
+      }));
+      toast.error(message);
+    } finally {
+      setDeliveryActionOrderId(null);
+    }
+  };
+
+  const refreshDelivery = async (order: ProducerSubOrderApi) => {
+    setDeliveryActionOrderId(order.id);
+    try {
+      await apiJson<{ delivery: ApiDeliveryInfo; sub_order_status: string }>(
+        `/api/delivery/producer/sub-orders/${order.id}/delivery/refresh/`,
+        {
+          method: 'POST',
+        },
+      );
+      setDeliveryErrors((previous) => {
+        const next = { ...previous };
+        delete next[order.id];
+        return next;
+      });
+      toast.success(`Stuart delivery refreshed for ${order.order_number}.`);
+      await loadOrders(true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to refresh Stuart delivery.';
+      setDeliveryErrors((previous) => ({
+        ...previous,
+        [order.id]: message,
+      }));
+      toast.error(message);
+    } finally {
+      setDeliveryActionOrderId(null);
+    }
+  };
+
+  const cancelDelivery = async (order: ProducerSubOrderApi) => {
+    setDeliveryActionOrderId(order.id);
+    try {
+      await apiJson<{ delivery: ApiDeliveryInfo; sub_order_status: string }>(
+        `/api/delivery/producer/sub-orders/${order.id}/delivery/cancel/`,
+        {
+          method: 'POST',
+        },
+      );
+      setDeliveryErrors((previous) => {
+        const next = { ...previous };
+        delete next[order.id];
+        return next;
+      });
+      toast.success(`Stuart delivery cancelled for ${order.order_number}.`);
+      await loadOrders(true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to cancel Stuart delivery.';
+      setDeliveryErrors((previous) => ({
+        ...previous,
+        [order.id]: message,
+      }));
+      toast.error(message);
+    } finally {
+      setDeliveryActionOrderId(null);
+    }
+  };
+
+  const restartSimulation = async (order: ProducerSubOrderApi) => {
+    setDeliveryActionOrderId(order.id);
+    try {
+      await apiJson<{ delivery: ApiDeliveryInfo; sub_order_status: string }>(
+        `/api/delivery/producer/sub-orders/${order.id}/delivery/restart-simulation/`,
+        {
+          method: 'POST',
+        },
+      );
+      setDeliveryErrors((previous) => {
+        const next = { ...previous };
+        delete next[order.id];
+        return next;
+      });
+      toast.success(`Sandbox rider restarted for ${order.order_number}.`);
+      await loadOrders(true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to restart delivery simulation.';
+      setDeliveryErrors((previous) => ({
+        ...previous,
+        [order.id]: message,
+      }));
+      toast.error(message);
+    } finally {
+      setDeliveryActionOrderId(null);
     }
   };
 
@@ -155,6 +313,96 @@ export function ProducerOrdersPage() {
     };
     return colors[status];
   };
+
+  const formatDeliveryStatus = (status: string | undefined) => {
+    if (!status) {
+      return 'No delivery job';
+    }
+    if (status === 'delivering') {
+      return 'Out for Delivery';
+    }
+    return status.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+  };
+
+  const getDeliveryStatusColor = (status: string | undefined) => {
+    switch (status) {
+      case 'delivered':
+        return 'bg-emerald-100 text-emerald-800 border-emerald-300';
+      case 'delivering':
+      case 'picked_up':
+      case 'picking_up':
+      case 'assigned':
+        return 'bg-blue-100 text-blue-800 border-blue-300';
+      case 'created':
+      case 'waiting_pickup':
+        return 'bg-amber-100 text-amber-800 border-amber-300';
+      case 'cancelled':
+        return 'bg-red-100 text-red-700 border-red-300';
+      case 'failed':
+        return 'bg-rose-100 text-rose-700 border-rose-300';
+      default:
+        return 'bg-gray-100 text-gray-700 border-gray-300';
+    }
+  };
+
+  const hasActiveDelivery = (delivery?: ApiDeliveryInfo | null, nowMs = simulationNow) => {
+    const effectiveStatus = getEffectiveDeliveryStatus(delivery, nowMs) || delivery?.status;
+    return Boolean(effectiveStatus && !isTerminalDeliveryStatus(effectiveStatus));
+  };
+
+  useEffect(() => {
+    if (!filteredOrders.some((order) => isSimulatedSandboxDelivery(order.delivery))) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setSimulationNow(Date.now());
+    }, 500);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [filteredOrders]);
+
+  useEffect(() => {
+    if (
+      !filteredOrders.some(
+        (order) =>
+          order.delivery &&
+          !isSimulatedSandboxDelivery(order.delivery) &&
+          hasActiveDelivery(order.delivery, Date.now()),
+      )
+    ) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      void loadOrders(true);
+    }, DELIVERY_POLL_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [filteredOrders, loadOrders]);
+
+  useEffect(() => {
+    const upcomingCompletionTimes = filteredOrders
+      .map((order) => getSimulationCompletionMs(order.delivery))
+      .filter((value): value is number => Boolean(value && value > simulationNow));
+
+    if (upcomingCompletionTimes.length === 0) {
+      return;
+    }
+
+    const nextRefreshInMs = Math.max(500, Math.min(...upcomingCompletionTimes) - simulationNow + 1000);
+    const timeoutId = window.setTimeout(() => {
+      void loadOrders(true);
+    }, nextRefreshInMs);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [filteredOrders, loadOrders, simulationNow]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[oklch(0.98_0.01_145)] to-[oklch(0.96_0.02_150)]">
@@ -288,6 +536,19 @@ export function ProducerOrdersPage() {
               const payout = toNumber(order.payout_amount);
               const parsedDate = parseISO(order.delivery_date);
               const statusOptions = order.allowed_next_statuses || [order.status];
+              const delivery = order.delivery;
+              const inlineDeliveryError = delivery?.last_error || deliveryErrors[order.id];
+              const displayDeliveryStatus = getEffectiveDeliveryStatus(delivery, simulationNow) || delivery?.status;
+              const displayDeliveryEta = getEffectiveDeliveryEta(delivery, simulationNow);
+              const deliveryEta = displayDeliveryEta ? parseISO(displayDeliveryEta) : null;
+              const deliveryBusy = deliveryActionOrderId === order.id;
+              const deliveryActive = Boolean(displayDeliveryStatus && !isTerminalDeliveryStatus(displayDeliveryStatus));
+              const headerStatusLabel = displayDeliveryStatus
+                ? formatDeliveryStatus(displayDeliveryStatus)
+                : formatBusinessStatus(order.status);
+              const headerStatusClass = displayDeliveryStatus
+                ? getDeliveryStatusColor(displayDeliveryStatus)
+                : getStatusColor(order.status);
 
               return (
                 <Card key={order.id} className={`transition-shadow hover:shadow-md ${urgent ? 'border-red-300 bg-red-50/30' : ''}`}>
@@ -304,8 +565,14 @@ export function ProducerOrdersPage() {
                           )}
                         </div>
                         <p className="text-sm text-gray-700">{order.customer_name} • {order.customer_email}</p>
+                        {delivery && (
+                          <p className="mt-2 text-sm font-medium text-green-800">
+                            Live delivery status: {formatDeliveryStatus(displayDeliveryStatus)}
+                            {deliveryEta && isValid(deliveryEta) ? ` • ETA ${format(deliveryEta, 'h:mm a')}` : ''}
+                          </p>
+                        )}
                       </div>
-                      <Badge className={`${getStatusColor(order.status)} border`}>{order.status}</Badge>
+                      <Badge className={`${headerStatusClass} border`}>{headerStatusLabel}</Badge>
                     </div>
                   </CardHeader>
 
@@ -384,6 +651,11 @@ export function ProducerOrdersPage() {
                             ))}
                           </SelectContent>
                         </Select>
+                        {delivery && (
+                          <p className="mt-2 text-xs text-gray-600">
+                            Delivery phase updates automatically while the sandbox simulation is running.
+                          </p>
+                        )}
                       </div>
 
                       <div className="flex flex-col gap-2">
@@ -409,6 +681,152 @@ export function ProducerOrdersPage() {
                           </Button>
                         </div>
                       </div>
+                    </div>
+
+                    <Separator />
+
+                    <div className="rounded-xl border border-[oklch(0.88_0.02_145)] bg-[oklch(0.985_0.01_145)] p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <Truck className="size-4 text-green-700" />
+                            <p className="text-sm font-semibold text-gray-900">Stuart Delivery</p>
+                          </div>
+                          <p className="mt-1 text-xs text-gray-600">
+                            Dispatch is created automatically when an order is moved to Ready.
+                          </p>
+                        </div>
+                        <Badge className={`${getDeliveryStatusColor(displayDeliveryStatus)} border`}>
+                          {formatDeliveryStatus(displayDeliveryStatus)}
+                        </Badge>
+                      </div>
+
+                      {delivery ? (
+                        <div className="mt-4 space-y-3">
+                          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4 text-sm">
+                            <div>
+                              <p className="text-gray-500">Job Reference</p>
+                              <p className="font-medium text-gray-900">{delivery.provider_reference || 'Pending'}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-500">Package Reference</p>
+                              <p className="font-medium text-gray-900">{delivery.package_reference || 'Pending'}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-500">ETA</p>
+                              <p className="font-medium text-gray-900">
+                                {deliveryEta && isValid(deliveryEta) ? format(deliveryEta, 'MMM d, yyyy h:mm a') : 'Awaiting courier ETA'}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-gray-500">Last Sync</p>
+                              <p className="font-medium text-gray-900">
+                                {delivery.updated_at ? format(parseISO(delivery.updated_at), 'MMM d, h:mm a') : 'N/A'}
+                              </p>
+                            </div>
+                          </div>
+
+                          {(delivery.courier?.name || delivery.courier?.transport_type || delivery.courier?.phone) && (
+                            <div className="rounded-lg border bg-white p-3 text-sm">
+                              <p className="font-medium text-gray-900">Courier</p>
+                              <p className="text-gray-700">
+                                {delivery.courier?.name || 'Courier assigned'}
+                                {delivery.courier?.transport_type ? ` • ${delivery.courier.transport_type}` : ''}
+                                {delivery.courier?.phone ? ` • ${delivery.courier.phone}` : ''}
+                              </p>
+                            </div>
+                          )}
+
+                          {inlineDeliveryError && (
+                            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                              {inlineDeliveryError}
+                            </div>
+                          )}
+
+                          <LiveDeliveryMap
+                            pickup={delivery.pickup_address_snapshot}
+                            dropoff={delivery.dropoff_address_snapshot}
+                            courierCoordinates={delivery.last_coordinates}
+                            pickupLabel="Producer Pickup"
+                            dropoffLabel={order.customer_name}
+                            courierLabel={delivery.courier?.name || 'Sandbox Rider'}
+                            deliveryStatus={formatDeliveryStatus(displayDeliveryStatus)}
+                            simulationStartedAt={delivery.simulation_started_at}
+                            simulationDurationSeconds={delivery.simulation_duration_seconds}
+                            testMode={delivery.test_mode}
+                          />
+
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="gap-2"
+                              onClick={() => refreshDelivery(order)}
+                              disabled={deliveryBusy}
+                            >
+                              {deliveryBusy ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+                              Refresh
+                            </Button>
+                            {deliveryActive && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-2"
+                                onClick={() => cancelDelivery(order)}
+                                disabled={deliveryBusy}
+                              >
+                                <XCircle className="size-4" />
+                                Cancel Delivery
+                              </Button>
+                            )}
+                            {['failed', 'cancelled'].includes(delivery.status) && (
+                              <Button size="sm" className="gap-2" onClick={() => retryDelivery(order)} disabled={deliveryBusy}>
+                                <Truck className="size-4" />
+                                Retry Dispatch
+                              </Button>
+                            )}
+                            {delivery.test_mode && deliveryActive && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-2"
+                                onClick={() => restartSimulation(order)}
+                                disabled={deliveryBusy}
+                              >
+                                <RefreshCw className="size-4" />
+                                Restart Simulation
+                              </Button>
+                            )}
+                            {delivery.client_tracking_url && (
+                              <Button variant="ghost" size="sm" className="gap-2" asChild>
+                                <a href={delivery.client_tracking_url} target="_blank" rel="noopener noreferrer">
+                                  <ExternalLink className="size-4" />
+                                  Stuart Tracking Fallback
+                                </a>
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="mt-4 rounded-lg border bg-white p-3 text-sm text-gray-700">
+                          {order.status === 'ready'
+                            ? 'This order is ready, but no Stuart delivery job is currently attached. Use Retry Dispatch to create one.'
+                            : 'No Stuart delivery has been created yet for this producer order.'}
+                          {inlineDeliveryError && (
+                            <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                              {inlineDeliveryError}
+                            </div>
+                          )}
+                          {order.status !== 'delivered' && order.status !== 'cancelled' && (
+                            <div className="mt-3">
+                              <Button size="sm" className="gap-2" onClick={() => retryDelivery(order)} disabled={deliveryBusy}>
+                                {deliveryBusy ? <Loader2 className="size-4 animate-spin" /> : <Truck className="size-4" />}
+                                Retry Dispatch
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {order.status === 'pending' && (

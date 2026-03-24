@@ -60,9 +60,9 @@ export function getSiteNavItems(role?: UserRole | null): SiteNavItem[] {
     default:
       return [
         { label: 'Home', to: '/', exact: true, matchPrefixes: ['/'] },
-        { label: 'Buy Local', to: '/portal/customer', matchPrefixes: ['/portal/customer'] },
-        { label: 'Producer Portal', to: '/portal/producer', matchPrefixes: ['/portal/producer'] },
-        { label: 'Community Portal', to: '/portal/community', matchPrefixes: ['/portal/community'] },
+        { label: 'About', to: '/about', matchPrefixes: ['/about'] },
+        { label: 'Producers', to: '/producers', matchPrefixes: ['/producers'] },
+        { label: 'Browse', to: '/browse', matchPrefixes: ['/browse'] },
       ];
   }
 }

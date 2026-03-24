@@ -4,6 +4,7 @@ services:
       context: .
       args:
         VITE_GOOGLE_MAPS_API_KEY: "${VITE_GOOGLE_MAPS_API_KEY}"
+        VITE_DELIVERY_SIMULATION_POLL_SECONDS: "${VITE_DELIVERY_SIMULATION_POLL_SECONDS:-15}"
     volumes:
       - media_data:/app/media
     ports:
@@ -13,9 +14,11 @@ services:
         condition: service_healthy
       payments:
         condition: service_healthy
+      stuart:
+        condition: service_healthy
     environment:
       DJANGO_DEBUG: "${DJANGO_DEBUG:-true}"
-      DJANGO_ALLOWED_HOSTS: "${DJANGO_ALLOWED_HOSTS:-127.0.0.1,localhost,0.0.0.0}"
+      DJANGO_ALLOWED_HOSTS: "${DJANGO_ALLOWED_HOSTS:-127.0.0.1,localhost,0.0.0.0,.trycloudflare.com}"
       FRONTEND_URL: "${FRONTEND_URL:-http://127.0.0.1:8000}"
       DJANGO_DB_ENGINE: "django.db.backends.postgresql"
       DJANGO_DB_HOST: "db"
@@ -36,6 +39,13 @@ services:
       STRIPE_WEBHOOK_SECRET: "${STRIPE_WEBHOOK_SECRET:-whsec_placeholder_replace_me}"
       PAYMENT_SERVICE_BASE_URL: "http://payments:8010"
       PAYMENT_SERVICE_SHARED_SECRET: "${PAYMENT_SERVICE_SHARED_SECRET:-local-payment-service-secret}"
+      STUART_SERVICE_BASE_URL: "http://stuart:8020"
+      STUART_SERVICE_SHARED_SECRET: "${STUART_SERVICE_SHARED_SECRET:-local-stuart-service-secret}"
+      STUART_SERVICE_TIMEOUT_SECONDS: "${STUART_SERVICE_TIMEOUT_SECONDS:-15}"
+      STUART_WEBHOOK_SECRET: "${STUART_WEBHOOK_SECRET:-}"
+      DELIVERY_SIMULATION_ENABLED: "${DELIVERY_SIMULATION_ENABLED:-true}"
+      DELIVERY_SIMULATION_TOTAL_SECONDS: "${DELIVERY_SIMULATION_TOTAL_SECONDS:-120}"
+      DELIVERY_SIMULATION_POLL_SECONDS: "${DELIVERY_SIMULATION_POLL_SECONDS:-15}"
     command: >
       sh -c "
       until python manage.py migrate; do
@@ -59,6 +69,24 @@ services:
       PAYMENT_SERVICE_PORT: "8010"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8010/health').read()"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  stuart:
+    build:
+      context: .
+      dockerfile: stuart_service/Dockerfile
+    environment:
+      STUART_CLIENT_ID: "${STUART_CLIENT_ID:-}"
+      STUART_CLIENT_SECRET: "${STUART_CLIENT_SECRET:-}"
+      STUART_ACCOUNT_ID: "${STUART_ACCOUNT_ID:-}"
+      STUART_BASE_URL: "${STUART_BASE_URL:-https://api.sandbox.stuart.com}"
+      STUART_SERVICE_SHARED_SECRET: "${STUART_SERVICE_SHARED_SECRET:-local-stuart-service-secret}"
+      STUART_SERVICE_PORT: "8020"
+      STUART_TIMEOUT_SECONDS: "${STUART_TIMEOUT_SECONDS:-20}"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8020/health').read()"]
       interval: 5s
       timeout: 5s
       retries: 12

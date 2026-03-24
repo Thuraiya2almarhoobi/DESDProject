@@ -5,6 +5,11 @@ from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
+from apps.accounts.models import (
+    Address,
+    CustomerProfile as EditableCustomerProfile,
+    ProducerProfile as EditableProducerProfile,
+)
 from apps.content.models import FarmStory, Recipe, RecipeProduct
 from apps.orders.models import (
     CustomerProfile,
@@ -112,6 +117,51 @@ class Command(BaseCommand):
             },
         )
 
+        def upsert_address(user, *, label: str, line1: str, city: str, postcode: str, line2: str = "", is_default: bool = True):
+            address = Address.objects.filter(user=user, label=label).order_by("id").first()
+            if address is None:
+                address = Address.objects.filter(user=user, is_default=True).order_by("id").first()
+
+            if address is None:
+                return Address.objects.create(
+                    user=user,
+                    label=label,
+                    line1=line1,
+                    line2=line2,
+                    city=city,
+                    postcode=postcode,
+                    is_default=is_default,
+                )
+
+            address.label = label
+            address.line1 = line1
+            address.line2 = line2
+            address.city = city
+            address.postcode = postcode
+            address.is_default = is_default
+            address.save(update_fields=["label", "line1", "line2", "city", "postcode", "is_default"])
+            if is_default:
+                Address.objects.filter(user=user).exclude(pk=address.pk).update(is_default=False)
+            return address
+
+        customer_address = upsert_address(
+            customer_user,
+            label="Delivery Address",
+            line1="45 Park Street",
+            city="Bristol",
+            postcode="BS1 5JG",
+        )
+        EditableCustomerProfile.objects.update_or_create(
+            user=customer_user,
+            defaults={
+                "full_name": "Demo Customer",
+                "phone": "07700900123",
+                "allergies_text": "",
+                "preferences_text": "",
+                "default_address": customer_address,
+            },
+        )
+
         bristol_farm, _ = Producer.objects.update_or_create(
             business_name="Bristol Valley Farm",
             defaults={
@@ -121,6 +171,24 @@ class Command(BaseCommand):
                 "postcode": "BS1 4DJ",
                 "lead_time_hours": 48,
                 "is_active": True,
+            },
+        )
+        bristol_farm_address = upsert_address(
+            producer_user,
+            label="Business Address",
+            line1="Unit 5 Farm Lane",
+            city="Bristol",
+            postcode="BS1 4DJ",
+        )
+        EditableProducerProfile.objects.update_or_create(
+            user=producer_user,
+            defaults={
+                "business_name": "Bristol Valley Farm",
+                "contact_name": "Amelia Grower",
+                "phone": "01179123456",
+                "farm_origin_text": "Fresh seasonal produce from Bristol growers.",
+                "lead_time_hours": 48,
+                "address": bristol_farm_address,
             },
         )
 
@@ -133,6 +201,24 @@ class Command(BaseCommand):
                 "postcode": "BS3 2AA",
                 "lead_time_hours": 72,
                 "is_active": True,
+            },
+        )
+        hillside_dairy_address = upsert_address(
+            producer_two_user,
+            label="Business Address",
+            line1="18 Dairy Lane",
+            city="Bristol",
+            postcode="BS3 2AA",
+        )
+        EditableProducerProfile.objects.update_or_create(
+            user=producer_two_user,
+            defaults={
+                "business_name": "Hillside Dairy",
+                "contact_name": "Harvey Milker",
+                "phone": "01179001122",
+                "farm_origin_text": "Milk, eggs, and bakery goods prepared for local delivery.",
+                "lead_time_hours": 72,
+                "address": hillside_dairy_address,
             },
         )
 

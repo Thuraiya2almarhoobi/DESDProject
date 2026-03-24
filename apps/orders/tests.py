@@ -90,6 +90,12 @@ class OrdersCriticalFlowTests(APITestCase):
         )
         self.payment_service_patcher.start()
         self.addCleanup(self.payment_service_patcher.stop)
+        self.delivery_service_patcher = patch(
+            "apps.delivery.services._service_request",
+            side_effect=self._mock_delivery_service_request,
+        )
+        self.delivery_service_patcher.start()
+        self.addCleanup(self.delivery_service_patcher.stop)
 
     def _mock_payment_service_post(self, url, json=None, headers=None, timeout=None):
         if url.endswith("/stripe/checkout-sessions"):
@@ -104,6 +110,44 @@ class OrdersCriticalFlowTests(APITestCase):
                 },
             )
         raise AssertionError(f"Unexpected payment service request: {url}")
+
+    def _mock_delivery_service_request(self, path, payload):
+        if path == "/stuart/jobs":
+            client_reference = str((payload or {}).get("client_reference") or "")
+            return {
+                "job_id": f"job_{client_reference or '1'}",
+                "package_id": f"pkg_{client_reference or '1'}",
+                "client_reference": client_reference,
+                "status": "created",
+                "tracking_url": f"https://tracking.stuart.test/{client_reference or '1'}",
+                "client_tracking_url": f"https://client.stuart.test/{client_reference or '1'}",
+                "eta_to_dropoff": (timezone.now() + timedelta(hours=1)).isoformat(),
+                "test_mode": True,
+            }
+        if path == "/stuart/jobs/retrieve":
+            client_reference = str((payload or {}).get("client_reference") or "")
+            return {
+                "job_id": str((payload or {}).get("job_id") or ""),
+                "package_id": str((payload or {}).get("package_id") or ""),
+                "client_reference": client_reference,
+                "status": "delivering",
+                "tracking_url": f"https://tracking.stuart.test/{client_reference or '1'}",
+                "client_tracking_url": f"https://client.stuart.test/{client_reference or '1'}",
+                "eta_to_dropoff": (timezone.now() + timedelta(minutes=35)).isoformat(),
+                "courier_name": "Sandbox Courier",
+                "courier_transport_type": "bike",
+                "test_mode": True,
+            }
+        if path == "/stuart/jobs/cancel":
+            client_reference = str((payload or {}).get("client_reference") or "")
+            return {
+                "job_id": str((payload or {}).get("job_id") or ""),
+                "package_id": str((payload or {}).get("package_id") or ""),
+                "client_reference": client_reference,
+                "status": "cancelled",
+                "test_mode": True,
+            }
+        raise AssertionError(f"Unexpected delivery service request: {path}")
 
     def _add_to_cart(self, product: Product, quantity: str):
         return self.client.post(
@@ -385,6 +429,8 @@ class OrdersCriticalFlowTests(APITestCase):
         )
         self.assertEqual(ready_res.status_code, status.HTTP_200_OK)
         self.assertEqual(ready_res.data["status"], Order.Status.READY)
+        self.assertEqual(ready_res.data["delivery"]["status"], "assigned")
+        self.assertEqual(ready_res.data["delivery"]["client_reference"], f"suborder:{sub_order.id}")
 
         delivered_res = producer_client.patch(
             f"/api/orders/producer/sub-orders/{sub_order.id}/status/",

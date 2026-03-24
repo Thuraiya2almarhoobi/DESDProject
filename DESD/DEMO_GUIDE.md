@@ -72,6 +72,7 @@ The application has three user roles with different access levels:
 7. Use test card `4242 4242 4242 4242` with any valid future expiry/CVC
 8. On success: Order confirmation shows order number and Stripe payment ID
 9. On cancel: Clear error message and reserved stock is released again
+10. Open **Order History > Current Orders** to see the in-app live delivery map, Stuart status, ETA, courier details, and tracking fallback links once the producer dispatches the order
 
 ### 2. Producer Journey (Manage Products & Orders)
 
@@ -99,6 +100,17 @@ The application has three user roles with different access levels:
    - **Your earnings** (subtotal - commission is for platform, producer gets full subtotal)
 4. Update order status via dropdown:
    - Pending → Confirmed → Preparing → Ready → Delivered
+5. When changing a sub-order from `Confirmed` to `Ready`, the app automatically creates a Stuart Sandbox delivery and starts the sandbox rider simulation
+6. The order card now shows a **Stuart Delivery** panel with:
+   - dispatch status
+   - Stuart job/package references
+   - ETA
+   - courier details
+   - in-app live map
+   - tracking fallback link
+   - retry / refresh / cancel actions
+   - restart simulation action for sandbox deliveries
+7. If Stuart dispatch fails, the producer sees an inline error and the sub-order stays at `Confirmed`
 
 **TC-010: Inventory Management**
 1. Go to "Inventory" page
@@ -217,6 +229,24 @@ Every product shows:
 - Inventory management (TC-010)
 - Payment reporting (TC-011)
 - Admin commission (TC-012)
+
+## Stuart Sandbox Delivery Setup
+1. Add the Stuart Sandbox credentials to the root `.env`
+2. Start Docker:
+```bash
+docker compose up --build
+```
+3. Open the app at `http://127.0.0.1:8000/`
+4. Run a tunnel for webhooks:
+```bash
+ngrok http 8000
+```
+5. Point Stuart Sandbox webhooks to:
+```text
+https://YOUR-NGROK-SUBDOMAIN.ngrok.app/api/delivery/stuart/webhook/
+```
+6. Make sure the Google Cloud project for `VITE_GOOGLE_MAPS_API_KEY` has the **Maps JavaScript API** enabled so the in-app delivery map can render.
+7. Sandbox rider animation does not require Stuart webhooks to move in-app; webhooks remain useful for testing real callback handling and terminal delivery states.
 
 ✅ **Robust Error Handling**
 - Empty states throughout

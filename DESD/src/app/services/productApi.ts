@@ -126,6 +126,12 @@ export async function fetchMarketplaceProductsFromApi(): Promise<Product[]> {
   return products.map(backendProductToFrontend);
 }
 
+export async function fetchPublicMarketplaceProductById(productId: string): Promise<Product> {
+  const res = await fetch(apiUrl(`/api/producer/public/products/${productId}/`));
+  const product = await parseResponse<BackendProduct>(res);
+  return backendProductToFrontend(product);
+}
+
 export async function fetchProducerProductsFromApi(demoUserEmail: string): Promise<Product[]> {
   const res = await fetch(apiUrl('/api/producer/products/'), {
     headers: {
@@ -202,5 +208,4 @@ export async function patchProducerProductInApi(
   const product = await parseResponse<BackendProduct>(res);
   return backendProductToFrontend(product);
 }
-
 
