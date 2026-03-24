@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 import { apiJson } from '../lib/api';
 import { clearPendingCustomerPreviewExitTarget } from '../lib/customerPreview';
+import { isBuyerRole } from '../lib/ordering';
 import { getDashboardPathForRole } from '../lib/roleRouting';
 import { getSiteNavItems, isSiteNavItemActive } from '../lib/siteNavigation';
 import { Badge } from './ui/badge';
@@ -72,7 +73,7 @@ export function SiteHeader({
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [profilePostcode, setProfilePostcode] = useState('');
 
-  const isActualCustomer = user?.role === 'CUSTOMER';
+  const isBuyer = isBuyerRole(user?.role);
   const isProducer = user?.role === 'PRODUCER';
   const customerName = (user?.name || '').trim() || 'Customer';
   const roleSummary = getRoleSummary(user?.role);
@@ -110,6 +111,20 @@ export function SiteHeader({
     : user.role === 'ADMIN'
       ? getDashboardPathForRole(user.role)
       : '/marketplace';
+
+  const buyerAddressLabel =
+    user?.role === 'COMMUNITY'
+      ? 'Community drop-off'
+      : user?.role === 'RESTAURANT'
+        ? 'Kitchen delivery'
+        : 'Delivery address';
+
+  const buyerPostcodeLabel =
+    user?.role === 'COMMUNITY'
+      ? 'Drop-off postcode'
+      : user?.role === 'RESTAURANT'
+        ? 'Kitchen postcode'
+        : 'Delivering to';
 
   const updateCollapsedState = (nextCollapsed: boolean) => {
     if (isCollapsedRef.current === nextCollapsed) {
@@ -186,7 +201,7 @@ export function SiteHeader({
   }, [showSearch]);
 
   useEffect(() => {
-    if (!isActualCustomer || deliveryPostcode) {
+    if (!isBuyer || deliveryPostcode) {
       setProfilePostcode('');
       return;
     }
@@ -211,16 +226,20 @@ export function SiteHeader({
     return () => {
       mounted = false;
     };
-  }, [deliveryPostcode, isActualCustomer]);
+  }, [deliveryPostcode, isBuyer]);
 
   const handleLogout = () => {
     clearPendingCustomerPreviewExitTarget();
     stopCustomerPreview();
     logout();
-    navigate('/');
+    navigate(user?.role === 'PRODUCER' ? '/login' : '/');
   };
 
   const openDeliveryProfile = () => {
+    if (user?.role === 'COMMUNITY') {
+      navigate('/account#organisation-profile');
+      return;
+    }
     navigate('/account#delivery-profile');
   };
 
@@ -251,9 +270,9 @@ export function SiteHeader({
                   : `Signed in as ${customerName}`}
               </p>
               {roleSummary && <p className="text-xs text-[oklch(0.43_0.03_145)]">{roleSummary}</p>}
-              {isActualCustomer && defaultAddressText && (
+              {isBuyer && defaultAddressText && (
                 <p className="max-w-[24rem] truncate text-xs text-[oklch(0.43_0.03_145)]">
-                  Delivery address: {defaultAddressText}
+                  {buyerAddressLabel}: {defaultAddressText}
                 </p>
               )}
               {isProducer && producerAddress && (
@@ -267,7 +286,7 @@ export function SiteHeader({
       </Link>
 
       <div className="flex flex-wrap items-center justify-end gap-2">
-        {isActualCustomer && (
+        {isBuyer && (
           <Button
             variant="ghost"
             size="sm"
@@ -275,16 +294,16 @@ export function SiteHeader({
             className="h-auto min-h-10 items-start gap-2 px-3 py-2 text-left"
           >
             <MapPin className="mt-0.5 size-4 shrink-0 text-[oklch(0.38_0.04_145)]" />
-            <span className="flex flex-col leading-tight">
-              <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-[oklch(0.46_0.03_145)]">
-                Delivering to
+              <span className="flex flex-col leading-tight">
+                <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-[oklch(0.46_0.03_145)]">
+                  {buyerPostcodeLabel}
+                </span>
+                <span className="max-w-[8rem] truncate text-sm font-semibold text-[oklch(0.24_0.03_145)]">
+                  {displayedDeliveryPostcode || 'Set postcode'}
+                </span>
               </span>
-              <span className="max-w-[8rem] truncate text-sm font-semibold text-[oklch(0.24_0.03_145)]">
-                {displayedDeliveryPostcode || 'Set postcode'}
-              </span>
-            </span>
-          </Button>
-        )}
+            </Button>
+          )}
 
         {isProducer && (
           <Button
@@ -305,10 +324,10 @@ export function SiteHeader({
           </Button>
         )}
 
-        {isActualCustomer && (
+        {isBuyer && (
           <Button variant="outline" size="sm" onClick={() => navigate('/cart')} className="relative">
             <ShoppingCart className="size-4 sm:mr-2" />
-            <span className="hidden sm:inline">Cart</span>
+            <span className="hidden sm:inline">{user?.role === 'CUSTOMER' ? 'Cart' : 'Order Cart'}</span>
             {getTotalItems() > 0 && (
               <Badge className="ml-2 flex h-5 min-w-5 items-center justify-center px-1.5">
                 {getTotalItems()}
@@ -349,12 +368,17 @@ export function SiteHeader({
               <DropdownMenuContent align="end">
                 <DropdownMenuLabel>Hello, {customerName}</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                {isActualCustomer ? (
+                {isBuyer ? (
                   <>
                     <DropdownMenuLabel>Account</DropdownMenuLabel>
                     <DropdownMenuItem onClick={() => navigate('/account')}>Account Information</DropdownMenuItem>
                     <DropdownMenuItem onClick={() => navigate('/settings')}>Settings</DropdownMenuItem>
                     <DropdownMenuItem onClick={() => navigate('/orders/history')}>Order History</DropdownMenuItem>
+                    {user.role !== 'CUSTOMER' && (
+                      <DropdownMenuItem onClick={() => navigate(getDashboardPathForRole(user.role))}>
+                        Go to Dashboard
+                      </DropdownMenuItem>
+                    )}
                     <DropdownMenuSeparator />
                     <DropdownMenuLabel>Explore</DropdownMenuLabel>
                     <DropdownMenuItem onClick={() => navigate('/map')}>Producers Near Me</DropdownMenuItem>

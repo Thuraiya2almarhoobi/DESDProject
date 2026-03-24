@@ -26,6 +26,7 @@ from .models import (
     RecurringOrderInstanceOverride,
     RecurringOrderInstanceOverrideItem,
 )
+from .services import MAX_ORDER_ITEM_QUANTITY
 
 
 class ProducerSerializer(serializers.ModelSerializer):
@@ -559,7 +560,12 @@ class RecurringOrderTemplateUpdateSerializer(serializers.Serializer):
 
 class RecurringOrderInstanceOverrideItemInputSerializer(serializers.Serializer):
     product_id = serializers.IntegerField()
-    quantity = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal("0.01"))
+    quantity = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        min_value=Decimal("0.01"),
+        max_value=MAX_ORDER_ITEM_QUANTITY,
+    )
 
 
 class RecurringOrderInstanceOverrideSerializer(serializers.ModelSerializer):

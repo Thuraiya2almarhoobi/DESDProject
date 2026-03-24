@@ -30,6 +30,7 @@ from .serializers import (
     ProductSerializer,
 )
 from .services import (
+    MAX_ORDER_ITEM_QUANTITY,
     build_cart_payload,
     checkout_cart,
     checkout_cart_with_stripe_reservation,
@@ -77,6 +78,11 @@ def _parse_decimal(value: str | None) -> Decimal | None:
         return Decimal(value.strip())
     except (InvalidOperation, ValueError):
         return None
+
+
+def _enforce_cart_quantity_cap(quantity: Decimal) -> None:
+    if quantity > MAX_ORDER_ITEM_QUANTITY:
+        raise ValueError(f"Maximum quantity per product is {MAX_ORDER_ITEM_QUANTITY.quantize(Decimal('1'))}.")
 
 
 PRODUCER_SUBORDER_ALLOWED_TRANSITIONS = {
@@ -499,6 +505,7 @@ class CartItemAddAPIView(APIView):
 
         try:
             quantity = _parse_quantity(quantity_raw)
+            _enforce_cart_quantity_cap(quantity)
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -519,6 +526,11 @@ class CartItemAddAPIView(APIView):
         )
         if not created:
             new_qty = cart_item.quantity + quantity
+            if new_qty > MAX_ORDER_ITEM_QUANTITY:
+                return Response(
+                    {"detail": f"Maximum quantity per product is {MAX_ORDER_ITEM_QUANTITY.quantize(Decimal('1'))}."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             if new_qty > product.stock_quantity:
                 return Response(
                     {"detail": "Requested quantity exceeds available stock."},
@@ -547,6 +559,7 @@ class CartItemDetailAPIView(APIView):
 
         try:
             quantity = _parse_quantity(request.data.get("quantity"))
+            _enforce_cart_quantity_cap(quantity)
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -586,7 +599,24 @@ class CheckoutAPIView(APIView):
     def post(self, request):
         serializer = CheckoutRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        if getattr(request.user, "role", None) in {"COMMUNITY", "RESTAURANT"}:
+
+        use_stripe_checkout = serializer.validated_data.get("payment_method") == "stripe_checkout"
+
+        if not use_stripe_checkout and getattr(request.user, "role", None) in {"COMMUNITY", "RESTAURANT"}:
+            try:
+                order = checkout_cart(request.user, serializer.validated_data)
+            except ValueError as exc:
+                return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+            return Response(
+                {
+                    "message": "Order placed successfully.",
+                    "order": OrderDetailSerializer(order).data,
+                },
+                status=status.HTTP_201_CREATED,
+            )
+
+        if not use_stripe_checkout:
             try:
                 order = checkout_cart(request.user, serializer.validated_data)
             except ValueError as exc:
@@ -603,7 +633,7 @@ class CheckoutAPIView(APIView):
         order = None
         try:
             order = checkout_cart_with_stripe_reservation(request.user, serializer.validated_data)
-            from apps.payments.services import cancel_stripe_checkout_order, create_stripe_checkout_session_for_order
+            from apps.payments.services import create_stripe_checkout_session_for_order
 
             checkout_session = create_stripe_checkout_session_for_order(order)
         except ValueError as exc:

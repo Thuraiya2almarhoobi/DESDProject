@@ -72,7 +72,7 @@ export function ContentFeedPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const isProducer = user?.role === 'PRODUCER';
-  const isCustomer = user?.role === 'CUSTOMER';
+  const isBuyer = user?.role === 'CUSTOMER' || user?.role === 'COMMUNITY' || user?.role === 'RESTAURANT';
   const goBack = useSafeBack(isProducer ? '/producer/dashboard' : '/marketplace');
 
   const [feed, setFeed] = useState<ApiFeedEntry[]>([]);
@@ -258,7 +258,7 @@ export function ContentFeedPage() {
       <main className="max-w-6xl mx-auto px-4 py-8 space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           {backButton}
-          {isCustomer ? (
+          {isBuyer ? (
             <Button variant="outline" onClick={() => navigate('/orders/history')}>
               Order History
             </Button>
@@ -520,7 +520,7 @@ export function ContentFeedPage() {
                             ? 'View Full Recipe'
                             : 'View Full Story'}
                       </Button>
-                      {isRecipe && isCustomer && (
+                      {isRecipe && isBuyer && (
                         <Button
                           size="sm"
                           variant={savedRecipeIds.has(entry.id) ? 'default' : 'outline'}

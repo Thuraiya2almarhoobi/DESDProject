@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ArrowLeft, Save } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAuth } from '../contexts/AuthContext';
 import { useSafeBack } from '../lib/navigation';
 import { SiteHeader } from '../components/SiteHeader';
 import { Button } from '../components/ui/button';
@@ -28,12 +29,19 @@ const DEFAULT_SETTINGS: CustomerSettings = {
   defaultMapRadiusMiles: 20,
 };
 
-function loadSettings(): CustomerSettings {
+function storageKeyForRole(role?: string | null): string {
+  if (!role || role === 'CUSTOMER') {
+    return SETTINGS_STORAGE_KEY;
+  }
+  return `desd_${role.toLowerCase()}_settings`;
+}
+
+function loadSettings(storageKey: string): CustomerSettings {
   if (typeof window === 'undefined') {
     return DEFAULT_SETTINGS;
   }
 
-  const raw = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
+  const raw = window.localStorage.getItem(storageKey);
   if (!raw) {
     return DEFAULT_SETTINGS;
   }
@@ -70,7 +78,21 @@ function loadSettings(): CustomerSettings {
 export function SettingsPage() {
   const navigate = useNavigate();
   const goBack = useSafeBack('/marketplace');
+  const { user } = useAuth();
   const [settings, setSettings] = useState<CustomerSettings>(DEFAULT_SETTINGS);
+  const storageKey = storageKeyForRole(user?.role);
+  const pageTitle =
+    user?.role === 'COMMUNITY'
+      ? 'Community Settings'
+      : user?.role === 'RESTAURANT'
+        ? 'Restaurant Settings'
+        : 'Settings';
+  const pageDescription =
+    user?.role === 'COMMUNITY'
+      ? 'Configure community ordering, food-mile visibility, and organisation delivery preferences.'
+      : user?.role === 'RESTAURANT'
+        ? 'Configure kitchen ordering, delivery updates, and supply-planning preferences.'
+        : 'Configure customer preferences and default behavior.';
   const backToMarketplaceButton = (
     <Button variant="ghost" onClick={goBack}>
       <ArrowLeft className="mr-2 size-4" />
@@ -79,12 +101,12 @@ export function SettingsPage() {
   );
 
   useEffect(() => {
-    setSettings(loadSettings());
-  }, []);
+    setSettings(loadSettings(storageKey));
+  }, [storageKey]);
 
   const saveSettings = () => {
     if (typeof window !== 'undefined') {
-      window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+      window.localStorage.setItem(storageKey, JSON.stringify(settings));
     }
     toast.success('Settings updated.');
   };
@@ -101,8 +123,8 @@ export function SettingsPage() {
           </Button>
         </div>
         <div>
-          <h1 className="text-3xl font-semibold">Settings</h1>
-          <p className="text-sm text-gray-600 mt-1">Configure customer preferences and default behavior.</p>
+          <h1 className="text-3xl font-semibold">{pageTitle}</h1>
+          <p className="text-sm text-gray-600 mt-1">{pageDescription}</p>
         </div>
 
         <Card>

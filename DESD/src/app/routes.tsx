@@ -163,7 +163,7 @@ export const router = createBrowserRouter([
           {
             path: '/settings',
             element: (
-              <ProtectedRoute allowedRoles={['CUSTOMER']}>
+              <ProtectedRoute allowedRoles={['CUSTOMER', 'COMMUNITY', 'RESTAURANT']}>
                 <SettingsPage />
               </ProtectedRoute>
             ),
@@ -171,7 +171,7 @@ export const router = createBrowserRouter([
           {
             path: '/map',
             element: (
-              <ProtectedRoute allowedRoles={['CUSTOMER']}>
+              <ProtectedRoute allowedRoles={['CUSTOMER', 'COMMUNITY', 'RESTAURANT']}>
                 <MapPage />
               </ProtectedRoute>
             ),
@@ -179,7 +179,7 @@ export const router = createBrowserRouter([
           {
             path: '/content/feed',
             element: (
-              <ProtectedRoute allowedRoles={['CUSTOMER', 'PRODUCER']}>
+              <ProtectedRoute allowedRoles={['CUSTOMER', 'COMMUNITY', 'RESTAURANT', 'PRODUCER']}>
                 <ContentFeedPage />
               </ProtectedRoute>
             ),

@@ -1,9 +1,10 @@
-ï»¿import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { ArrowLeft, CreditCard, CheckCircle, LoaderCircle, XCircle } from 'lucide-react';
 import { useCart } from '../contexts/CartContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSafeBack } from '../lib/navigation';
+import { isBuyerRole, MAX_ORDER_ITEM_QUANTITY } from '../lib/ordering';
 import { SiteHeader } from '../components/SiteHeader';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
@@ -17,7 +18,64 @@ import { ApiOrderDetail, apiJson } from '../lib/api';
 
 type CheckoutStep = 'address' | 'delivery' | 'payment' | 'confirm';
 
-const PENDING_STRIPE_ORDER_STORAGE_KEY = 'desd_pending_stripe_order_id';
+const PENDING_STRIPE_CHECKOUT_STORAGE_KEY = 'desd_pending_stripe_checkout';
+const LEGACY_PENDING_STRIPE_ORDER_STORAGE_KEY = 'desd_pending_stripe_order_id';
+
+interface PendingStripeCheckoutState {
+  orderId: number;
+  recurringTemplateId?: number | null;
+}
+
+function readPendingStripeCheckout(): PendingStripeCheckoutState | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  const raw = window.sessionStorage.getItem(PENDING_STRIPE_CHECKOUT_STORAGE_KEY);
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw) as Partial<PendingStripeCheckoutState>;
+      if (typeof parsed.orderId === 'number') {
+        return {
+          orderId: parsed.orderId,
+          recurringTemplateId:
+            typeof parsed.recurringTemplateId === 'number' ? parsed.recurringTemplateId : null,
+        };
+      }
+    } catch {
+      // Fall through to the legacy order-id storage format.
+    }
+  }
+
+  const legacyOrderId = window.sessionStorage.getItem(LEGACY_PENDING_STRIPE_ORDER_STORAGE_KEY);
+  if (!legacyOrderId) {
+    return null;
+  }
+
+  const parsedLegacyId = Number(legacyOrderId);
+  if (!Number.isFinite(parsedLegacyId)) {
+    return null;
+  }
+  return { orderId: parsedLegacyId, recurringTemplateId: null };
+}
+
+function persistPendingStripeCheckout(state: PendingStripeCheckoutState): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  window.sessionStorage.setItem(PENDING_STRIPE_CHECKOUT_STORAGE_KEY, JSON.stringify(state));
+  window.sessionStorage.setItem(LEGACY_PENDING_STRIPE_ORDER_STORAGE_KEY, String(state.orderId));
+}
+
+function clearPendingStripeCheckout(): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  window.sessionStorage.removeItem(PENDING_STRIPE_CHECKOUT_STORAGE_KEY);
+  window.sessionStorage.removeItem(LEGACY_PENDING_STRIPE_ORDER_STORAGE_KEY);
+}
 
 function minDeliveryDate(leadHours: number): string {
   const minHours = Math.max(48, leadHours || 48);
@@ -70,6 +128,7 @@ export function CheckoutPage() {
   const isCustomerCheckout = user?.role === 'CUSTOMER';
   const isCommunityCheckout = user?.role === 'COMMUNITY';
   const isRestaurantCheckout = user?.role === 'RESTAURANT';
+  const usesStripeCheckout = isBuyerRole(user?.role);
   const isMultiProducerCheckout = cartByProducer.length > 1;
   const isStripeSuccessReturn = location.pathname === '/checkout/success';
   const isStripeCancelReturn = location.pathname === '/checkout/cancel';
@@ -136,7 +195,7 @@ export function CheckoutPage() {
   }, [cartByProducer]);
 
   useEffect(() => {
-    if (!isCustomerCheckout || !isStripeReturnPath) {
+    if (!usesStripeCheckout || !isStripeReturnPath) {
       return;
     }
 
@@ -152,6 +211,7 @@ export function CheckoutPage() {
       try {
         if (isStripeSuccessReturn) {
           const sessionId = query.get('session_id');
+          const pendingCheckout = readPendingStripeCheckout();
           if (!sessionId) {
             throw new Error('Stripe did not return a checkout session ID.');
           }
@@ -172,12 +232,11 @@ export function CheckoutPage() {
 
           if (response.confirmed && response.order.payment_status === 'paid') {
             setCreatedOrder(response.order);
+            setCreatedRecurringTemplateId(pendingCheckout?.recurringTemplateId ?? null);
             setOrderComplete(true);
             setStep('confirm');
             setPaymentNotice('');
-            if (typeof window !== 'undefined') {
-              window.sessionStorage.removeItem(PENDING_STRIPE_ORDER_STORAGE_KEY);
-            }
+            clearPendingStripeCheckout();
             await refreshCart();
             return;
           }
@@ -190,22 +249,18 @@ export function CheckoutPage() {
           return;
         }
 
-        const pendingOrderId =
-          typeof window !== 'undefined'
-            ? window.sessionStorage.getItem(PENDING_STRIPE_ORDER_STORAGE_KEY)
-            : null;
+        const pendingCheckout = readPendingStripeCheckout();
+        const pendingOrderId = pendingCheckout?.orderId;
 
         if (pendingOrderId) {
           await apiJson<{ cancelled: boolean; order: ApiOrderDetail }>(
             '/api/payments/stripe/checkout-session/cancel/',
             {
               method: 'POST',
-              body: JSON.stringify({ order_id: Number(pendingOrderId) }),
+              body: JSON.stringify({ order_id: pendingOrderId }),
             },
           );
-          if (typeof window !== 'undefined') {
-            window.sessionStorage.removeItem(PENDING_STRIPE_ORDER_STORAGE_KEY);
-          }
+          clearPendingStripeCheckout();
           await refreshCart();
         }
 
@@ -213,7 +268,11 @@ export function CheckoutPage() {
           return;
         }
 
-        setPaymentError('Stripe checkout was cancelled. Your reserved stock has been returned to the cart flow.');
+        setPaymentError(
+          pendingCheckout?.recurringTemplateId
+            ? 'Stripe checkout was cancelled. Your reserved stock has been returned to the cart flow, and the recurring template remains available in Recurring Orders.'
+            : 'Stripe checkout was cancelled. Your reserved stock has been returned to the cart flow.',
+        );
       } catch (error) {
         if (!mounted) {
           return;
@@ -232,13 +291,12 @@ export function CheckoutPage() {
       mounted = false;
     };
   }, [
-    isCustomerCheckout,
     isStripeCancelReturn,
     isStripeReturnPath,
     isStripeSuccessReturn,
     location.search,
-    navigate,
     refreshCart,
+    usesStripeCheckout,
   ]);
 
   if ((items.length === 0 || selectedItems.length === 0) && !orderComplete && !isStripeReturnPath) {
@@ -268,8 +326,8 @@ export function CheckoutPage() {
       const payload: Record<string, unknown> = {
         delivery_address: fullAddress,
         customer_postcode: postcode,
-        payment_method: isCustomerCheckout ? 'stripe_checkout' : 'test_card',
-        payment_token: isCustomerCheckout ? '' : 'tok_demo',
+        payment_method: usesStripeCheckout ? 'stripe_checkout' : 'test_card',
+        payment_token: '',
         selected_cart_item_ids: selectedCartItemIds.map((cartItemId) => Number(cartItemId)),
       };
       if (specialInstructions.trim()) {
@@ -295,20 +353,40 @@ export function CheckoutPage() {
           message: string;
           template: { id: number };
           initial_order: ApiOrderDetail;
+          payment: {
+            checkout_session_id: string;
+            checkout_url: string;
+          };
         }>('/api/restaurant/recurring-orders/', {
           method: 'POST',
           body: JSON.stringify(payload),
         });
-        setCreatedOrder(response.initial_order);
-        setCreatedRecurringTemplateId(response.template.id);
+        persistPendingStripeCheckout({
+          orderId: response.initial_order.id,
+          recurringTemplateId: response.template.id,
+        });
+        if (typeof window !== 'undefined') {
+          window.location.assign(response.payment.checkout_url);
+        }
+        return;
       } else if (isCommunityCheckout) {
-        const response = await apiJson<{ message: string; order: ApiOrderDetail }>('/api/community/bulk-checkout/', {
+        const response = await apiJson<{
+          message: string;
+          order: ApiOrderDetail;
+          payment: {
+            checkout_session_id: string;
+            checkout_url: string;
+          };
+        }>('/api/community/bulk-checkout/', {
           method: 'POST',
           body: JSON.stringify(payload),
         });
-        setCreatedOrder(response.order);
-        setCreatedRecurringTemplateId(null);
-      } else if (isCustomerCheckout) {
+        persistPendingStripeCheckout({ orderId: response.order.id, recurringTemplateId: null });
+        if (typeof window !== 'undefined') {
+          window.location.assign(response.payment.checkout_url);
+        }
+        return;
+      } else {
         const response = await apiJson<{
           message: string;
           order: ApiOrderDetail;
@@ -320,23 +398,12 @@ export function CheckoutPage() {
           method: 'POST',
           body: JSON.stringify(payload),
         });
+        persistPendingStripeCheckout({ orderId: response.order.id, recurringTemplateId: null });
         if (typeof window !== 'undefined') {
-          window.sessionStorage.setItem(PENDING_STRIPE_ORDER_STORAGE_KEY, String(response.order.id));
           window.location.assign(response.payment.checkout_url);
         }
         return;
-      } else {
-        const response = await apiJson<{ message: string; order: ApiOrderDetail }>('/api/orders/checkout/', {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        });
-        setCreatedOrder(response.order);
-        setCreatedRecurringTemplateId(null);
       }
-
-      setOrderComplete(true);
-      setStep('confirm');
-      await refreshCart();
     } catch (error) {
       setPaymentError(error instanceof Error ? error.message : 'Payment failed. Please try again.');
     } finally {
@@ -397,7 +464,11 @@ export function CheckoutPage() {
               </div>
               <h2 className="text-2xl font-semibold mb-2">Order Confirmed!</h2>
               <p className="text-gray-600 mb-6">
-                {isCustomerCheckout
+                {isCommunityCheckout
+                  ? 'Your Stripe test payment was captured successfully and the community bulk order has been recorded.'
+                  : isRestaurantCheckout && createdRecurringTemplateId
+                  ? 'Your Stripe test payment was captured successfully and the recurring kitchen template is now active.'
+                  : usesStripeCheckout
                   ? 'Your Stripe test payment was captured successfully and the order has been recorded.'
                   : 'Your order has been successfully placed in test mode.'}
               </p>
@@ -511,6 +582,42 @@ export function CheckoutPage() {
           </p>
         )}
 
+        {(isCommunityCheckout || isRestaurantCheckout) && (
+          <Card className="mb-8 border-[oklch(0.84_0.05_145)] bg-[linear-gradient(135deg,rgba(243,249,244,0.96),rgba(255,255,255,0.94))]">
+            <CardContent className="flex flex-col gap-4 p-5 lg:flex-row lg:items-start lg:justify-between">
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[oklch(0.42_0.07_145)]">
+                  {isCommunityCheckout ? 'Community checkout flow' : 'Restaurant checkout flow'}
+                </p>
+                <h2 className="text-xl font-semibold text-[oklch(0.24_0.03_145)]">
+                  {isCommunityCheckout
+                    ? 'Confirm a single coordinated order for your organisation'
+                    : 'Turn this kitchen order into a confirmed purchase or a reusable recurring template'}
+                </h2>
+                <p className="text-sm text-gray-600">
+                  {isCommunityCheckout
+                    ? 'Delivery notes and producer contacts stay grouped by supplier so volunteers and receiving teams can coordinate clearly.'
+                    : 'Producer sections stay separate so you can schedule deliveries, then optionally convert the order into a weekly or fortnightly template.'}
+                </p>
+              </div>
+              <div className="grid gap-2 rounded-2xl border border-white/80 bg-white/80 p-4 text-sm text-gray-700 lg:min-w-[17rem]">
+                <div className="flex items-center justify-between gap-4">
+                  <span className="font-medium">Per-product cap</span>
+                  <Badge variant="secondary">{MAX_ORDER_ITEM_QUANTITY} units</Badge>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <span className="font-medium">Producer groups</span>
+                  <span>{cartByProducer.length}</span>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <span className="font-medium">Selected lines</span>
+                  <span>{selectedCartItemIds.length}</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <StepIndicator />
 
         <div className="grid lg:grid-cols-3 gap-8">
@@ -518,7 +625,13 @@ export function CheckoutPage() {
             {step === 'address' && (
               <Card>
                 <CardHeader>
-                  <CardTitle>Delivery Address</CardTitle>
+                  <CardTitle>
+                    {isCommunityCheckout
+                      ? 'Community Delivery Address'
+                      : isRestaurantCheckout
+                        ? 'Restaurant Delivery Address'
+                        : 'Delivery Address'}
+                  </CardTitle>
                   <p className="text-sm text-gray-600">
                     Your saved delivery address is pre-filled here and can be edited before checkout.
                   </p>
@@ -552,7 +665,7 @@ export function CheckoutPage() {
                   <p className="text-sm text-gray-600">
                     {isMultiProducerCheckout
                       ? 'Each producer can have a different delivery date.'
-                      : 'The delivery date must respect the producerâ€™s minimum 48-hour lead time.'}
+                      : 'The delivery date must respect the producer’s minimum 48-hour lead time.'}
                   </p>
                 </CardHeader>
                 <CardContent>
@@ -582,6 +695,9 @@ export function CheckoutPage() {
                     })}
                     {isCommunityCheckout && (
                       <div className="border p-4 rounded-lg">
+                        <p className="mb-3 text-sm text-gray-600">
+                          Add any site access notes, receiving contact details, or unloading guidance for the community drop-off point.
+                        </p>
                         <Label htmlFor="special-instructions">Special Delivery Instructions</Label>
                         <Input
                           id="special-instructions"
@@ -593,6 +709,9 @@ export function CheckoutPage() {
                     )}
                     {isRestaurantCheckout && (
                       <div className="border p-4 rounded-lg space-y-3">
+                        <p className="text-sm text-gray-600">
+                          Enable recurring if this order should become the template for regular kitchen replenishment.
+                        </p>
                         <label className="inline-flex items-center gap-2 text-sm">
                           <input
                             type="checkbox"
@@ -663,10 +782,10 @@ export function CheckoutPage() {
             {step === 'payment' && (
               <Card>
                 <CardHeader>
-                  <CardTitle>Payment Method</CardTitle>
-                  <p className="text-sm text-gray-600">
-                    {isCustomerCheckout
-                      ? 'Choose the Stripe test payment method. You will be redirected to Stripe to finish payment.'
+                <CardTitle>Payment Method</CardTitle>
+                <p className="text-sm text-gray-600">
+                    {usesStripeCheckout
+                      ? 'This checkout uses Stripe test mode. You will be redirected to the hosted checkout page to finish payment.'
                       : 'Sandbox payment. No real payment will be processed.'}
                   </p>
                 </CardHeader>
@@ -685,7 +804,7 @@ export function CheckoutPage() {
                   )}
 
                   <form onSubmit={handlePayment} className="space-y-4">
-                    {isCustomerCheckout ? (
+                    {usesStripeCheckout ? (
                       <>
                         <Alert>
                           <CreditCard className="size-4" />
@@ -696,13 +815,26 @@ export function CheckoutPage() {
 
                         <div className="rounded-lg border border-dashed border-[oklch(0.82_0.04_145)] bg-[oklch(0.98_0.01_145)] p-4 text-sm text-gray-700">
                           <p className="font-medium text-gray-900">Selected Payment Method</p>
-                          <p className="mt-2">Stripe Test Card</p>
+                          <p className="mt-2">
+                            {isCommunityCheckout
+                              ? 'Stripe Test Checkout for Community Orders'
+                              : isRestaurantCheckout
+                              ? 'Stripe Test Checkout for Restaurant Orders'
+                              : 'Stripe Test Checkout'}
+                          </p>
                         </div>
 
                         <div className="rounded-lg border border-dashed border-[oklch(0.82_0.04_145)] bg-[oklch(0.98_0.01_145)] p-4 text-sm text-gray-700">
                           <p className="font-medium text-gray-900">What happens next</p>
                           <p className="mt-2">
-                            Your selected stock is reserved before the Stripe redirect. If payment succeeds, the order is marked paid and the cart lines are cleared. If you cancel or Stripe expires the session, the stock is released again.
+                            Your selected stock is reserved before the Stripe redirect. If payment succeeds, the order is marked paid and the checked cart lines are cleared. If you cancel or Stripe expires the session, the stock is released again.
+                          </p>
+                          <p className="mt-2">
+                            {isRestaurantCheckout && makeRecurring
+                              ? 'This payment also activates the recurring supply template you configured in the delivery step.'
+                              : isCommunityCheckout
+                              ? 'Producer contacts and community delivery notes stay grouped after payment so your receiving team can coordinate clearly.'
+                              : 'You will return here automatically after Stripe confirms the test payment.'}
                           </p>
                         </div>
                       </>
@@ -736,14 +868,20 @@ export function CheckoutPage() {
                       </Button>
                       <Button type="submit" className="flex-1" disabled={paymentProcessing}>
                         {paymentProcessing
-                          ? isCustomerCheckout
+                          ? usesStripeCheckout
                             ? 'Opening Stripe...'
                             : 'Processing...'
-                          : isCustomerCheckout
-                          ? 'Continue to Stripe Checkout'
+                          : usesStripeCheckout
+                          ? isCommunityCheckout
+                            ? 'Continue to Stripe for Community Payment'
+                            : isRestaurantCheckout && makeRecurring
+                            ? 'Continue to Stripe and Create Template'
+                            : isRestaurantCheckout
+                            ? 'Continue to Stripe for Restaurant Payment'
+                            : 'Continue to Stripe Checkout'
                           : isRestaurantCheckout && makeRecurring
-                          ? `Create Recurring Order (Â£${total.toFixed(2)})`
-                          : `Pay Â£${total.toFixed(2)}`}
+                          ? `Create Recurring Order (£${total.toFixed(2)})`
+                          : `Pay £${total.toFixed(2)}`}
                       </Button>
                     </div>
                   </form>
@@ -755,7 +893,13 @@ export function CheckoutPage() {
           <div className="lg:col-span-1">
             <Card className="sticky top-4">
               <CardHeader>
-                <CardTitle>Order Summary</CardTitle>
+                <CardTitle>
+                  {isCommunityCheckout
+                    ? 'Community Order Summary'
+                    : isRestaurantCheckout
+                      ? 'Restaurant Order Summary'
+                      : 'Order Summary'}
+                </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-3">
@@ -774,9 +918,9 @@ export function CheckoutPage() {
                         {group.items.map((item) => (
                           <div key={item.cartItemId || item.product.id} className="flex justify-between gap-2 text-xs text-gray-700">
                             <span>
-                              {item.product.name} â€¢ {item.quantity} {item.product.unit}
+                              {item.product.name} • {item.quantity} {item.product.unit}
                             </span>
-                            <span>Â£{(item.product.price * item.quantity).toFixed(2)}</span>
+                            <span>£{(item.product.price * item.quantity).toFixed(2)}</span>
                           </div>
                         ))}
                       </div>
@@ -785,7 +929,7 @@ export function CheckoutPage() {
                           Delivery: {format(new Date(deliveryDates[group.producerId]), 'MMM d, yyyy')}
                         </p>
                       )}
-                      <p className="mt-2 text-sm font-medium">Producer Subtotal: Â£{group.subtotal.toFixed(2)}</p>
+                      <p className="mt-2 text-sm font-medium">Producer Subtotal: £{group.subtotal.toFixed(2)}</p>
                     </div>
                   ))}
                 </div>
@@ -795,11 +939,11 @@ export function CheckoutPage() {
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span>Subtotal</span>
-                    <span>Â£{grandTotal.toFixed(2)}</span>
+                    <span>£{grandTotal.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between text-gray-600">
                     <span>Network Commission (5%)</span>
-                    <span>Â£{commission.toFixed(2)}</span>
+                    <span>£{commission.toFixed(2)}</span>
                   </div>
                 </div>
 
@@ -807,7 +951,7 @@ export function CheckoutPage() {
 
                 <div className="flex justify-between text-lg font-semibold">
                   <span>Total</span>
-                  <span className="text-green-700">Â£{total.toFixed(2)}</span>
+                  <span className="text-green-700">£{total.toFixed(2)}</span>
                 </div>
 
                 {address && (

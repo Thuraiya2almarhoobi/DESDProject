@@ -5,6 +5,7 @@ import { useCart } from '../contexts/CartContext';
 import { useAuth } from '../contexts/AuthContext';
 import { apiJson } from '../lib/api';
 import { useSafeBack } from '../lib/navigation';
+import { MAX_ORDER_ITEM_QUANTITY } from '../lib/ordering';
 import { SiteHeader } from '../components/SiteHeader';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
@@ -162,6 +163,42 @@ export function CartPage() {
             </p>
           </div>
 
+          {isBulkRole && (
+            <Card className="border-[oklch(0.84_0.05_145)] bg-[linear-gradient(135deg,rgba(243,249,244,0.96),rgba(255,255,255,0.94))] shadow-sm">
+              <CardContent className="flex flex-col gap-4 p-5 lg:flex-row lg:items-start lg:justify-between">
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[oklch(0.42_0.07_145)]">
+                    {user?.role === 'COMMUNITY' ? 'Community Portal' : 'Restaurant Portal'}
+                  </p>
+                  <h2 className="text-xl font-semibold text-[oklch(0.24_0.03_145)]">
+                    {user?.role === 'COMMUNITY'
+                      ? 'Coordinate one bulk order across multiple producers'
+                      : 'Shape one organised kitchen order before checkout'}
+                  </h2>
+                  <p className="text-sm text-gray-600">
+                    {user?.role === 'COMMUNITY'
+                      ? 'Select the supplier lines you want to confirm today and keep the rest saved for the next bulk cycle.'
+                      : 'Review each producer section, adjust larger quantities quickly, and move only the selected lines into checkout.'}
+                  </p>
+                </div>
+                <div className="grid gap-2 rounded-2xl border border-white/80 bg-white/80 p-4 text-sm text-gray-700 lg:min-w-[17rem]">
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="font-medium">Per-product cap</span>
+                    <Badge variant="secondary">{MAX_ORDER_ITEM_QUANTITY} units</Badge>
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="font-medium">Producer groups</span>
+                    <span>{cartByProducer.length}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="font-medium">Selected today</span>
+                    <span>{selectedLineCount} lines</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <Card className="border-[oklch(0.86_0.05_150)] bg-white/90 shadow-sm">
             <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
               <div className="space-y-2">
@@ -264,7 +301,10 @@ export function CartPage() {
                         const isSelected = item.cartItemId
                           ? isCartItemSelected(item.cartItemId)
                           : false;
-                        const maxQuantity = Math.max(1, Math.floor(item.product.stock));
+                        const maxQuantity = Math.max(
+                          1,
+                          Math.min(MAX_ORDER_ITEM_QUANTITY, Math.floor(item.product.stock)),
+                        );
 
                         return (
                           <div
@@ -308,6 +348,12 @@ export function CartPage() {
                                   <p className="mb-2 text-xs text-gray-500">
                                     Food miles: {productFoodMiles[item.product.id].toFixed(2)} miles
                                     {' '}• Go Green
+                                  </p>
+                                )}
+
+                                {isBulkRole && (
+                                  <p className="mb-2 text-xs text-gray-500">
+                                    Bulk cap: up to {MAX_ORDER_ITEM_QUANTITY} units per product.
                                   </p>
                                 )}
 
@@ -370,6 +416,18 @@ export function CartPage() {
                                         }
                                       >
                                         +10
+                                      </Button>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() =>
+                                          updateQuantity(
+                                            item.product.id,
+                                            Math.min(maxQuantity, item.quantity + 25),
+                                          )
+                                        }
+                                      >
+                                        +25
                                       </Button>
                                     </>
                                   )}
@@ -477,7 +535,11 @@ export function CartPage() {
                   onClick={() => navigate('/checkout')}
                   disabled={selectedLineCount === 0}
                 >
-                  Proceed to Checkout
+                  {user?.role === 'COMMUNITY'
+                    ? 'Proceed to Community Checkout'
+                    : user?.role === 'RESTAURANT'
+                      ? 'Proceed to Restaurant Checkout'
+                      : 'Proceed to Checkout'}
                 </Button>
 
                 <Button variant="outline" className="w-full" onClick={goBack}>
@@ -490,6 +552,11 @@ export function CartPage() {
                   <p className="mt-1">
                     Orders are delivered directly by each producer with a minimum 48-hour lead time.
                   </p>
+                  {isBulkRole && (
+                    <p className="mt-1">
+                      Bulk quantities are capped at {MAX_ORDER_ITEM_QUANTITY} units per product for each order basket.
+                    </p>
+                  )}
                 </div>
               </CardContent>
             </Card>

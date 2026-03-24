@@ -13,9 +13,14 @@ interface RoleProtectedRouteProps {
 export function RoleProtectedRoute({ children, requiredRole }: RoleProtectedRouteProps) {
   const { user, loading } = useAuth();
   const accessToken = getAccessToken();
+  const unauthenticatedRedirect = requiredRole === 'ADMIN'
+    ? '/admin/login'
+    : requiredRole === 'PRODUCER'
+      ? '/login'
+      : getPortalPathForRole(requiredRole);
 
   if (!accessToken) {
-    return <Navigate to={getPortalPathForRole(requiredRole)} replace />;
+    return <Navigate to={unauthenticatedRedirect} replace />;
   }
 
   if (loading) {
@@ -23,7 +28,7 @@ export function RoleProtectedRoute({ children, requiredRole }: RoleProtectedRout
   }
 
   if (!user) {
-    return <Navigate to={getPortalPathForRole(requiredRole)} replace />;
+    return <Navigate to={unauthenticatedRedirect} replace />;
   }
 
   if (user.role !== requiredRole) {

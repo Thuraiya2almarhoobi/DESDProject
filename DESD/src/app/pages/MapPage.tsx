@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, MapPin, Route } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 import { apiJson } from '../lib/api';
 import { getGoogleMapsEmbedUrl, getGoogleMapsSearchUrl } from '../lib/googleMaps';
 import { useSafeBack } from '../lib/navigation';
@@ -42,6 +43,7 @@ interface CartMilesPayload {
 
 export function MapPage() {
   const goBack = useSafeBack('/marketplace');
+  const { user } = useAuth();
   const [postcode, setPostcode] = useState('');
   const [radius, setRadius] = useState('20');
   const [loading, setLoading] = useState(true);
@@ -54,6 +56,30 @@ export function MapPage() {
       Back to Marketplace
     </Button>
   );
+  const portalLabel =
+    user?.role === 'COMMUNITY'
+      ? 'Community'
+      : user?.role === 'RESTAURANT'
+        ? 'Restaurant'
+        : 'Customer';
+  const postcodeLabel =
+    user?.role === 'COMMUNITY'
+      ? 'Community Postcode'
+      : user?.role === 'RESTAURANT'
+        ? 'Kitchen Postcode'
+        : 'Customer Postcode';
+  const heading =
+    user?.role === 'COMMUNITY'
+      ? 'Community Producers Near Me'
+      : user?.role === 'RESTAURANT'
+        ? 'Restaurant Producers Near Me'
+        : 'Producers Near Me';
+  const introCopy =
+    user?.role === 'COMMUNITY'
+      ? 'Compare supplier distances around your community drop-off point and track total food miles across the current bulk basket.'
+      : user?.role === 'RESTAURANT'
+        ? 'Compare supplier distances around your kitchen postcode and track total food miles across the current restaurant order cart.'
+        : 'Postcode distance and cart food-miles visual for sustainability tracking.';
 
   const loadData = async (overridePostcode?: string, overrideRadius?: string) => {
     setLoading(true);
@@ -95,8 +121,8 @@ export function MapPage() {
       <main className="max-w-6xl mx-auto px-4 py-8 space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3">{backToMarketplaceButton}</div>
         <div>
-          <h1 className="text-3xl font-semibold">Producers Near Me</h1>
-          <p className="text-sm text-gray-600 mt-1">Postcode distance and cart food-miles visual for sustainability tracking.</p>
+          <h1 className="text-3xl font-semibold">{heading}</h1>
+          <p className="text-sm text-gray-600 mt-1">{introCopy}</p>
         </div>
 
         <Card>
@@ -112,7 +138,7 @@ export function MapPage() {
               }}
             >
               <div>
-                <Label htmlFor="postcode">Customer Postcode</Label>
+                <Label htmlFor="postcode">{postcodeLabel}</Label>
                 <Input id="postcode" value={postcode} onChange={(e) => setPostcode(e.target.value)} required />
               </div>
               <div>
@@ -199,12 +225,12 @@ export function MapPage() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="p-3 bg-gray-50 rounded">
-                    <p className="text-xs text-gray-600">Customer postcode</p>
+                    <p className="text-xs text-gray-600">{portalLabel} postcode</p>
                     <p className="font-medium">{cartMiles?.customer_postcode || nearPayload?.postcode || 'N/A'}</p>
                   </div>
 
                   <div className="p-3 border rounded">
-                    <p className="text-xs text-gray-600">Total Food Miles (current cart)</p>
+                    <p className="text-xs text-gray-600">Total Food Miles (current {portalLabel.toLowerCase()} cart)</p>
                     <p className="text-2xl font-semibold text-green-700 flex items-center gap-2">
                       <Route className="size-5" />
                       {Number(cartMiles?.total_food_miles || 0).toFixed(2)}

@@ -27,8 +27,10 @@ export function getSiteNavItems(role?: UserRole | null): SiteNavItem[] {
           to: '/marketplace',
           matchPrefixes: ['/marketplace', '/product', '/cart', '/checkout'],
         },
-        { label: 'Dashboard', to: '/community/dashboard', matchPrefixes: ['/community/dashboard'] },
+        { label: 'Orders', to: '/orders/history', matchPrefixes: ['/orders/history'] },
+        { label: 'Near Me', to: '/map', matchPrefixes: ['/map'] },
         { label: 'Recipes', to: '/content/feed', matchPrefixes: ['/content/feed'] },
+        { label: 'Dashboard', to: '/community/dashboard', matchPrefixes: ['/community/dashboard'] },
       ];
     case 'RESTAURANT':
       return [
@@ -37,12 +39,14 @@ export function getSiteNavItems(role?: UserRole | null): SiteNavItem[] {
           to: '/marketplace',
           matchPrefixes: ['/marketplace', '/product', '/cart', '/checkout'],
         },
+        { label: 'Orders', to: '/orders/history', matchPrefixes: ['/orders/history'] },
+        { label: 'Near Me', to: '/map', matchPrefixes: ['/map'] },
+        { label: 'Recipes', to: '/content/feed', matchPrefixes: ['/content/feed'] },
         {
           label: 'Dashboard',
           to: '/restaurant/dashboard',
           matchPrefixes: ['/restaurant/dashboard', '/restaurant/recurring-orders'],
         },
-        { label: 'Recipes', to: '/content/feed', matchPrefixes: ['/content/feed'] },
       ];
     case 'PRODUCER':
       return [

@@ -40,6 +40,7 @@ import {
   fetchProductReviews,
   respondToProductReview,
 } from '../api/catalog';
+import { isBulkBuyerRole, isBuyerRole, MAX_ORDER_ITEM_QUANTITY } from '../lib/ordering';
 import { getDashboardPathForRole } from '../lib/roleRouting';
 import { useSafeBack } from '../lib/navigation';
 import { ApiRecipe, apiJson } from '../lib/api';
@@ -288,10 +289,11 @@ export function ProductDetailPage() {
     if (!product) {
       return 1;
     }
-    return Math.min(product.stock, 99);
+    return Math.max(1, Math.min(MAX_ORDER_ITEM_QUANTITY, Math.floor(product.stock)));
   }, [product]);
 
   const requiresAllergenReview = Boolean(product && product.allergens.length > 0);
+  const isBulkBuyer = isBulkBuyerRole(user?.role);
   const producerDeliveryLeadTime = product?.producerDeliveryLeadTime || 48;
   const hasExistingReview = Boolean(reviewEligibility?.hasExistingReview);
   const canSubmitReview = Boolean(reviewEligibility?.canSubmit);
@@ -321,10 +323,10 @@ export function ProductDetailPage() {
     if (!product) {
       return 0;
     }
-    return Math.max(0, product.stock - cartQuantity);
+    return Math.max(0, Math.min(MAX_ORDER_ITEM_QUANTITY, product.stock) - cartQuantity);
   }, [cartQuantity, product]);
 
-  const validateCustomerPurchaseAction = () => {
+  const validateBuyerPurchaseAction = () => {
     if (!product || !isAvailable) {
       return false;
     }
@@ -343,8 +345,8 @@ export function ProductDetailPage() {
       return false;
     }
 
-    if (user.role !== 'CUSTOMER') {
-      toast.error('Only customer accounts can place orders.', {
+    if (!isBuyerRole(user.role)) {
+      toast.error('This portal does not support marketplace ordering.', {
         action: {
           label: 'Dashboard',
           onClick: () => navigate(getDashboardPathForRole(user.role)),
@@ -362,7 +364,7 @@ export function ProductDetailPage() {
   };
 
   const handleAddToCart = async () => {
-    if (!product || !validateCustomerPurchaseAction()) {
+    if (!product || !validateBuyerPurchaseAction()) {
       return;
     }
     if (remainingAddToCartQuantity <= 0) {
@@ -377,14 +379,16 @@ export function ProductDetailPage() {
       if (!cartItemId) {
         return;
       }
-      toast.success(`Added ${quantityToAdd} ${product.unit} of ${product.name} to cart`);
+      toast.success(
+        `Added ${quantityToAdd} ${product.unit} of ${product.name} to ${isBulkBuyer ? 'your order cart' : 'cart'}`,
+      );
     } finally {
       setActiveCartAction(null);
     }
   };
 
   const handleBuyNow = async () => {
-    if (!product || !validateCustomerPurchaseAction()) {
+    if (!product || !validateBuyerPurchaseAction()) {
       return;
     }
 
@@ -433,6 +437,11 @@ export function ProductDetailPage() {
         <Badge variant="secondary" className="bg-[oklch(0.96_0.05_150)] text-[oklch(0.34_0.05_145)]">
           Ready for checkout
         </Badge>
+        {isBulkBuyer && (
+          <Badge variant="outline">
+            {user?.role === 'COMMUNITY' ? 'Community bulk ordering' : 'Restaurant order planning'}
+          </Badge>
+        )}
         {isInCart && (
           <Badge variant="outline">
             In cart: {cartQuantity} {product?.unit}
@@ -440,10 +449,30 @@ export function ProductDetailPage() {
         )}
       </div>
 
+      {isBulkBuyer && (
+        <div className="rounded-xl border border-[oklch(0.86_0.04_145)] bg-[oklch(0.985_0.01_145)] p-4 text-sm text-gray-700">
+          <p className="font-medium text-gray-900">
+            {user?.role === 'COMMUNITY' ? 'Community ordering workspace' : 'Restaurant ordering workspace'}
+          </p>
+          <p className="mt-1">
+            Build larger producer orders here, then continue through the dedicated {user?.role === 'COMMUNITY' ? 'bulk checkout' : 'restaurant checkout'} flow.
+          </p>
+          <p className="mt-2 text-xs text-gray-500">
+            Maximum quantity per product: {MAX_ORDER_ITEM_QUANTITY} units.
+          </p>
+        </div>
+      )}
+
       <div className="grid gap-3 sm:grid-cols-2">
         <Button size="lg" onClick={() => void handleBuyNow()} disabled={isCartActionPending}>
           <CreditCard className="size-5" />
-          {activeCartAction === 'buy' ? 'Preparing Checkout...' : 'Buy Now'}
+          {activeCartAction === 'buy'
+            ? 'Preparing Checkout...'
+            : isBulkBuyer
+              ? user?.role === 'COMMUNITY'
+                ? 'Review Community Checkout'
+                : 'Review Restaurant Checkout'
+              : 'Buy Now'}
         </Button>
         <Button
           size="lg"
@@ -456,9 +485,34 @@ export function ProductDetailPage() {
             ? 'Adding to Cart...'
             : remainingAddToCartQuantity <= 0
               ? 'Max in Cart'
-              : 'Add to Cart'}
+              : isBulkBuyer
+                ? user?.role === 'COMMUNITY'
+                  ? 'Add to Community Order'
+                  : 'Add to Restaurant Cart'
+                : 'Add to Cart'}
         </Button>
       </div>
+
+      {isBulkBuyer && (
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setQuantity((value) => Math.min(maxQuantity, value + 10))}
+            disabled={quantity >= maxQuantity || isCartActionPending}
+          >
+            +10
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setQuantity(maxQuantity)}
+            disabled={quantity >= maxQuantity || isCartActionPending}
+          >
+            Use Max ({maxQuantity})
+          </Button>
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-3">
         {isInCart && (

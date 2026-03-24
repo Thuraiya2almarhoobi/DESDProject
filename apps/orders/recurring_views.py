@@ -62,21 +62,47 @@ class RestaurantRecurringOrderListCreateAPIView(APIView):
     def post(self, request):
         serializer = RecurringOrderTemplateCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        use_stripe_checkout = serializer.validated_data.get("payment_method") == "stripe_checkout"
+        template = None
+        initial_order = None
         try:
             template, initial_order = create_recurring_template_from_checkout(
-                request.user, serializer.validated_data
+                request.user,
+                serializer.validated_data,
+                reserve_payment=use_stripe_checkout,
             )
+            if use_stripe_checkout:
+                from apps.payments.services import create_stripe_checkout_session_for_order
+
+                checkout_session = create_stripe_checkout_session_for_order(initial_order)
         except ValueError as exc:
+            if use_stripe_checkout and template is not None and initial_order is not None:
+                try:
+                    from apps.payments.services import cancel_stripe_checkout_order
+
+                    cancel_stripe_checkout_order(initial_order)
+                except ValueError:
+                    pass
+                template.delete()
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
-        return Response(
-            {
-                "message": "Recurring order template created.",
-                "template": _template_payload(template),
-                "initial_order": OrderDetailSerializer(initial_order).data,
-            },
-            status=status.HTTP_201_CREATED,
-        )
+        response_payload = {
+            "message": "Recurring order template created."
+            if not use_stripe_checkout
+            else "Recurring order template created and Stripe checkout session prepared.",
+            "template": _template_payload(template),
+            "initial_order": OrderDetailSerializer(initial_order).data,
+        }
+        if use_stripe_checkout:
+            response_payload["payment"] = {
+                "provider": "stripe",
+                "checkout_session_id": checkout_session.session_id,
+                "checkout_url": checkout_session.checkout_url,
+                "publishable_key": checkout_session.publishable_key,
+                "test_mode": checkout_session.test_mode,
+            }
+
+        return Response(response_payload, status=status.HTTP_201_CREATED)
 
 
 class RestaurantRecurringOrderDetailAPIView(APIView):

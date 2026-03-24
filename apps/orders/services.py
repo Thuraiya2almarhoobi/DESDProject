@@ -23,6 +23,7 @@ from .models import (
 
 MONEY_Q = Decimal("0.01")
 COMMISSION_RATE = Decimal("0.05")
+MAX_ORDER_ITEM_QUANTITY = Decimal("100.00")
 logger = logging.getLogger("apps.orders")
 
 

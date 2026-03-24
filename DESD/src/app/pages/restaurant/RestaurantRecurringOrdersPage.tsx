@@ -4,6 +4,7 @@ import { Calendar, Clock3, PauseCircle, PlayCircle, RefreshCw, Trash2 } from 'lu
 import { toast } from 'sonner';
 
 import { apiJson } from '../../lib/api';
+import { MAX_ORDER_ITEM_QUANTITY } from '../../lib/ordering';
 import { SiteHeader } from '../../components/SiteHeader';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
@@ -165,6 +166,19 @@ export function RestaurantRecurringOrdersPage() {
             Create From Marketplace
           </Button>
         </div>
+        <Card className="border-[oklch(0.84_0.05_145)] bg-[linear-gradient(135deg,rgba(243,249,244,0.96),rgba(255,255,255,0.94))]">
+          <CardContent className="flex flex-col gap-3 p-5 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[oklch(0.42_0.07_145)]">
+                Restaurant scheduling workspace
+              </p>
+              <p className="mt-2 text-sm text-gray-600">
+                Use this page to manage repeat kitchen orders, adjust only the next run when needed, and keep each producer quantity within the portal cap.
+              </p>
+            </div>
+            <Badge variant="secondary">{MAX_ORDER_ITEM_QUANTITY} units max per product</Badge>
+          </CardContent>
+        </Card>
         <Card>
           <CardContent className="p-6 flex flex-wrap items-center gap-4 justify-between">
             <div>
@@ -238,6 +252,7 @@ export function RestaurantRecurringOrdersPage() {
                           id={`override-${template.id}-${item.product_id}`}
                           type="number"
                           min="0.01"
+                          max={String(MAX_ORDER_ITEM_QUANTITY)}
                           step="0.01"
                           value={overrideDrafts[template.id]?.[item.product_id] || item.default_quantity}
                           onChange={(event) =>
@@ -265,6 +280,10 @@ export function RestaurantRecurringOrdersPage() {
                     ))}
                   </div>
                 )}
+
+                <p className="text-xs text-gray-500">
+                  Override quantities stay capped at {MAX_ORDER_ITEM_QUANTITY} units per product for each generated run.
+                </p>
 
                 <div className="flex flex-wrap gap-2">
                   <Button

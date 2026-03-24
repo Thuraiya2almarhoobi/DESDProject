@@ -2,10 +2,11 @@
 import { useNavigate } from 'react-router';
 import { Filter, X, Plus, Minus, AlertCircle, AlertTriangle, Star } from 'lucide-react';
 import { toast } from 'sonner';
-import { Product } from '../types';
+import { Product, UserRole } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 import { fetchCategories, fetchProducts } from '../api/catalog';
+import { isBulkBuyerRole, isBuyerRole, MAX_ORDER_ITEM_QUANTITY } from '../lib/ordering';
 import { getDashboardPathForRole } from '../lib/roleRouting';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -78,6 +79,7 @@ export function MarketplacePage() {
   const [viewMode, setViewMode] = useState<ViewMode>('all');
   const [excludedAllergens, setExcludedAllergens] = useState<string[]>([]);
   const [reloadKey, setReloadKey] = useState(0);
+  const isBulkBuyer = isBulkBuyerRole(user?.role);
 
   useEffect(() => {
     let mounted = true;
@@ -287,8 +289,8 @@ export function MarketplacePage() {
       return;
     }
 
-    if (user.role !== 'CUSTOMER') {
-      toast.error('Only customer accounts can place orders.', {
+    if (!isBuyerRole(user.role)) {
+      toast.error('This portal does not support ordering from the marketplace.', {
         action: {
           label: 'Dashboard',
           onClick: () => navigate(getDashboardPathForRole(user.role)),
@@ -309,9 +311,14 @@ export function MarketplacePage() {
     }
 
     const currentCartQuantity = getProductCartQuantity(product.id);
-    const remainingStock = Math.max(0, Math.floor(product.stock) - currentCartQuantity);
+    const remainingStock = Math.max(
+      0,
+      Math.min(MAX_ORDER_ITEM_QUANTITY, Math.floor(product.stock)) - currentCartQuantity,
+    );
     if (remainingStock <= 0) {
-      toast.error(`You already have the maximum available quantity of ${product.name} in your cart.`);
+      toast.error(
+        `You already have the maximum allowed quantity of ${product.name} in your cart.`,
+      );
       return;
     }
 
@@ -321,13 +328,16 @@ export function MarketplacePage() {
       return;
     }
 
-    toast.success(`Added: ${product.name} (${quantityToAdd} ${product.unit})`, {
-      action: {
-        label: 'Undo',
-        onClick: () => undoLastAdd(),
+    toast.success(
+      `${isBulkBuyer ? 'Added to order cart' : 'Added'}: ${product.name} (${quantityToAdd} ${product.unit})`,
+      {
+        action: {
+          label: 'Undo',
+          onClick: () => undoLastAdd(),
+        },
+        duration: 4000,
       },
-      duration: 4000,
-    });
+    );
   };
 
   const retryLoad = () => {
@@ -543,6 +553,48 @@ export function MarketplacePage() {
 
           {/* Main Content */}
           <main className="flex-1">
+            {isBulkBuyer && (
+              <Card className="mb-4 overflow-hidden border-[oklch(0.82_0.07_145)] bg-[linear-gradient(135deg,rgba(240,248,241,0.98),rgba(255,255,255,0.96))]">
+                <CardContent className="flex flex-col gap-4 p-5 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[oklch(0.42_0.07_145)]">
+                      {user?.role === 'COMMUNITY' ? 'Community Ordering Portal' : 'Restaurant Ordering Portal'}
+                    </p>
+                    <h2 className="text-2xl font-semibold text-[oklch(0.24_0.03_145)]">
+                      {user?.role === 'COMMUNITY'
+                        ? 'Build one shared order'
+                        : 'Build one kitchen order'}
+                    </h2>
+                    <p className="max-w-3xl text-sm text-gray-600">
+                      {user?.role === 'COMMUNITY'
+                        ? 'Group products by producer, keep quantities clear, and move to bulk checkout when the basket is ready.'
+                        : 'Source ingredients, keep supplier sections tidy, and save recurring supply from checkout when needed.'}
+                    </p>
+                  </div>
+                  <div className="grid gap-3 rounded-2xl border border-white/80 bg-white/80 p-4 text-sm text-gray-700 shadow-sm lg:min-w-[18rem]">
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="font-medium">Per-product cap</span>
+                      <Badge variant="secondary">100 units max</Badge>
+                    </div>
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="font-medium">Checkout mode</span>
+                      <span>{user?.role === 'COMMUNITY' ? 'Bulk order' : 'Recurring-ready'}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button size="sm" onClick={() => navigate('/cart')}>
+                        Order Cart
+                      </Button>
+                      {user?.role === 'RESTAURANT' && (
+                        <Button size="sm" variant="outline" onClick={() => navigate('/restaurant/recurring-orders')}>
+                          Recurring
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* J) Renamed tabs - "Marketplace" instead of "All Products" */}
             <div className="mb-4">
               <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as ViewMode)}>
@@ -824,6 +876,8 @@ export function MarketplacePage() {
                     product={product} 
                     handleAddToCart={handleAddToCart} 
                     currentCartQuantity={getProductCartQuantity(product.id)}
+                    isBulkBuyer={isBulkBuyer}
+                    userRole={user?.role}
                   />
                 ))}
               </div>
@@ -840,17 +894,24 @@ function ProductCard({
   product, 
   handleAddToCart,
   currentCartQuantity,
+  isBulkBuyer,
+  userRole,
 }: { 
   product: Product; 
   handleAddToCart: (product: Product, quantity: number, e: React.MouseEvent) => Promise<void>;
   currentCartQuantity: number;
+  isBulkBuyer: boolean;
+  userRole?: UserRole;
 }) {
   const navigate = useNavigate();
   const [quantity, setQuantity] = useState(1);
 
   const isAvailable = product.availability !== 'unavailable' && product.stock > 0;
   const hasAllergens = product.allergens && product.allergens.length > 0;
-  const remainingStock = Math.max(0, Math.floor(product.stock) - currentCartQuantity);
+  const remainingStock = Math.max(
+    0,
+    Math.min(MAX_ORDER_ITEM_QUANTITY, Math.floor(product.stock)) - currentCartQuantity,
+  );
   const maxQuantity = Math.max(1, remainingStock);
 
   useEffect(() => {
@@ -902,24 +963,45 @@ function ProductCard({
         </div>
       </div>
       
-      <CardContent className="p-4 space-y-3">
+      <CardContent className="flex h-full flex-col p-4 space-y-3">
         {/* Title */}
         <div>
-          <h3 className="font-semibold mb-1">{product.name}</h3>
+          <h3 className="mb-1 line-clamp-2 font-semibold">{product.name}</h3>
           
           {/* Producer */}
-          <p className="text-sm text-gray-600 mb-2">{product.producerName}</p>
+          <p className="mb-2 line-clamp-1 text-sm text-gray-600">{product.producerName}</p>
           <p className="text-xs text-gray-500 mb-2">{product.category}</p>
           
           {/* Meta row: distance + harvested */}
-          <ProductMeta
-            producerName={product.producerName}
-            producerLocation={product.producerLocation}
-            harvestDate={product.harvestDate}
-            foodMiles={product.foodMiles}
-            seasonalDates={product.seasonalDates}
-            compact
-          />
+          {isBulkBuyer ? (
+            <div className="space-y-2 text-xs text-gray-600">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="outline" className="px-2 py-0.5 text-[11px] font-medium">
+                  {product.producerLocation}
+                </Badge>
+                <Badge variant="outline" className="px-2 py-0.5 text-[11px] font-medium">
+                  {product.foodMiles.toFixed(1)} mi
+                </Badge>
+                <Badge variant="secondary" className="px-2 py-0.5 text-[11px] font-medium">
+                  {product.seasonalDates}
+                </Badge>
+              </div>
+              <p className="text-[11px] text-gray-500">
+                {new Date(product.harvestDate).toDateString() === new Date().toDateString()
+                  ? 'Harvested today'
+                  : 'Fresh local supply'}
+              </p>
+            </div>
+          ) : (
+            <ProductMeta
+              producerName={product.producerName}
+              producerLocation={product.producerLocation}
+              harvestDate={product.harvestDate}
+              foodMiles={product.foodMiles}
+              seasonalDates={product.seasonalDates}
+              compact
+            />
+          )}
           {product.averageRating !== undefined && product.reviewCount ? (
             <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
               <div className="flex items-center gap-1 text-amber-500">
@@ -976,53 +1058,83 @@ function ProductCard({
         
         {/* B) Quantity stepper + CTA */}
         {isAvailable && (
-          <div className="flex items-center gap-2">
-            <div className="flex items-center border rounded-md">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 rounded-r-none focus-visible:ring-2 focus-visible:ring-green-600"
-                onClick={decrementQuantity}
-                disabled={quantity <= 1}
-                aria-label="Decrease quantity"
-              >
-                <Minus className="size-3" />
-              </Button>
-              <Input
-                type="number"
-                min="1"
-                max={String(maxQuantity)}
-                step="1"
-                value={quantity}
-                onClick={(event) => event.stopPropagation()}
-                onFocus={(event) => {
-                  event.stopPropagation();
-                  event.target.select();
-                }}
-                onChange={updateQuantity}
-                className="h-8 w-16 rounded-none border-0 text-center text-sm font-medium shadow-none focus-visible:ring-1"
-                aria-label="Enter quantity"
-              />
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 rounded-l-none focus-visible:ring-2 focus-visible:ring-green-600"
-                onClick={incrementQuantity}
-                disabled={remainingStock <= 0 || quantity >= maxQuantity}
-                aria-label="Increase quantity"
-              >
-                <Plus className="size-3" />
-              </Button>
+          <div className="mt-auto space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center rounded-md border">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 rounded-r-none focus-visible:ring-2 focus-visible:ring-green-600"
+                  onClick={decrementQuantity}
+                  disabled={quantity <= 1}
+                  aria-label="Decrease quantity"
+                >
+                  <Minus className="size-3" />
+                </Button>
+                <Input
+                  type="number"
+                  min="1"
+                  max={String(maxQuantity)}
+                  step="1"
+                  value={quantity}
+                  onClick={(event) => event.stopPropagation()}
+                  onFocus={(event) => {
+                    event.stopPropagation();
+                    event.target.select();
+                  }}
+                  onChange={updateQuantity}
+                  className="h-8 w-16 rounded-none border-0 text-center text-sm font-medium shadow-none focus-visible:ring-1"
+                  aria-label="Enter quantity"
+                />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 rounded-l-none focus-visible:ring-2 focus-visible:ring-green-600"
+                  onClick={incrementQuantity}
+                  disabled={remainingStock <= 0 || quantity >= maxQuantity}
+                  aria-label="Increase quantity"
+                >
+                  <Plus className="size-3" />
+                </Button>
+              </div>
+                {isBulkBuyer && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setQuantity((current) => Math.min(maxQuantity, current + 10));
+                    }}
+                  >
+                    +10
+                  </Button>
+                )}
+              {isBulkBuyer && (
+                <Badge variant="secondary" className="px-2 py-1 text-[11px]">
+                  Cap 100
+                </Badge>
+              )}
             </div>
             <Button
               size="sm"
-              className="flex-1 focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
+              className="w-full focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
               onClick={(e) => handleAddToCart(product, quantity, e)}
               disabled={remainingStock <= 0}
               aria-label={`Add ${quantity} ${product.unit} of ${product.name} to cart`}
             >
-              {remainingStock <= 0 ? 'Max in cart' : `Add ${quantity} ${product.unit}`}
+              {remainingStock <= 0
+                ? 'Max in cart'
+                : isBulkBuyer
+                  ? userRole === 'COMMUNITY'
+                    ? 'Add to Community Cart'
+                    : 'Add to Restaurant Cart'
+                  : `Add ${quantity} ${product.unit}`}
             </Button>
+            {isBulkBuyer && (
+              <p className="text-xs text-gray-500">
+                Large-order mode. Up to {MAX_ORDER_ITEM_QUANTITY} units per product.
+              </p>
+            )}
           </div>
         )}
       </CardContent>

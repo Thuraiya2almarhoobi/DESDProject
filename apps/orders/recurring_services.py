@@ -20,7 +20,14 @@ from .models import (
     RecurringOrderTemplateItem,
     UserNotification,
 )
-from .services import COMMISSION_RATE, checkout_cart, get_cart_groups, get_or_create_cart, money
+from .services import (
+    COMMISSION_RATE,
+    checkout_cart,
+    checkout_cart_with_stripe_reservation,
+    get_cart_groups,
+    get_or_create_cart,
+    money,
+)
 
 
 @dataclass
@@ -87,12 +94,21 @@ def _build_template_item_rows_from_cart(user) -> list[dict]:
 
 
 @transaction.atomic
-def create_recurring_template_from_checkout(user, payload: dict) -> tuple[RecurringOrderTemplate, Order]:
+def create_recurring_template_from_checkout(
+    user,
+    payload: dict,
+    *,
+    reserve_payment: bool = False,
+) -> tuple[RecurringOrderTemplate, Order]:
     item_rows = _build_template_item_rows_from_cart(user)
     if not item_rows:
         raise ValueError("Cart is empty.")
 
-    initial_order = checkout_cart(user, payload)
+    initial_order = (
+        checkout_cart_with_stripe_reservation(user, payload)
+        if reserve_payment
+        else checkout_cart(user, payload)
+    )
 
     today = timezone.localdate()
     next_order_date = _next_weekday(today, int(payload["order_day"]))
@@ -105,7 +121,7 @@ def create_recurring_template_from_checkout(user, payload: dict) -> tuple[Recurr
         next_order_date=next_order_date,
         delivery_address=payload["delivery_address"],
         customer_postcode=payload["customer_postcode"],
-        payment_method=payload.get("payment_method") or "test_card",
+        payment_method=payload.get("payment_method") or ("stripe_checkout" if reserve_payment else "test_card"),
     )
 
     RecurringOrderTemplateItem.objects.bulk_create(

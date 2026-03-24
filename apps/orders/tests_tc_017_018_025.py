@@ -1,10 +1,13 @@
 from datetime import datetime, timedelta
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
+
+from apps.payments.services import StripeCheckoutSessionResult
 
 from .models import (
     Order,
@@ -92,14 +95,30 @@ class CommunityBulkOrderTests(APITestCase):
         self.client = APIClient()
         self.client.force_authenticate(self.community_user)
 
+    def test_community_user_can_add_to_cart_with_100_item_cap(self):
+        within_cap = self.client.post(
+            "/api/orders/cart/items/",
+            {"product_id": self.products[0].id, "quantity": "100"},
+            format="json",
+        )
+        self.assertEqual(within_cap.status_code, status.HTTP_200_OK)
+
+        over_cap = self.client.patch(
+            f"/api/orders/cart/items/{within_cap.data['cart']['groups'][0]['items'][0]['cart_item_id']}/",
+            {"quantity": "101"},
+            format="json",
+        )
+        self.assertEqual(over_cap.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("Maximum quantity per product is 100", over_cap.data["detail"])
+
     def test_tc017_bulk_order_with_special_instructions_and_contacts(self):
         excessive = self.client.post(
             "/api/orders/cart/items/",
-            {"product_id": self.products[0].id, "quantity": "500"},
+            {"product_id": self.products[0].id, "quantity": "101"},
             format="json",
         )
         self.assertEqual(excessive.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("exceeds available stock", excessive.data["detail"])
+        self.assertIn("Maximum quantity per product is 100", excessive.data["detail"])
 
         self.client.post(
             "/api/orders/cart/items/",
@@ -154,6 +173,51 @@ class CommunityBulkOrderTests(APITestCase):
             "Delivery to kitchen entrance, contact kitchen manager",
         )
 
+    @patch("apps.payments.services.create_stripe_checkout_session_for_order")
+    def test_community_bulk_checkout_can_prepare_stripe_session(self, mock_checkout_session):
+        mock_checkout_session.return_value = StripeCheckoutSessionResult(
+            session_id="cs_test_community_bulk",
+            checkout_url="https://stripe.test/community",
+            publishable_key="pk_test_community",
+            test_mode=True,
+        )
+
+        self.client.post(
+            "/api/orders/cart/items/",
+            {"product_id": self.products[0].id, "quantity": "25"},
+            format="json",
+        )
+        self.client.post(
+            "/api/orders/cart/items/",
+            {"product_id": self.products[1].id, "quantity": "15"},
+            format="json",
+        )
+
+        today = timezone.localdate()
+        response = self.client.post(
+            "/api/community/bulk-checkout/",
+            {
+                "delivery_address": "Community Hall, 4 Orchard Walk, Bristol",
+                "customer_postcode": "BS1 5JG",
+                "payment_method": "stripe_checkout",
+                "special_instructions": "Use the rear loading entrance",
+                "producer_delivery_dates": {
+                    str(self.producers[0].id): (today + timedelta(days=3)).isoformat(),
+                    str(self.producers[1].id): (today + timedelta(days=3)).isoformat(),
+                },
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["payment"]["provider"], "stripe")
+        self.assertEqual(response.data["payment"]["checkout_session_id"], "cs_test_community_bulk")
+        self.assertEqual(len(response.data["order"]["producer_contacts"]), 2)
+
+        order = Order.objects.get(id=response.data["order"]["id"])
+        self.assertEqual(order.payment_status, Order.PaymentStatus.PENDING)
+        self.assertTrue(PaymentTransaction.objects.filter(order=order, provider="stripe").exists())
+
 
 class RestaurantRecurringOrderTests(APITestCase):
     def setUp(self):
@@ -204,6 +268,148 @@ class RestaurantRecurringOrderTests(APITestCase):
         )
         self.client = APIClient()
         self.client.force_authenticate(self.restaurant_user)
+
+    def test_restaurant_user_can_add_to_cart_with_100_item_cap(self):
+        within_cap = self.client.post(
+            "/api/orders/cart/items/",
+            {"product_id": self.product_a.id, "quantity": "100"},
+            format="json",
+        )
+        self.assertEqual(within_cap.status_code, status.HTTP_200_OK)
+
+        over_cap = self.client.post(
+            "/api/orders/cart/items/",
+            {"product_id": self.product_b.id, "quantity": "101"},
+            format="json",
+        )
+        self.assertEqual(over_cap.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("Maximum quantity per product is 100", over_cap.data["detail"])
+
+    def test_restaurant_recurring_override_rejects_quantity_over_100(self):
+        self.client.post(
+            "/api/orders/cart/items/",
+            {"product_id": self.product_a.id, "quantity": "10"},
+            format="json",
+        )
+        self.client.post(
+            "/api/orders/cart/items/",
+            {"product_id": self.product_b.id, "quantity": "8"},
+            format="json",
+        )
+
+        today = timezone.localdate()
+        create_res = self.client.post(
+            "/api/restaurant/recurring-orders/",
+            {
+                "frequency": "weekly",
+                "order_day": 0,
+                "delivery_day": 2,
+                "delivery_address": "12 Restaurant Lane, Bristol",
+                "customer_postcode": "BS1 4DJ",
+                "producer_delivery_dates": {
+                    str(self.producer_a.id): (today + timedelta(days=3)).isoformat(),
+                    str(self.producer_b.id): (today + timedelta(days=4)).isoformat(),
+                },
+            },
+            format="json",
+        )
+        self.assertEqual(create_res.status_code, status.HTTP_201_CREATED)
+        template_id = create_res.data["template"]["id"]
+
+        over_cap = self.client.patch(
+            f"/api/restaurant/recurring-orders/{template_id}/next-instance/",
+            {
+                "items": [
+                    {"product_id": self.product_a.id, "quantity": "101.00"},
+                    {"product_id": self.product_b.id, "quantity": "8.00"},
+                ]
+            },
+            format="json",
+        )
+        self.assertEqual(over_cap.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("Ensure this value is less than or equal to 100.00", str(over_cap.data))
+
+    @patch("apps.payments.services.create_stripe_checkout_session_for_order")
+    def test_restaurant_one_off_checkout_can_prepare_stripe_session(self, mock_checkout_session):
+        mock_checkout_session.return_value = StripeCheckoutSessionResult(
+            session_id="cs_test_restaurant_checkout",
+            checkout_url="https://stripe.test/restaurant",
+            publishable_key="pk_test_restaurant",
+            test_mode=True,
+        )
+
+        self.client.post(
+            "/api/orders/cart/items/",
+            {"product_id": self.product_a.id, "quantity": "10"},
+            format="json",
+        )
+
+        today = timezone.localdate()
+        response = self.client.post(
+            "/api/orders/checkout/",
+            {
+                "delivery_address": "12 Restaurant Lane, Bristol",
+                "customer_postcode": "BS1 4DJ",
+                "payment_method": "stripe_checkout",
+                "delivery_date": (today + timedelta(days=3)).isoformat(),
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["payment"]["provider"], "stripe")
+        self.assertEqual(response.data["payment"]["checkout_session_id"], "cs_test_restaurant_checkout")
+
+        order = Order.objects.get(id=response.data["order"]["id"])
+        self.assertEqual(order.payment_status, Order.PaymentStatus.PENDING)
+        self.assertTrue(PaymentTransaction.objects.filter(order=order, provider="stripe").exists())
+
+    @patch("apps.payments.services.create_stripe_checkout_session_for_order")
+    def test_restaurant_recurring_creation_can_prepare_stripe_session(self, mock_checkout_session):
+        mock_checkout_session.return_value = StripeCheckoutSessionResult(
+            session_id="cs_test_restaurant_recurring",
+            checkout_url="https://stripe.test/restaurant-recurring",
+            publishable_key="pk_test_restaurant",
+            test_mode=True,
+        )
+
+        self.client.post(
+            "/api/orders/cart/items/",
+            {"product_id": self.product_a.id, "quantity": "10"},
+            format="json",
+        )
+        self.client.post(
+            "/api/orders/cart/items/",
+            {"product_id": self.product_b.id, "quantity": "8"},
+            format="json",
+        )
+
+        today = timezone.localdate()
+        response = self.client.post(
+            "/api/restaurant/recurring-orders/",
+            {
+                "frequency": "weekly",
+                "order_day": 0,
+                "delivery_day": 2,
+                "delivery_address": "12 Restaurant Lane, Bristol",
+                "customer_postcode": "BS1 4DJ",
+                "payment_method": "stripe_checkout",
+                "producer_delivery_dates": {
+                    str(self.producer_a.id): (today + timedelta(days=3)).isoformat(),
+                    str(self.producer_b.id): (today + timedelta(days=4)).isoformat(),
+                },
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["payment"]["provider"], "stripe")
+        self.assertEqual(response.data["payment"]["checkout_session_id"], "cs_test_restaurant_recurring")
+        self.assertIn("template", response.data)
+
+        initial_order = Order.objects.get(id=response.data["initial_order"]["id"])
+        self.assertEqual(initial_order.payment_status, Order.PaymentStatus.PENDING)
+        self.assertTrue(PaymentTransaction.objects.filter(order=initial_order, provider="stripe").exists())
 
     def test_tc018_create_template_override_and_run_generation(self):
         self.client.post(

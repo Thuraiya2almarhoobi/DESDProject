@@ -9,7 +9,7 @@ from rest_framework.views import APIView
 from apps.accounts.permissions import IsCommunity
 from apps.orders.models import Order
 from apps.orders.serializers import CheckoutRequestSerializer, OrderDetailSerializer
-from apps.orders.services import checkout_cart
+from apps.orders.services import checkout_cart, checkout_cart_with_stripe_reservation
 
 
 class CommunityBulkCheckoutAPIView(APIView):
@@ -18,9 +18,24 @@ class CommunityBulkCheckoutAPIView(APIView):
     def post(self, request):
         serializer = CheckoutRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        use_stripe_checkout = serializer.validated_data.get("payment_method") == "stripe_checkout"
+        order = None
         try:
-            order = checkout_cart(request.user, serializer.validated_data)
+            if use_stripe_checkout:
+                order = checkout_cart_with_stripe_reservation(request.user, serializer.validated_data)
+                from apps.payments.services import create_stripe_checkout_session_for_order
+
+                checkout_session = create_stripe_checkout_session_for_order(order)
+            else:
+                order = checkout_cart(request.user, serializer.validated_data)
         except ValueError as exc:
+            if order is not None and use_stripe_checkout:
+                try:
+                    from apps.payments.services import cancel_stripe_checkout_order
+
+                    cancel_stripe_checkout_order(order)
+                except ValueError:
+                    pass
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
         payload = OrderDetailSerializer(order).data
@@ -33,10 +48,19 @@ class CommunityBulkCheckoutAPIView(APIView):
             }
             for sub_order in order.sub_orders.select_related("producer").all()
         ]
-        return Response(
-            {"message": "Bulk order placed successfully.", "order": payload},
-            status=status.HTTP_201_CREATED,
-        )
+        response_payload = {
+            "message": "Bulk order placed successfully." if not use_stripe_checkout else "Stripe checkout session created successfully.",
+            "order": payload,
+        }
+        if use_stripe_checkout:
+            response_payload["payment"] = {
+                "provider": "stripe",
+                "checkout_session_id": checkout_session.session_id,
+                "checkout_url": checkout_session.checkout_url,
+                "publishable_key": checkout_session.publishable_key,
+                "test_mode": checkout_session.test_mode,
+            }
+        return Response(response_payload, status=status.HTTP_201_CREATED)
 
 
 class CommunityOrderConfirmationAPIView(APIView):
