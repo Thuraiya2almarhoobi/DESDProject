@@ -1,0 +1,4114 @@
+{
+  "info": {
+    "_postman_id": "desdproject-api-collection",
+    "name": "DESDProject API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Generated from the live Django URL configuration and grouped for local API testing."
+  },
+  "item": [
+    {
+      "name": "Auth Helpers",
+      "item": [
+        {
+          "name": "Login Customer",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/auth/login/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{customerEmail}}\",\n  \"password\": \"{{customerPassword}}\",\n  \"remember_me\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.environment.set('customerAccessToken', json.access || '');",
+                  "pm.environment.set('customerRefreshToken', json.refresh || '');",
+                  "pm.environment.set('accessToken', json.access || '');",
+                  "pm.environment.set('refreshToken', json.refresh || '');"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Login Producer",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/auth/login/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{producerEmail}}\",\n  \"password\": \"{{producerPassword}}\",\n  \"remember_me\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.environment.set('producerAccessToken', json.access || '');",
+                  "pm.environment.set('producerRefreshToken', json.refresh || '');",
+                  "pm.environment.set('accessToken', json.access || '');",
+                  "pm.environment.set('refreshToken', json.refresh || '');"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Login Community",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/auth/login/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{communityEmail}}\",\n  \"password\": \"{{communityPassword}}\",\n  \"remember_me\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.environment.set('communityAccessToken', json.access || '');",
+                  "pm.environment.set('communityRefreshToken', json.refresh || '');",
+                  "pm.environment.set('accessToken', json.access || '');",
+                  "pm.environment.set('refreshToken', json.refresh || '');"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Login Restaurant",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/auth/login/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{restaurantEmail}}\",\n  \"password\": \"{{restaurantPassword}}\",\n  \"remember_me\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.environment.set('restaurantAccessToken', json.access || '');",
+                  "pm.environment.set('restaurantRefreshToken', json.refresh || '');",
+                  "pm.environment.set('accessToken', json.access || '');",
+                  "pm.environment.set('refreshToken', json.refresh || '');"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Login Admin",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/auth/login/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\",\n  \"remember_me\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.environment.set('adminAccessToken', json.access || '');",
+                  "pm.environment.set('adminRefreshToken', json.refresh || '');",
+                  "pm.environment.set('accessToken', json.access || '');",
+                  "pm.environment.set('refreshToken', json.refresh || '');"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Refresh Active Token",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/auth/refresh/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "auth",
+                "refresh"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh\": \"{{refreshToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.environment.set('accessToken', json.access || '');"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Accounts",
+      "item": [
+        {
+          "name": "GET /api/accounts/addresses/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: AddressListCreateView\nMethods: GET, POST\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/addresses/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "addresses"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/accounts/addresses/",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: AddressListCreateView\nMethods: GET, POST\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/addresses/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "addresses"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"Delivery Address\",\n  \"line1\": \"45 Park Street\",\n  \"line2\": \"\",\n  \"city\": \"Bristol\",\n  \"postcode\": \"BS1 5JG\",\n  \"is_default\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/accounts/addresses/<int:pk>/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: AddressDetailView\nMethods: GET, PUT, PATCH, DELETE\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/addresses/{{addressId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "addresses",
+                "{{addressId}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PUT /api/accounts/addresses/<int:pk>/",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: AddressDetailView\nMethods: GET, PUT, PATCH, DELETE\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/addresses/{{addressId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "addresses",
+                "{{addressId}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"Updated Address\",\n  \"line1\": \"45 Park Street\",\n  \"line2\": \"Flat 2\",\n  \"city\": \"Bristol\",\n  \"postcode\": \"BS1 5JG\",\n  \"is_default\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PATCH /api/accounts/addresses/<int:pk>/",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: AddressDetailView\nMethods: GET, PUT, PATCH, DELETE\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/addresses/{{addressId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "addresses",
+                "{{addressId}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"Updated Address\",\n  \"is_default\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "DELETE /api/accounts/addresses/<int:pk>/",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "description": "View: AddressDetailView\nMethods: GET, PUT, PATCH, DELETE\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/addresses/{{addressId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "addresses",
+                "{{addressId}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/accounts/admin/only/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: AdminOnlyView\nMethods: GET\nPermissions: IsAuthenticated, IsAdmin\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/admin/only/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "admin",
+                "only"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/accounts/auth/login/",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: LoginView\nMethods: POST\nPermissions: AllowAny\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/auth/login/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "auth",
+                "login"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{customerEmail}}\",\n  \"password\": \"{{customerPassword}}\",\n  \"remember_me\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/accounts/auth/password-reset/confirm/",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: PasswordResetConfirmView\nMethods: POST\nPermissions: AllowAny\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/auth/password-reset/confirm/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "auth",
+                "password-reset",
+                "confirm"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"paste-reset-token\",\n  \"new_password\": \"DemoPass123!\",\n  \"confirm_password\": \"DemoPass123!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/accounts/auth/password-reset/request/",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: PasswordResetRequestView\nMethods: POST\nPermissions: AllowAny\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/auth/password-reset/request/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "auth",
+                "password-reset",
+                "request"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{customerEmail}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/accounts/auth/refresh/",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: TokenRefreshView\nMethods: POST\nPermissions: AllowAny\nAuthentication: None",
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/auth/refresh/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "auth",
+                "refresh"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh\": \"{{refreshToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/accounts/auth/register/community/",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: CommunityRegistrationView\nMethods: POST\nPermissions: AllowAny\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/auth/register/community/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "auth",
+                "register",
+                "community"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"new.community@example.com\",\n  \"password\": \"DemoPass123!\",\n  \"confirm_password\": \"DemoPass123!\",\n  \"organisation_name\": \"Community Buying Group\",\n  \"org_type\": \"Community Group\",\n  \"contact_name\": \"Community Lead\",\n  \"phone\": \"07700900124\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/accounts/auth/register/customer/",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: CustomerRegistrationView\nMethods: POST\nPermissions: AllowAny\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/auth/register/customer/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "auth",
+                "register",
+                "customer"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"new.customer@example.com\",\n  \"password\": \"DemoPass123!\",\n  \"confirm_password\": \"DemoPass123!\",\n  \"full_name\": \"New Customer\",\n  \"phone\": \"07700900123\",\n  \"delivery_address\": \"1 Demo Street, Bristol\",\n  \"postcode\": \"BS1 5JG\",\n  \"accept_terms\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/accounts/auth/register/producer/",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: ProducerRegistrationView\nMethods: POST\nPermissions: AllowAny\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/auth/register/producer/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "auth",
+                "register",
+                "producer"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"new.producer@example.com\",\n  \"password\": \"DemoPass123!\",\n  \"confirm_password\": \"DemoPass123!\",\n  \"business_name\": \"New Producer Farm\",\n  \"contact_name\": \"New Producer\",\n  \"phone\": \"01179001122\",\n  \"business_address\": \"2 Farm Lane, Bristol\",\n  \"postcode\": \"BS1 4DJ\",\n  \"farm_origin_text\": \"Family-run farm\",\n  \"lead_time_hours\": 48\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/accounts/auth/register/restaurant/",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: RestaurantRegistrationView\nMethods: POST\nPermissions: AllowAny\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/auth/register/restaurant/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "auth",
+                "register",
+                "restaurant"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"new.restaurant@example.com\",\n  \"password\": \"DemoPass123!\",\n  \"confirm_password\": \"DemoPass123!\",\n  \"business_name\": \"Demo Restaurant\",\n  \"contact_name\": \"Head Chef\",\n  \"phone\": \"07700900125\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/accounts/auth/verify-email/",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: VerifyEmailView\nMethods: POST\nPermissions: AllowAny\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/auth/verify-email/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "auth",
+                "verify-email"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"paste-verification-token\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/accounts/community/only/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: CommunityOnlyView\nMethods: GET\nPermissions: IsAuthenticated, IsCommunity\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/community/only/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "community",
+                "only"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{communityAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/accounts/customer/only/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: CustomerOnlyView\nMethods: GET\nPermissions: IsAuthenticated, IsCustomer\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/customer/only/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "customer",
+                "only"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/accounts/me/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: MeView\nMethods: GET, PATCH\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/me/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "me"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PATCH /api/accounts/me/",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: MeView\nMethods: GET, PATCH\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/me/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "me"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Updated Demo User\",\n  \"phone\": \"07700900123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/accounts/producer/only/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: ProducerOnlyView\nMethods: GET\nPermissions: IsAuthenticated, IsProducer\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/producer/only/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "producer",
+                "only"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{producerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/accounts/restaurant/only/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: RestaurantOnlyView\nMethods: GET\nPermissions: IsAuthenticated, IsRestaurant\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/restaurant/only/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "restaurant",
+                "only"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{restaurantAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/accounts/uploads/images/",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "description": "View: ImageUploadView\nMethods: POST\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/uploads/images/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "uploads",
+                "images"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "scope",
+                  "value": "general",
+                  "type": "text"
+                },
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": ""
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "GET /api/admin/commission-report/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: AdminCommissionReportAPIView\nMethods: GET\nPermissions: IsAuthenticated, IsAdmin\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/commission-report/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "commission-report"
+              ],
+              "query": [
+                {
+                  "key": "start",
+                  "value": "{{startDate}}"
+                },
+                {
+                  "key": "end",
+                  "value": "{{endDate}}"
+                },
+                {
+                  "key": "status",
+                  "value": "delivered"
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/admin/commission-report/<int:order_id>/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: AdminCommissionReportDetailAPIView\nMethods: GET\nPermissions: IsAuthenticated, IsAdmin\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/commission-report/{{orderId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "commission-report",
+                "{{orderId}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/admin/commission-report/export.csv",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: AdminCommissionReportExportCSVAPIView\nMethods: GET\nPermissions: IsAuthenticated, IsAdmin\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/commission-report/export.csv",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "commission-report",
+                "export.csv"
+              ],
+              "query": [
+                {
+                  "key": "start",
+                  "value": "{{startDate}}"
+                },
+                {
+                  "key": "end",
+                  "value": "{{endDate}}"
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/admin/commission-report/summary/monthly",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: AdminCommissionMonthlySummaryAPIView\nMethods: GET\nPermissions: IsAuthenticated, IsAdmin\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/commission-report/summary/monthly",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "commission-report",
+                "summary",
+                "monthly"
+              ],
+              "query": [
+                {
+                  "key": "year",
+                  "value": "{{reportYear}}"
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/admin/commission-report/summary/ytd",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: AdminCommissionYTDSummaryAPIView\nMethods: GET\nPermissions: IsAuthenticated, IsAdmin\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/commission-report/summary/ytd",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "commission-report",
+                "summary",
+                "ytd"
+              ],
+              "query": [
+                {
+                  "key": "year",
+                  "value": "{{reportYear}}"
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Catalog",
+      "item": [
+        {
+          "name": "GET /api/catalog",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: APIRootView\nMethods: GET\nPermissions: AllowAny\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/catalog",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "catalog"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/catalog/categories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: CategoryListAPIView\nMethods: GET\nPermissions: AllowAny\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/catalog/categories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "catalog",
+                "categories"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/catalog/products",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: ProductViewSet\nMethods: GET\nPermissions: AllowAny\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/catalog/products",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "catalog",
+                "products"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/catalog/products/{pk}",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: ProductViewSet\nMethods: GET\nPermissions: AllowAny\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/catalog/products/{{catalogProductId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "catalog",
+                "products",
+                "{{catalogProductId}}"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/catalog/products/{pk}/reviews",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: ProductViewSet\nMethods: GET, POST\nPermissions: AllowAny\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/catalog/products/{{catalogProductId}}/reviews",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "catalog",
+                "products",
+                "{{catalogProductId}}",
+                "reviews"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/catalog/products/{pk}/reviews",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: ProductViewSet\nMethods: GET, POST\nPermissions: AllowAny\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/catalog/products/{{catalogProductId}}/reviews",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "catalog",
+                "products",
+                "{{catalogProductId}}",
+                "reviews"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Community",
+      "item": [
+        {
+          "name": "POST /api/community/bulk-checkout/",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: CommunityBulkCheckoutAPIView\nMethods: POST\nPermissions: IsAuthenticated, IsCommunity\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/community/bulk-checkout/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "community",
+                "bulk-checkout"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{communityAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"delivery_address\": \"12 Community Hall, Bristol\",\n  \"customer_postcode\": \"BS1 5JG\",\n  \"special_instructions\": \"\",\n  \"payment_method\": \"test_card\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/community/orders/<int:order_id>/confirmation/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: CommunityOrderConfirmationAPIView\nMethods: GET\nPermissions: IsAuthenticated, IsCommunity\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/community/orders/{{orderId}}/confirmation/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "community",
+                "orders",
+                "{{orderId}}",
+                "confirmation"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{communityAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Content",
+      "item": [
+        {
+          "name": "GET /api/content/feed/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: ContentFeedAPIView\nMethods: GET\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/content/feed/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "content",
+                "feed"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/content/producer/products/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: ProducerOwnedProductsAPIView\nMethods: GET\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/content/producer/products/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "content",
+                "producer",
+                "products"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{producerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/content/products/<int:product_id>/recipes/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: ProductRecipesAPIView\nMethods: GET\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/content/products/{{productId}}/recipes/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "content",
+                "products",
+                "{{productId}}",
+                "recipes"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/content/recipes/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: RecipeListCreateAPIView\nMethods: GET, POST\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/content/recipes/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "content",
+                "recipes"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/content/recipes/",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: RecipeListCreateAPIView\nMethods: GET, POST\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/content/recipes/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "content",
+                "recipes"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Demo Recipe\",\n  \"description\": \"A simple demo recipe.\",\n  \"ingredients\": \"Carrots\\nSalt\",\n  \"instructions\": \"Mix and cook.\",\n  \"seasonal_tag\": \"Spring\",\n  \"image_url\": \"\",\n  \"is_published\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/content/recipes/<int:recipe_id>/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: RecipeDetailAPIView\nMethods: GET, PATCH, DELETE\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/content/recipes/{{recipeId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "content",
+                "recipes",
+                "{{recipeId}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PATCH /api/content/recipes/<int:recipe_id>/",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: RecipeDetailAPIView\nMethods: GET, PATCH, DELETE\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/content/recipes/{{recipeId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "content",
+                "recipes",
+                "{{recipeId}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Updated Demo Recipe\",\n  \"description\": \"Updated description\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "DELETE /api/content/recipes/<int:recipe_id>/",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "description": "View: RecipeDetailAPIView\nMethods: GET, PATCH, DELETE\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/content/recipes/{{recipeId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "content",
+                "recipes",
+                "{{recipeId}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/content/recipes/<int:recipe_id>/save/",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: ToggleSavedRecipeAPIView\nMethods: POST\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/content/recipes/{{recipeId}}/save/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "content",
+                "recipes",
+                "{{recipeId}}",
+                "save"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/content/stories/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: FarmStoryListCreateAPIView\nMethods: GET, POST\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/content/stories/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "content",
+                "stories"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/content/stories/",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: FarmStoryListCreateAPIView\nMethods: GET, POST\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/content/stories/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "content",
+                "stories"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Demo Farm Story\",\n  \"body\": \"A story about this week's harvest.\",\n  \"seasonal_tag\": \"Spring\",\n  \"image_url\": \"\",\n  \"is_published\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/content/stories/<int:story_id>/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: FarmStoryDetailAPIView\nMethods: GET, PATCH, DELETE\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/content/stories/{{storyId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "content",
+                "stories",
+                "{{storyId}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PATCH /api/content/stories/<int:story_id>/",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: FarmStoryDetailAPIView\nMethods: GET, PATCH, DELETE\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/content/stories/{{storyId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "content",
+                "stories",
+                "{{storyId}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Updated Farm Story\",\n  \"body\": \"Updated farm story body.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "DELETE /api/content/stories/<int:story_id>/",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "description": "View: FarmStoryDetailAPIView\nMethods: GET, PATCH, DELETE\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/content/stories/{{storyId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "content",
+                "stories",
+                "{{storyId}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Geo",
+      "item": [
+        {
+          "name": "GET /api/geo/food-miles/cart/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: CartFoodMilesAPIView\nMethods: GET\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/geo/food-miles/cart/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "geo",
+                "food-miles",
+                "cart"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/geo/producers-near-me/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: ProducersNearMeAPIView\nMethods: GET\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/geo/producers-near-me/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "geo",
+                "producers-near-me"
+              ],
+              "query": [
+                {
+                  "key": "postcode",
+                  "value": "BS1 5JG"
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Legacy Catalog",
+      "item": [
+        {
+          "name": "GET /api/categories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: CategoryListAPIView\nMethods: GET\nPermissions: AllowAny\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/categories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "categories"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/products",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: ProductViewSet\nMethods: GET\nPermissions: AllowAny\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/products",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "products"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/products/{pk}",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: ProductViewSet\nMethods: GET\nPermissions: AllowAny\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/products/{{catalogProductId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "products",
+                "{{catalogProductId}}"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/products/{pk}/reviews",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: ProductViewSet\nMethods: GET, POST\nPermissions: AllowAny\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/products/{{catalogProductId}}/reviews",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "products",
+                "{{catalogProductId}}",
+                "reviews"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/products/{pk}/reviews",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: ProductViewSet\nMethods: GET, POST\nPermissions: AllowAny\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/products/{{catalogProductId}}/reviews",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "products",
+                "{{catalogProductId}}",
+                "reviews"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Orders",
+      "item": [
+        {
+          "name": "GET /api/orders/cart/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: CartAPIView\nMethods: GET\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/cart/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders",
+                "cart"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/orders/cart/items/",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: CartItemAddAPIView\nMethods: POST\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/cart/items/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders",
+                "cart",
+                "items"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product_id\": \"{{productId}}\",\n  \"quantity\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PATCH /api/orders/cart/items/<int:item_id>/",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: CartItemDetailAPIView\nMethods: PATCH, DELETE\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/cart/items/{{cartItemId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders",
+                "cart",
+                "items",
+                "{{cartItemId}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "DELETE /api/orders/cart/items/<int:item_id>/",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "description": "View: CartItemDetailAPIView\nMethods: PATCH, DELETE\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/cart/items/{{cartItemId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders",
+                "cart",
+                "items",
+                "{{cartItemId}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/orders/checkout/",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: CheckoutAPIView\nMethods: POST\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/checkout/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders",
+                "checkout"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"delivery_address\": \"45 Park Street, Bristol\",\n  \"customer_postcode\": \"BS1 5JG\",\n  \"special_instructions\": \"\",\n  \"payment_method\": \"test_card\",\n  \"payment_token\": \"\",\n  \"selected_cart_item_ids\": [\n    1\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/orders/checkout/preview/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: CheckoutPreviewAPIView\nMethods: GET\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/checkout/preview/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders",
+                "checkout",
+                "preview"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/orders/history/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: OrderHistoryAPIView\nMethods: GET\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/history/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders",
+                "history"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/orders/history/<int:order_id>/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: OrderDetailAPIView\nMethods: GET\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/history/{{orderId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders",
+                "history",
+                "{{orderId}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/orders/history/<int:order_id>/receipt/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: OrderReceiptAPIView\nMethods: GET\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/history/{{orderId}}/receipt/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders",
+                "history",
+                "{{orderId}}",
+                "receipt"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/orders/history/<int:order_id>/reorder/",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: OrderReorderAPIView\nMethods: POST\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/history/{{orderId}}/reorder/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders",
+                "history",
+                "{{orderId}}",
+                "reorder"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/orders/producer/sub-orders/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: ProducerSubOrderListAPIView\nMethods: GET\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/producer/sub-orders/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders",
+                "producer",
+                "sub-orders"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{producerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PATCH /api/orders/producer/sub-orders/<int:sub_order_id>/status/",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: ProducerSubOrderStatusUpdateAPIView\nMethods: PATCH\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/producer/sub-orders/{{subOrderId}}/status/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders",
+                "producer",
+                "sub-orders",
+                "{{subOrderId}}",
+                "status"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{producerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/orders/producers/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: ProducerListCreateAPIView\nMethods: GET, POST\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/producers/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders",
+                "producers"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/orders/producers/",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: ProducerListCreateAPIView\nMethods: GET, POST\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/producers/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders",
+                "producers"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"business_name\": \"Demo Producer\",\n  \"contact_email\": \"demo.producer@example.com\",\n  \"phone\": \"01179001122\",\n  \"postcode\": \"BS1 4DJ\",\n  \"lead_time_hours\": 48\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/orders/products/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: ProductListCreateAPIView\nMethods: GET, POST\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/products/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders",
+                "products"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/orders/products/",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: ProductListCreateAPIView\nMethods: GET, POST\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/products/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders",
+                "products"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"producer_id\": 1,\n  \"name\": \"Demo Product\",\n  \"category\": \"Vegetables\",\n  \"description\": \"Fresh demo produce\",\n  \"unit\": \"kg\",\n  \"price\": \"2.50\",\n  \"stock_quantity\": \"50.00\",\n  \"is_available\": true,\n  \"in_season\": true,\n  \"harvest_date\": \"2026-03-23\",\n  \"allergen_info\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/orders/products/<int:pk>/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: ProductDetailAPIView\nMethods: GET\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/products/{{productId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders",
+                "products",
+                "{{productId}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/orders/products/<int:product_id>/reviews/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: ProductReviewsAPIView\nMethods: GET, POST\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/products/{{productId}}/reviews/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders",
+                "products",
+                "{{productId}}",
+                "reviews"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/orders/products/<int:product_id>/reviews/",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: ProductReviewsAPIView\nMethods: GET, POST\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/products/{{productId}}/reviews/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders",
+                "products",
+                "{{productId}}",
+                "reviews"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/orders/profile/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: CustomerProfileAPIView\nMethods: GET, PUT\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/profile/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders",
+                "profile"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PUT /api/orders/profile/",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: CustomerProfileAPIView\nMethods: GET, PUT\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/profile/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders",
+                "profile"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Demo Customer\",\n  \"phone\": \"07700900123\",\n  \"delivery_address\": \"45 Park Street, Bristol\",\n  \"postcode\": \"BS1 5JG\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Payments",
+      "item": [
+        {
+          "name": "GET /api/payments/settlements/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: WeeklySettlementListAPIView\nMethods: GET\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/payments/settlements/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "payments",
+                "settlements"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{producerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/payments/settlements/<int:pk>/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: WeeklySettlementDetailAPIView\nMethods: GET\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/payments/settlements/{{settlementId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "payments",
+                "settlements",
+                "{{settlementId}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{producerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/payments/settlements/<int:pk>/export/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: WeeklySettlementExportCSVAPIView\nMethods: GET\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/payments/settlements/{{settlementId}}/export/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "payments",
+                "settlements",
+                "{{settlementId}}",
+                "export"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{producerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/payments/settlements/run-weekly/",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: TriggerWeeklySettlementsAPIView\nMethods: POST\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/payments/settlements/run-weekly/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "payments",
+                "settlements",
+                "run-weekly"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/payments/stripe/checkout-session/",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: StripeCheckoutSessionCreateAPIView\nMethods: POST\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/payments/stripe/checkout-session/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "payments",
+                "stripe",
+                "checkout-session"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_id\": \"{{orderId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/payments/stripe/checkout-session/cancel/",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: StripeCheckoutCancelAPIView\nMethods: POST\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/payments/stripe/checkout-session/cancel/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "payments",
+                "stripe",
+                "checkout-session",
+                "cancel"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"session_id\": \"cs_test_replace_me\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/payments/stripe/checkout-session/confirm/",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: StripeCheckoutSessionConfirmAPIView\nMethods: POST\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/payments/stripe/checkout-session/confirm/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "payments",
+                "stripe",
+                "checkout-session",
+                "confirm"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"session_id\": \"cs_test_replace_me\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/payments/stripe/webhook/",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: StripeWebhookAPIView\nMethods: POST\nPermissions: AllowAny\nAuthentication: None",
+            "url": {
+              "raw": "{{baseUrl}}/api/payments/stripe/webhook/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "payments",
+                "stripe",
+                "webhook"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Producer",
+      "item": [
+        {
+          "name": "GET /api/producer/inventory/low-stock/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: ProducerLowStockAlertsAPIView\nMethods: GET\nPermissions: AllowAny\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/producer/inventory/low-stock/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "producer",
+                "inventory",
+                "low-stock"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/producer/orders/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: ProducerOrdersInboxAPIView\nMethods: GET\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/producer/orders/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "producer",
+                "orders"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{producerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/producer/orders/<int:pk>/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: ProducerOrderDetailAPIView\nMethods: GET\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/producer/orders/{{producerOrderId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "producer",
+                "orders",
+                "{{producerOrderId}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{producerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PATCH /api/producer/orders/<int:pk>/status/",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: ProducerOrderStatusUpdateAPIView\nMethods: PATCH\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/producer/orders/{{producerOrderId}}/status/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "producer",
+                "orders",
+                "{{producerOrderId}}",
+                "status"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{producerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"confirmed\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/producer/products/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: ProducerProductListCreateAPIView\nMethods: GET, POST\nPermissions: AllowAny\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/producer/products/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "producer",
+                "products"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/producer/products/",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: ProducerProductListCreateAPIView\nMethods: GET, POST\nPermissions: AllowAny\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/producer/products/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "producer",
+                "products"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Producer Demo Product\",\n  \"category\": \"Vegetables\",\n  \"description\": \"Fresh produce for inventory testing\",\n  \"price\": \"3.20\",\n  \"unit\": \"kg\",\n  \"availability\": \"in_season\",\n  \"stock_quantity\": 25,\n  \"allergen_information\": \"\",\n  \"harvest_date\": \"2026-03-23\",\n  \"image_url\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/producer/products/<int:pk>/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: ProducerProductDetailAPIView\nMethods: GET, PUT, PATCH, DELETE\nPermissions: AllowAny\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/producer/products/{{producerProductId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "producer",
+                "products",
+                "{{producerProductId}}"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PUT /api/producer/products/<int:pk>/",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: ProducerProductDetailAPIView\nMethods: GET, PUT, PATCH, DELETE\nPermissions: AllowAny\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/producer/products/{{producerProductId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "producer",
+                "products",
+                "{{producerProductId}}"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Producer Demo Product\",\n  \"category\": \"Vegetables\",\n  \"description\": \"Updated producer product\",\n  \"price\": \"3.20\",\n  \"unit\": \"kg\",\n  \"availability\": \"in_season\",\n  \"stock_quantity\": 25,\n  \"allergen_information\": \"\",\n  \"harvest_date\": \"2026-03-23\",\n  \"image_url\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PATCH /api/producer/products/<int:pk>/",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: ProducerProductDetailAPIView\nMethods: GET, PUT, PATCH, DELETE\nPermissions: AllowAny\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/producer/products/{{producerProductId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "producer",
+                "products",
+                "{{producerProductId}}"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"stock_quantity\": 25\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "DELETE /api/producer/products/<int:pk>/",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "description": "View: ProducerProductDetailAPIView\nMethods: GET, PUT, PATCH, DELETE\nPermissions: AllowAny\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/producer/products/{{producerProductId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "producer",
+                "products",
+                "{{producerProductId}}"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PATCH /api/producer/products/<int:pk>/surplus/",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: ProducerSurplusDealAPIView\nMethods: PATCH\nPermissions: AllowAny\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/producer/products/{{producerProductId}}/surplus/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "producer",
+                "products",
+                "{{producerProductId}}",
+                "surplus"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"is_surplus\": true,\n  \"surplus_discount_percent\": 20\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/producer/public/products/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: PublicMarketplaceProductsAPIView\nMethods: GET\nPermissions: AllowAny\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/producer/public/products/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "producer",
+                "public",
+                "products"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/producer/public/products/<int:pk>/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: PublicMarketplaceProductDetailAPIView\nMethods: GET\nPermissions: AllowAny\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/producer/public/products/{{pk}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "producer",
+                "public",
+                "products",
+                "{{pk}}"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Restaurant",
+      "item": [
+        {
+          "name": "GET /api/restaurant/recurring-orders/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: RestaurantRecurringOrderListCreateAPIView\nMethods: GET, POST\nPermissions: IsAuthenticated, IsRestaurant\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/restaurant/recurring-orders/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "restaurant",
+                "recurring-orders"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{restaurantAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/restaurant/recurring-orders/",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: RestaurantRecurringOrderListCreateAPIView\nMethods: GET, POST\nPermissions: IsAuthenticated, IsRestaurant\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/restaurant/recurring-orders/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "restaurant",
+                "recurring-orders"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{restaurantAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"frequency\": \"weekly\",\n  \"order_day\": 0,\n  \"delivery_day\": 2,\n  \"delivery_address\": \"10 Restaurant Lane, Bristol\",\n  \"customer_postcode\": \"BS1 5JG\",\n  \"producer_delivery_dates\": {\n    \"1\": \"2026-03-30\",\n    \"2\": \"2026-03-31\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/restaurant/recurring-orders/<int:pk>/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: RestaurantRecurringOrderDetailAPIView\nMethods: GET, PATCH\nPermissions: IsAuthenticated, IsRestaurant\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/restaurant/recurring-orders/{{recurringOrderId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "restaurant",
+                "recurring-orders",
+                "{{recurringOrderId}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{restaurantAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PATCH /api/restaurant/recurring-orders/<int:pk>/",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: RestaurantRecurringOrderDetailAPIView\nMethods: GET, PATCH\nPermissions: IsAuthenticated, IsRestaurant\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/restaurant/recurring-orders/{{recurringOrderId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "restaurant",
+                "recurring-orders",
+                "{{recurringOrderId}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{restaurantAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"next_order_date\": \"2026-03-23\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/restaurant/recurring-orders/<int:pk>/generated/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "View: RestaurantRecurringOrderGeneratedListAPIView\nMethods: GET\nPermissions: IsAuthenticated, IsRestaurant\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/restaurant/recurring-orders/{{recurringOrderId}}/generated/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "restaurant",
+                "recurring-orders",
+                "{{recurringOrderId}}",
+                "generated"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{restaurantAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PATCH /api/restaurant/recurring-orders/<int:pk>/next-instance/",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: RestaurantRecurringOrderNextInstanceAPIView\nMethods: PATCH\nPermissions: IsAuthenticated, IsRestaurant\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/restaurant/recurring-orders/{{recurringOrderId}}/next-instance/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "restaurant",
+                "recurring-orders",
+                "{{recurringOrderId}}",
+                "next-instance"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{restaurantAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"product_id\": \"{{productId}}\",\n      \"quantity\": \"2.00\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/restaurant/recurring-orders/run/",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "View: RestaurantRecurringOrderRunAPIView\nMethods: POST\nPermissions: IsAuthenticated\nAuthentication: JWTAuthentication, BasicAuthentication, SessionAuthentication",
+            "url": {
+              "raw": "{{baseUrl}}/api/restaurant/recurring-orders/run/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "restaurant",
+                "recurring-orders",
+                "run"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{restaurantAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
