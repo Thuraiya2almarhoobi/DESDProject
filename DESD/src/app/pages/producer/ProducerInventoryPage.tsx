@@ -64,6 +64,7 @@ type MonthOption = { value: number; label: string };
 
 interface ProductDraft {
   stock: string;
+  lowStockThreshold: string;
   availability: AvailabilityType;
   harvestDate: string;
   seasonStartMonth: string;
@@ -80,6 +81,7 @@ interface NewProductForm {
   unit: ProductUnit;
   availability: AvailabilityType;
   stock: string;
+  lowStockThreshold: string;
   allergens: string[];
   harvestDate: string;
   seasonStartMonth: string;
@@ -164,6 +166,7 @@ function initialNewProductForm(): NewProductForm {
     unit: 'kg',
     availability: 'in-season',
     stock: '0',
+    lowStockThreshold: '10',
     allergens: [],
     harvestDate: todayIso(),
     seasonStartMonth: String(startMonth),
@@ -179,6 +182,7 @@ function toDraft(product: Product): ProductDraft {
   const startMonth = product.seasonStartMonth ?? currentMonthNumber();
   return {
     stock: String(product.stock),
+    lowStockThreshold: String(product.lowStockThreshold ?? 10),
     availability: configuredAvailability,
     harvestDate: product.harvestDate || todayIso(),
     seasonStartMonth: String(startMonth),
@@ -236,6 +240,14 @@ function formatHarvestDate(value: string): string {
     return value;
   }
   return format(parsed, 'MMM d, yyyy');
+}
+
+function getLowStockThreshold(product: Product): number {
+  return Math.max(1, product.lowStockThreshold ?? 10);
+}
+
+function isLowStock(product: Product): boolean {
+  return product.stock > 0 && product.stock <= getLowStockThreshold(product);
 }
 export function ProducerInventoryPage() {
   const navigate = useNavigate();
@@ -302,7 +314,7 @@ export function ProducerInventoryPage() {
     }
   };
 
-  const lowStockItems = useMemo(() => products.filter((product) => product.stock > 0 && product.stock < 10), [products]);
+  const lowStockItems = useMemo(() => products.filter((product) => isLowStock(product)), [products]);
   const outOfStockItems = useMemo(() => products.filter((product) => product.stock === 0), [products]);
   const seasonEndingItems = useMemo(() => products.filter((product) => isSeasonEndingSoon(product)), [products]);
   const seasonStartingItems = useMemo(() => products.filter((product) => isSeasonStartingSoon(product)), [products]);
@@ -362,9 +374,15 @@ export function ProducerInventoryPage() {
       toast.error('Stock quantity must be zero or greater.');
       return;
     }
+    const parsedLowStockThreshold = Number.parseInt(draft.lowStockThreshold, 10);
+    if (!Number.isFinite(parsedLowStockThreshold) || parsedLowStockThreshold < 1) {
+      toast.error('Low-stock threshold must be 1 or greater.');
+      return;
+    }
 
     const payload: {
       stock: number;
+      lowStockThreshold: number;
       availability: AvailabilityType;
       harvestDate: string;
       seasonStartMonth?: number;
@@ -373,6 +391,7 @@ export function ProducerInventoryPage() {
       surplusDiscountPercent?: number;
     } = {
       stock: parsedStock,
+      lowStockThreshold: parsedLowStockThreshold,
       availability: draft.availability,
       harvestDate: draft.harvestDate || todayIso(),
       isSurplus: draft.isSurplus,
@@ -492,6 +511,7 @@ export function ProducerInventoryPage() {
 
     const price = Number.parseFloat(newProduct.price);
     const stock = Number.parseInt(newProduct.stock, 10);
+    const lowStockThreshold = Number.parseInt(newProduct.lowStockThreshold, 10);
     if (!newProduct.name.trim() || !newProduct.category.trim() || !newProduct.description.trim()) {
       toast.error('Name, category, and description are required.');
       return;
@@ -502,6 +522,10 @@ export function ProducerInventoryPage() {
     }
     if (!Number.isFinite(stock) || stock < 0) {
       toast.error('Stock must be zero or greater.');
+      return;
+    }
+    if (!Number.isFinite(lowStockThreshold) || lowStockThreshold < 1) {
+      toast.error('Low-stock threshold must be 1 or greater.');
       return;
     }
     if (newProduct.availability === 'in-season') {
@@ -533,6 +557,7 @@ export function ProducerInventoryPage() {
           unit: newProduct.unit,
           availability: newProduct.availability,
           stock,
+          lowStockThreshold,
           allergens: newProduct.allergens,
           harvestDate: newProduct.harvestDate || todayIso(),
           seasonStartMonth:
@@ -772,7 +797,7 @@ export function ProducerInventoryPage() {
                                   Out of stock
                                 </Badge>
                               )}
-                              {product.stock > 0 && product.stock < 10 && (
+                              {isLowStock(product) && (
                                 <Badge variant="outline" className="gap-1 border-orange-300 bg-orange-50 text-orange-700">
                                   <AlertCircle className="size-3" />
                                   Low stock
@@ -829,6 +854,10 @@ export function ProducerInventoryPage() {
                         <p className="font-medium">{product.stock} {product.unit}</p>
                       </div>
                       <div>
+                        <p className="text-sm text-gray-600">Low-stock Threshold</p>
+                        <p className="font-medium">{getLowStockThreshold(product)} {product.unit}</p>
+                      </div>
+                      <div>
                         <p className="text-sm text-gray-600">Harvest Date</p>
                         <p className="font-medium">{formatHarvestDate(product.harvestDate)}</p>
                       </div>
@@ -849,7 +878,7 @@ export function ProducerInventoryPage() {
 
                     {editingId === product.id && (
                       <div className="pt-4 border-t space-y-6">
-                        <div className="grid md:grid-cols-2 gap-6">
+                        <div className="grid md:grid-cols-3 gap-6">
                           <div className="space-y-2">
                             <Label htmlFor={`stock-${product.id}`} className="flex items-center gap-2">
                               Update Stock Level
@@ -868,6 +897,25 @@ export function ProducerInventoryPage() {
                                 {product.unit}
                               </div>
                             </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label htmlFor={`low-stock-threshold-${product.id}`} className="flex items-center gap-2">
+                              Low-stock Threshold
+                              <HelpCircle className="size-3 text-gray-400" />
+                            </Label>
+                            <Input
+                              id={`low-stock-threshold-${product.id}`}
+                              type="number"
+                              min="1"
+                              step="1"
+                              value={draft.lowStockThreshold}
+                              onChange={(event) => updateDraft(product.id, 'lowStockThreshold', event.target.value)}
+                              className="focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
+                            />
+                            <p className="text-xs text-gray-500">
+                              Trigger a dashboard notification when stock reaches this level or lower.
+                            </p>
                           </div>
 
                           <div className="space-y-2">
@@ -1048,7 +1096,7 @@ export function ProducerInventoryPage() {
               />
             </div>
 
-            <div className="grid md:grid-cols-3 gap-4">
+            <div className="grid md:grid-cols-4 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="new-price">Price (GBP)</Label>
                 <Input
@@ -1090,6 +1138,23 @@ export function ProducerInventoryPage() {
                   onChange={(event) => setNewProduct((previous) => ({ ...previous, stock: event.target.value }))}
                   required
                 />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="new-low-stock-threshold">Low-stock Threshold</Label>
+                <Input
+                  id="new-low-stock-threshold"
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={newProduct.lowStockThreshold}
+                  onChange={(event) =>
+                    setNewProduct((previous) => ({ ...previous, lowStockThreshold: event.target.value }))
+                  }
+                  required
+                />
+                <p className="text-xs text-gray-500">
+                  A notification will appear on the producer dashboard when stock reaches this amount or lower.
+                </p>
               </div>
             </div>
 

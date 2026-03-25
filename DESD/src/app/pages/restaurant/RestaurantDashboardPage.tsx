@@ -24,6 +24,7 @@ export function RestaurantDashboardPage() {
     { label: 'Orders', icon: ReceiptText, path: '/orders/history', variant: 'outline' as const },
     { label: 'Recurring', icon: CalendarClock, path: '/restaurant/recurring-orders', variant: 'outline' as const },
     { label: 'Near Me', icon: MapPinned, path: '/map', variant: 'outline' as const },
+    { label: 'Recipes', icon: BookOpenText, path: '/content/feed', variant: 'outline' as const },
   ];
   const workflowCards = [
     {
@@ -104,7 +105,7 @@ export function RestaurantDashboardPage() {
                   );
                 })}
               </div>
-              <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-5">
+              <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
                 {quickActions.map((action) => {
                   const Icon = action.icon;
                   return (

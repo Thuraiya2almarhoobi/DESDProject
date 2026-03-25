@@ -1,6 +1,7 @@
-import { ArrowLeft, Sprout } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router';
 
+import { SiteHeader } from '../SiteHeader';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
@@ -31,49 +32,28 @@ export function PublicPortalShell({
   centered = false,
   children,
 }: PublicPortalShellProps) {
+  const backAction = backHref ? (
+    <Button asChild variant="ghost" className="w-fit">
+      <Link to={backHref}>
+        <ArrowLeft className="mr-2 size-4" />
+        {backLabel}
+      </Link>
+    </Button>
+  ) : (
+    <Button asChild variant="ghost" className="w-fit">
+      <Link to="/login">Generic Login</Link>
+    </Button>
+  );
+
   return (
     <div className="relative min-h-screen overflow-hidden bg-[linear-gradient(180deg,oklch(0.985_0.01_145),oklch(0.955_0.02_145))]">
+      <SiteHeader />
+
       <div className="pointer-events-none absolute inset-0 opacity-70">
         <div className="absolute left-[-8rem] top-[-8rem] h-72 w-72 rounded-full bg-[oklch(0.88_0.06_145/.45)] blur-3xl" />
         <div className="absolute right-[-6rem] top-24 h-64 w-64 rounded-full bg-[oklch(0.9_0.04_60/.35)] blur-3xl" />
         <div className="absolute bottom-[-7rem] left-1/3 h-80 w-80 rounded-full bg-[oklch(0.88_0.05_200/.2)] blur-3xl" />
       </div>
-
-      <header className="relative z-10 border-b border-[oklch(0.88_0.02_145)] bg-white/70 backdrop-blur">
-        <div className={cn('mx-auto flex max-w-6xl items-center justify-between px-4', compact ? 'py-3' : 'py-4')}>
-          <Link to="/" className="flex items-center gap-3">
-            <div
-              className={cn(
-                'flex items-center justify-center rounded-2xl bg-[linear-gradient(135deg,oklch(0.43_0.11_155),oklch(0.57_0.08_140))] shadow-sm',
-                compact ? 'h-10 w-10' : 'h-11 w-11',
-              )}
-            >
-              <Sprout className="size-5 text-white" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold tracking-[0.18em] text-[oklch(0.42_0.06_150)] uppercase">
-                Bristol Marketplace
-              </p>
-              <p className={cn('text-sm text-[oklch(0.35_0.03_145)]', compact ? 'hidden sm:block' : '')}>
-                Local produce portals for buyers, producers, and institutions
-              </p>
-            </div>
-          </Link>
-
-          {backHref ? (
-            <Button asChild variant="ghost">
-              <Link to={backHref}>
-                <ArrowLeft className="mr-2 size-4" />
-                {backLabel}
-              </Link>
-            </Button>
-          ) : (
-            <Button asChild variant="ghost">
-              <Link to="/login">Generic Login</Link>
-            </Button>
-          )}
-        </div>
-      </header>
 
       <main
         className={cn(
@@ -87,6 +67,7 @@ export function PublicPortalShell({
       >
         {centered ? (
           <div className="mx-auto flex w-full max-w-4xl flex-col items-center gap-4">
+            <div className="flex w-full max-w-3xl justify-start">{backAction}</div>
             <section className="w-full max-w-3xl space-y-3 text-center">
               <div className="flex justify-center">
                 <Badge className="rounded-full border border-[oklch(0.82_0.03_145)] bg-white/80 px-4 py-1 text-[0.7rem] font-semibold tracking-[0.22em] text-[oklch(0.42_0.05_145)] uppercase shadow-sm">
@@ -129,6 +110,8 @@ export function PublicPortalShell({
             )}
           >
             <section className={cn(compact ? 'space-y-4' : 'space-y-6')}>
+              {backAction}
+
               <Badge className="rounded-full border border-[oklch(0.82_0.03_145)] bg-white/80 px-4 py-1 text-[0.7rem] font-semibold tracking-[0.22em] text-[oklch(0.42_0.05_145)] uppercase shadow-sm">
                 {eyebrow}
               </Badge>

@@ -7,8 +7,27 @@ export interface SiteNavItem {
   matchPrefixes: string[];
 }
 
+function normalizeRole(role?: UserRole | string | null): UserRole | null {
+  if (!role) {
+    return null;
+  }
+
+  const normalizedRole = role.toUpperCase();
+  if (
+    normalizedRole === 'CUSTOMER' ||
+    normalizedRole === 'PRODUCER' ||
+    normalizedRole === 'COMMUNITY' ||
+    normalizedRole === 'RESTAURANT' ||
+    normalizedRole === 'ADMIN'
+  ) {
+    return normalizedRole;
+  }
+
+  return null;
+}
+
 export function getSiteNavItems(role?: UserRole | null): SiteNavItem[] {
-  switch (role) {
+  switch (normalizeRole(role)) {
     case 'CUSTOMER':
       return [
         {

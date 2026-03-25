@@ -23,6 +23,7 @@ interface BackendProduct {
   season_reminder_message?: string;
   is_currently_in_season?: boolean;
   stock_quantity: number;
+  low_stock_threshold?: number;
   allergen_information: string | string[];
   harvest_date: string;
   image_url: string;
@@ -38,6 +39,7 @@ interface ProducerCreatePayload {
   unit: Product['unit'];
   availability: AvailabilityType;
   stock: number;
+  lowStockThreshold?: number;
   allergens?: string[];
   harvestDate: string;
   seasonStartMonth?: number;
@@ -122,6 +124,7 @@ export function backendProductToFrontend(product: BackendProduct): Product {
     allergens,
     imageUrl: product.image_url || 'https://images.unsplash.com/photo-1563636619-e9143da7973b?w=800',
     stock: product.stock_quantity,
+    lowStockThreshold: product.low_stock_threshold ?? 10,
     foodMiles: 12,
     isSurplus: product.is_surplus,
     surplusDiscount: discount,
@@ -175,6 +178,7 @@ export async function createProducerProductInApi(
     season_start_month: payload.availability === 'in-season' ? payload.seasonStartMonth ?? null : null,
     season_end_month: payload.availability === 'in-season' ? payload.seasonEndMonth ?? null : null,
     stock_quantity: payload.stock,
+    low_stock_threshold: payload.lowStockThreshold ?? 10,
     allergen_information: serializeAllergens(payload.allergens),
     harvest_date: payload.harvestDate,
     image_url: payload.imageUrl ?? '',
@@ -209,6 +213,7 @@ export async function patchProducerProductInApi(
   if (partialPayload.seasonStartMonth !== undefined) body.season_start_month = partialPayload.seasonStartMonth;
   if (partialPayload.seasonEndMonth !== undefined) body.season_end_month = partialPayload.seasonEndMonth;
   if (partialPayload.stock !== undefined) body.stock_quantity = partialPayload.stock;
+  if (partialPayload.lowStockThreshold !== undefined) body.low_stock_threshold = partialPayload.lowStockThreshold;
   if (partialPayload.allergens !== undefined) body.allergen_information = serializeAllergens(partialPayload.allergens);
   if (partialPayload.harvestDate !== undefined) body.harvest_date = partialPayload.harvestDate;
   if (partialPayload.imageUrl !== undefined) body.image_url = partialPayload.imageUrl;

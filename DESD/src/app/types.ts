@@ -48,6 +48,7 @@ export interface Product {
   allergens: string[];
   imageUrl: string;
   stock: number;
+  lowStockThreshold?: number;
   foodMiles: number;
   isSurplus?: boolean;
   surplusDiscount?: number; // percentage discount

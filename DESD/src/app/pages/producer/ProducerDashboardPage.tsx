@@ -55,6 +55,7 @@ interface ProducerProductApiView {
   id: string;
   name: string;
   stock: number;
+  lowStockThreshold: number;
   availability: 'in-season' | 'year-round' | 'unavailable';
   configuredAvailability?: 'in-season' | 'year-round' | 'unavailable';
   effectiveAvailability?: 'in-season' | 'year-round' | 'unavailable';
@@ -78,6 +79,14 @@ function toNumber(value: string): number {
 
 function formatCurrency(value: number): string {
   return `£${value.toFixed(2)}`;
+}
+
+function getLowStockThreshold(product: ProducerProductApiView): number {
+  return Math.max(1, product.lowStockThreshold || 10);
+}
+
+function isLowStock(product: ProducerProductApiView): boolean {
+  return product.stock > 0 && product.stock <= getLowStockThreshold(product);
 }
 
 function isUrgentOrder(order: ProducerSubOrderApi): boolean {
@@ -121,6 +130,7 @@ export function ProducerDashboardPage() {
             id: product.id,
             name: product.name,
             stock: product.stock,
+            lowStockThreshold: product.lowStockThreshold ?? 10,
             availability: product.availability,
             configuredAvailability: product.configuredAvailability,
             effectiveAvailability: product.effectiveAvailability,
@@ -156,7 +166,7 @@ export function ProducerDashboardPage() {
   const deliveredOrders = useMemo(() => orders.filter((order) => order.status === 'delivered'), [orders]);
   const urgentOrders = useMemo(() => orders.filter((order) => isUrgentOrder(order)), [orders]);
 
-  const lowStockProducts = useMemo(() => products.filter((product) => product.stock > 0 && product.stock < 10), [products]);
+  const lowStockProducts = useMemo(() => products.filter((product) => isLowStock(product)), [products]);
   const outOfStockProducts = useMemo(() => products.filter((product) => product.stock === 0), [products]);
   const unavailableProducts = useMemo(
     () => products.filter((product) => (product.effectiveAvailability ?? product.availability) === 'unavailable'),
@@ -194,7 +204,7 @@ export function ProducerDashboardPage() {
       .slice(0, 3);
   }, [deliveredOrders]);
 
-  const actionQueue = useMemo(() => {
+  const notifications = useMemo(() => {
     const queue: Array<{
       id: string;
       title: string;
@@ -223,7 +233,10 @@ export function ProducerDashboardPage() {
       queue.push({
         id: 'low-stock',
         title: `${lowStockProducts.length} low-stock product${lowStockProducts.length === 1 ? '' : 's'}`,
-        description: lowStockProducts.slice(0, 2).map((product) => product.name).join(', '),
+        description: lowStockProducts
+          .slice(0, 2)
+          .map((product) => `${product.name} (${product.stock}/${getLowStockThreshold(product)})`)
+          .join(', '),
         path: '/producer/inventory',
         variant: 'default',
         icon: AlertTriangle,
@@ -306,11 +319,11 @@ export function ProducerDashboardPage() {
             <section>
               <div className="flex items-center gap-2 mb-4">
                 <Clock className="size-5 text-green-700" />
-                <h2 className="text-lg font-semibold">Today's work</h2>
-                <Badge variant="secondary" className="ml-2">{actionQueue.length} items</Badge>
+                <h2 className="text-lg font-semibold">Notifications</h2>
+                <Badge variant="secondary" className="ml-2">{notifications.length} items</Badge>
               </div>
               <div className="space-y-3">
-                {actionQueue.map((item) => {
+                {notifications.map((item) => {
                   const Icon = item.icon;
                   return (
                     <Card key={item.id} className={`transition-shadow hover:shadow-md ${item.urgent ? 'border-red-300 bg-red-50/50' : ''}`}>

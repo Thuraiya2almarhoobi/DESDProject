@@ -74,6 +74,7 @@ class ProducerPortalCriticalTestCases(APITestCase):
             "season_start_month": 1,
             "season_end_month": 3,
             "stock_quantity": 50,
+            "low_stock_threshold": 14,
             "allergen_information": "Contains eggs",
             "harvest_date": timezone.localdate().isoformat(),
             "image_url": "https://example.com/eggs.jpg",
@@ -87,6 +88,7 @@ class ProducerPortalCriticalTestCases(APITestCase):
         self.assertEqual(product.name, payload["name"])
         self.assertEqual(product.category, payload["category"])
         self.assertEqual(product.stock_quantity, 50)
+        self.assertEqual(product.low_stock_threshold, 14)
         self.assertTrue(product.is_visible_to_customers)
 
         list_response = self.client.get("/api/producer/products/")
@@ -94,6 +96,51 @@ class ProducerPortalCriticalTestCases(APITestCase):
         self.assertEqual(len(list_response.data), 1)
         self.assertEqual(list_response.data[0]["name"], payload["name"])
         self.assertEqual(list_response.data[0]["availability"], ProductAvailability.IN_SEASON)
+        self.assertEqual(list_response.data[0]["low_stock_threshold"], 14)
+
+    def test_low_stock_threshold_persists_and_default_alert_filter_uses_saved_value(self):
+        product = ProducerProduct.objects.create(
+            producer=self.producer,
+            name="Threshold Tomatoes",
+            category="Vegetables",
+            description="Low-stock threshold test",
+            price=Decimal("2.10"),
+            unit="kg",
+            availability=ProductAvailability.YEAR_ROUND,
+            stock_quantity=6,
+            low_stock_threshold=7,
+            harvest_date=timezone.localdate(),
+        )
+
+        patch_response = self.client.patch(
+            f"/api/producer/products/{product.id}/",
+            {"low_stock_threshold": 5},
+            format="json",
+        )
+        self.assertEqual(patch_response.status_code, status.HTTP_200_OK)
+        product.refresh_from_db()
+        self.assertEqual(product.low_stock_threshold, 5)
+
+        low_stock_response = self.client.get("/api/producer/products/?low_stock=true")
+        self.assertEqual(low_stock_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(low_stock_response.data, [])
+
+        alert_response = self.client.get("/api/producer/inventory/low-stock/")
+        self.assertEqual(alert_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(alert_response.data["count"], 0)
+
+        product.low_stock_threshold = 6
+        product.save(update_fields=["low_stock_threshold"])
+
+        low_stock_response = self.client.get("/api/producer/products/?low_stock=true")
+        self.assertEqual(low_stock_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(low_stock_response.data), 1)
+        self.assertEqual(low_stock_response.data[0]["name"], "Threshold Tomatoes")
+
+        alert_response = self.client.get("/api/producer/inventory/low-stock/")
+        self.assertEqual(alert_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(alert_response.data["count"], 1)
+        self.assertEqual(alert_response.data["results"][0]["low_stock_threshold"], 6)
 
     def test_tc_009_producer_views_only_their_orders_sorted_by_delivery_date(self):
         product = ProducerProduct.objects.create(

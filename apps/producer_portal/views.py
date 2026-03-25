@@ -3,6 +3,7 @@ from __future__ import annotations
 from decimal import Decimal, ROUND_CEILING
 
 from django.contrib.auth import get_user_model
+from django.db.models import F
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, permissions, response, status
@@ -121,11 +122,15 @@ class ProducerProductListCreateAPIView(generics.ListCreateAPIView):
         queryset = ProducerProduct.objects.filter(producer=actor).order_by("-created_at")
         low_stock = self.request.query_params.get("low_stock")
         if low_stock in {"1", "true", "yes"}:
-            try:
-                threshold = int(self.request.query_params.get("threshold", 10))
-            except (TypeError, ValueError):
-                threshold = 10
-            queryset = queryset.filter(stock_quantity__lte=threshold)
+            threshold_param = self.request.query_params.get("threshold")
+            if threshold_param is not None:
+                try:
+                    threshold = int(threshold_param)
+                except (TypeError, ValueError):
+                    threshold = 10
+                queryset = queryset.filter(stock_quantity__gt=0, stock_quantity__lte=threshold)
+            else:
+                queryset = queryset.filter(stock_quantity__gt=0, stock_quantity__lte=F("low_stock_threshold"))
         return queryset
 
     def perform_create(self, serializer):
@@ -171,11 +176,18 @@ class ProducerLowStockAlertsAPIView(APIView):
     permission_classes = [permissions.AllowAny]
 
     def get(self, request):
-        threshold = int(request.query_params.get("threshold", 10))
-        products = ProducerProduct.objects.filter(
-            producer=_resolve_actor_user(request),
-            stock_quantity__lte=threshold,
-        ).order_by("stock_quantity", "name")
+        threshold_param = request.query_params.get("threshold")
+        threshold = None
+        products = ProducerProduct.objects.filter(producer=_resolve_actor_user(request))
+        if threshold_param is not None:
+            try:
+                threshold = int(threshold_param)
+            except (TypeError, ValueError):
+                threshold = 10
+            products = products.filter(stock_quantity__gt=0, stock_quantity__lte=threshold)
+        else:
+            products = products.filter(stock_quantity__gt=0, stock_quantity__lte=F("low_stock_threshold"))
+        products = products.order_by("stock_quantity", "name")
         serializer = ProducerProductSerializer(products, many=True)
         return response.Response({"threshold": threshold, "count": len(serializer.data), "results": serializer.data})
 

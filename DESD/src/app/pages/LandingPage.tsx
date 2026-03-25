@@ -90,7 +90,7 @@ export function LandingPage() {
 
       <main>
         <section className="lfm-hero">
-          <div className="lfm-hero-content">
+          <div className="lfm-section-shell lfm-hero-content">
             <h1>Local Food, Fresher Every Day</h1>
             <p>
               Connect directly with local farmers, producers, and community vendors. Buy fresh, eat local, support your
@@ -117,29 +117,31 @@ export function LandingPage() {
         </section>
 
         <section id="features" className="lfm-features">
-          <div className="lfm-section-header">
-            <div className="lfm-section-label">Why Choose Us</div>
-            <h2 className="lfm-section-title">Built for Your Community</h2>
-            <p className="lfm-section-subtitle">
-              Everything you need to support local agriculture and build stronger communities
-            </p>
-          </div>
+          <div className="lfm-section-shell">
+            <div className="lfm-section-header">
+              <div className="lfm-section-label">Why Choose Us</div>
+              <h2 className="lfm-section-title">Built for Your Community</h2>
+              <p className="lfm-section-subtitle">
+                Everything you need to support local agriculture and build stronger communities
+              </p>
+            </div>
 
-          <div className="lfm-features-grid">
-            {features.map((feature) => (
-              <article key={feature.title} className="lfm-feature-card">
-                <div className="lfm-feature-icon" aria-hidden="true">
-                  {feature.icon}
-                </div>
-                <h3>{feature.title}</h3>
-                <p>{feature.description}</p>
-              </article>
-            ))}
+            <div className="lfm-features-grid">
+              {features.map((feature) => (
+                <article key={feature.title} className="lfm-feature-card">
+                  <div className="lfm-feature-icon" aria-hidden="true">
+                    {feature.icon}
+                  </div>
+                  <h3>{feature.title}</h3>
+                  <p>{feature.description}</p>
+                </article>
+              ))}
+            </div>
           </div>
         </section>
 
         <section className="lfm-roles">
-          <div className="lfm-roles-content">
+          <div className="lfm-section-shell lfm-roles-content">
             <div className="lfm-section-header">
               <div className="lfm-section-label">Get Involved</div>
               <h2 className="lfm-section-title">Choose Your Role</h2>

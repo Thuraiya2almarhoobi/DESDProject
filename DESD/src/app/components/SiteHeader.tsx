@@ -31,7 +31,9 @@ interface SiteHeaderProps {
 }
 
 function getRoleSummary(role?: string | null): string | null {
-  switch (role) {
+  const normalizedRole = role?.toUpperCase();
+
+  switch (normalizedRole) {
     case 'COMMUNITY':
       return 'Role: COMMUNITY | Bulk multi-producer ordering interface';
     case 'RESTAURANT':
@@ -52,9 +54,9 @@ export function SiteHeader({
   onSearchQueryChange,
   searchPlaceholder = 'Search products, producers, categories...',
 }: SiteHeaderProps) {
-  const HEADER_SCROLL_TOP_THRESHOLD = 24;
-  const HEADER_SCROLL_DELTA_THRESHOLD = 12;
-  const HEADER_STATE_LOCK_MS = 260;
+  const HEADER_EXPAND_THRESHOLD = 8;
+  const HEADER_COLLAPSE_THRESHOLD = 96;
+  const HEADER_STATE_SETTLE_MS = 220;
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -67,9 +69,7 @@ export function SiteHeader({
   } = useAuth();
   const { getTotalItems } = useCart();
   const headerRef = useRef<HTMLElement | null>(null);
-  const lastScrollY = useRef(0);
-  const isCollapsedRef = useRef(false);
-  const scrollStateLockUntil = useRef(0);
+  const collapsedStateLockUntil = useRef(0);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [profilePostcode, setProfilePostcode] = useState('');
 
@@ -111,6 +111,8 @@ export function SiteHeader({
     : user.role === 'ADMIN'
       ? getDashboardPathForRole(user.role)
       : '/marketplace';
+  const compactActionClass = isCollapsed ? 'h-9 px-3 py-1.5' : '';
+  const compactProfileButtonClass = isCollapsed ? 'min-h-9 gap-2 px-2.5 py-1.5' : 'min-h-10 gap-2 px-3 py-2';
 
   const buyerAddressLabel =
     user?.role === 'COMMUNITY'
@@ -126,30 +128,13 @@ export function SiteHeader({
         ? 'Kitchen postcode'
         : 'Delivering to';
 
-  const updateCollapsedState = (nextCollapsed: boolean) => {
-    if (isCollapsedRef.current === nextCollapsed) {
-      return;
-    }
-
-    const lockUntil = Date.now() + HEADER_STATE_LOCK_MS;
-    isCollapsedRef.current = nextCollapsed;
-    scrollStateLockUntil.current = lockUntil;
-    setIsCollapsed(nextCollapsed);
-  };
-
-  useEffect(() => {
-    isCollapsedRef.current = isCollapsed;
-  }, [isCollapsed]);
-
   useEffect(() => {
     if (typeof window === 'undefined') {
       return;
     }
 
-    isCollapsedRef.current = false;
-    scrollStateLockUntil.current = 0;
-    setIsCollapsed(false);
-    lastScrollY.current = window.scrollY;
+    collapsedStateLockUntil.current = 0;
+    setIsCollapsed(window.scrollY > HEADER_COLLAPSE_THRESHOLD);
   }, [location.pathname, location.search]);
 
   useEffect(() => {
@@ -162,29 +147,20 @@ export function SiteHeader({
     const updateHeaderState = () => {
       const currentScrollY = window.scrollY;
       const now = Date.now();
-      const collapseStartThreshold = showSearch ? 88 : 64;
 
-      if (now < scrollStateLockUntil.current) {
-        lastScrollY.current = currentScrollY;
-        ticking = false;
-        return;
+      if (now >= collapsedStateLockUntil.current) {
+        setIsCollapsed((previous) => {
+          const nextCollapsed = previous
+            ? currentScrollY > HEADER_EXPAND_THRESHOLD
+            : currentScrollY > HEADER_COLLAPSE_THRESHOLD;
+
+          if (nextCollapsed !== previous) {
+            collapsedStateLockUntil.current = now + HEADER_STATE_SETTLE_MS;
+          }
+
+          return nextCollapsed;
+        });
       }
-
-      if (currentScrollY <= HEADER_SCROLL_TOP_THRESHOLD) {
-        updateCollapsedState(false);
-      } else if (currentScrollY < collapseStartThreshold) {
-        updateCollapsedState(false);
-      } else {
-        const scrollDelta = currentScrollY - lastScrollY.current;
-
-        if (scrollDelta > HEADER_SCROLL_DELTA_THRESHOLD) {
-          updateCollapsedState(true);
-        } else if (scrollDelta < -HEADER_SCROLL_DELTA_THRESHOLD) {
-          updateCollapsedState(false);
-        }
-      }
-
-      lastScrollY.current = currentScrollY;
       ticking = false;
     };
 
@@ -198,7 +174,7 @@ export function SiteHeader({
 
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
-  }, [showSearch]);
+  }, []);
 
   useEffect(() => {
     if (!isBuyer || deliveryPostcode) {
@@ -255,13 +231,30 @@ export function SiteHeader({
   }, [stopCustomerPreview, user?.role]);
 
   const compactHeaderRow = (
-    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-      <Link to={brandLinkTarget} className="flex items-start gap-3">
-        <div className="flex size-11 items-center justify-center rounded-2xl bg-gradient-to-br from-[oklch(0.45_0.12_155)] to-[oklch(0.55_0.10_150)] shadow-sm">
+    <div
+      className={cn(
+        'flex flex-col justify-between gap-4 transition-[gap] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] lg:flex-row',
+        isCollapsed ? 'lg:items-center' : 'lg:items-start',
+      )}
+    >
+      <Link to={brandLinkTarget} className={cn('flex items-start gap-3', isCollapsed && 'items-center gap-2.5')}>
+        <div
+          className={cn(
+            'flex items-center justify-center rounded-2xl bg-gradient-to-br from-[oklch(0.45_0.12_155)] to-[oklch(0.55_0.10_150)] shadow-sm transition-[width,height,border-radius] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]',
+            isCollapsed ? 'size-9 rounded-[1.1rem]' : 'size-11',
+          )}
+        >
           <Sprout className="size-5 text-white" />
         </div>
         <div>
-          <h1 className="text-2xl font-semibold text-[oklch(0.24_0.03_145)]">Local Food Marketplace</h1>
+          <h1
+            className={cn(
+              'font-semibold text-[oklch(0.24_0.03_145)] transition-[font-size,line-height] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]',
+              isCollapsed ? 'text-lg leading-none sm:text-xl' : 'text-2xl',
+            )}
+          >
+            Local Food Marketplace
+          </h1>
           {!isCollapsed && (
             <>
               <p className="text-sm text-[oklch(0.38_0.03_145)]">
@@ -291,13 +284,15 @@ export function SiteHeader({
             variant="ghost"
             size="sm"
             onClick={openDeliveryProfile}
-            className="h-auto min-h-10 items-start gap-2 px-3 py-2 text-left"
+            className={cn('h-auto items-start text-left', compactProfileButtonClass, isCollapsed && 'items-center')}
           >
             <MapPin className="mt-0.5 size-4 shrink-0 text-[oklch(0.38_0.04_145)]" />
               <span className="flex flex-col leading-tight">
-                <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-[oklch(0.46_0.03_145)]">
-                  {buyerPostcodeLabel}
-                </span>
+                {!isCollapsed && (
+                  <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-[oklch(0.46_0.03_145)]">
+                    {buyerPostcodeLabel}
+                  </span>
+                )}
                 <span className="max-w-[8rem] truncate text-sm font-semibold text-[oklch(0.24_0.03_145)]">
                   {displayedDeliveryPostcode || 'Set postcode'}
                 </span>
@@ -310,13 +305,15 @@ export function SiteHeader({
             variant="ghost"
             size="sm"
             onClick={openProducerProfile}
-            className="h-auto min-h-10 items-start gap-2 px-3 py-2 text-left"
+            className={cn('h-auto items-start text-left', compactProfileButtonClass, isCollapsed && 'items-center')}
           >
             <MapPin className="mt-0.5 size-4 shrink-0 text-[oklch(0.38_0.04_145)]" />
             <span className="flex flex-col leading-tight">
-              <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-[oklch(0.46_0.03_145)]">
-                Delivering from
-              </span>
+              {!isCollapsed && (
+                <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-[oklch(0.46_0.03_145)]">
+                  Delivering from
+                </span>
+              )}
               <span className="max-w-[8rem] truncate text-sm font-semibold text-[oklch(0.24_0.03_145)]">
                 {producerOriginPostcode || 'Set postcode'}
               </span>
@@ -325,7 +322,7 @@ export function SiteHeader({
         )}
 
         {isBuyer && (
-          <Button variant="outline" size="sm" onClick={() => navigate('/cart')} className="relative">
+          <Button variant="outline" size="sm" onClick={() => navigate('/cart')} className={cn('relative', compactActionClass)}>
             <ShoppingCart className="size-4 sm:mr-2" />
             <span className="hidden sm:inline">{user?.role === 'CUSTOMER' ? 'Cart' : 'Order Cart'}</span>
             {getTotalItems() > 0 && (
@@ -338,13 +335,13 @@ export function SiteHeader({
 
         {!user && (
           <>
-            <Button asChild variant="ghost" size="sm">
+            <Button asChild variant="ghost" size="sm" className={compactActionClass}>
               <Link to="/portal/producer">Producer Portal</Link>
             </Button>
-            <Button asChild variant="outline" size="sm">
+            <Button asChild variant="outline" size="sm" className={compactActionClass}>
               <Link to="/login">Sign In</Link>
             </Button>
-            <Button asChild size="sm">
+            <Button asChild size="sm" className={compactActionClass}>
               <Link to="/select-portal?mode=register">Sign Up</Link>
             </Button>
           </>
@@ -352,7 +349,7 @@ export function SiteHeader({
 
         {user && (
           <>
-            <Button variant="ghost" size="sm" onClick={handleLogout}>
+            <Button variant="ghost" size="sm" onClick={handleLogout} className={compactActionClass}>
               <LogOut className="size-4 sm:mr-2" />
               <span className="hidden sm:inline">Sign Out</span>
             </Button>
@@ -437,6 +434,42 @@ export function SiteHeader({
     </div>
   );
 
+  const collapsedSearchBrand = (
+    <Link
+      to={brandLinkTarget}
+      className="flex shrink-0 items-center gap-2 rounded-2xl border border-[oklch(0.88_0.02_145)] bg-[oklch(0.985_0.008_145)] px-2.5 py-2 shadow-sm"
+      aria-label="Go to marketplace home"
+    >
+      <div className="flex size-8 items-center justify-center rounded-[1rem] bg-gradient-to-br from-[oklch(0.45_0.12_155)] to-[oklch(0.55_0.10_150)] shadow-sm">
+        <Sprout className="size-4 text-white" />
+      </div>
+      <span className="hidden text-sm font-semibold text-[oklch(0.24_0.03_145)] sm:inline">Local Food Marketplace</span>
+    </Link>
+  );
+
+  const searchInput = (
+    <div className="relative min-w-0 flex-1">
+      <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+      <Input
+        id="marketplace-search"
+        placeholder={searchPlaceholder}
+        value={searchQuery}
+        onChange={(event) => onSearchQueryChange?.(event.target.value)}
+        className="pl-10 pr-10"
+      />
+      {searchQuery && (
+        <button
+          type="button"
+          onClick={() => onSearchQueryChange?.('')}
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
+          aria-label="Clear search"
+        >
+          <X className="size-4" />
+        </button>
+      )}
+    </div>
+  );
+
   return (
     <header
       ref={headerRef}
@@ -445,7 +478,7 @@ export function SiteHeader({
     >
       <div className="mx-auto max-w-7xl px-4">
         {showSearch ? (
-          <div className="space-y-3 py-3">
+          <div className={cn('space-y-3 transition-[padding] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]', isCollapsed ? 'py-2' : 'py-3')}>
             <div
               className={cn(
                 'overflow-hidden transition-[max-height,opacity,transform,margin] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]',
@@ -456,25 +489,9 @@ export function SiteHeader({
               <div className="pb-1 pt-1">{compactHeaderRow}</div>
             </div>
 
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                id="marketplace-search"
-                placeholder={searchPlaceholder}
-                value={searchQuery}
-                onChange={(event) => onSearchQueryChange?.(event.target.value)}
-                className="pl-10 pr-10"
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => onSearchQueryChange?.('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
-                  aria-label="Clear search"
-                >
-                  <X className="size-4" />
-                </button>
-              )}
+            <div className={cn('transition-[gap] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]', isCollapsed ? 'flex items-center gap-3' : 'block')}>
+              {isCollapsed && collapsedSearchBrand}
+              {searchInput}
             </div>
 
             {showNavigation && (
@@ -490,7 +507,7 @@ export function SiteHeader({
             )}
           </div>
         ) : (
-          <div className="py-4">
+          <div className={cn('transition-[padding] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]', isCollapsed ? 'py-2' : 'py-4')}>
             {compactHeaderRow}
             {showNavigation && (
               <div

@@ -2,10 +2,31 @@ import { UserRole } from '../types';
 
 export const MAX_ORDER_ITEM_QUANTITY = 100;
 
-export function isBuyerRole(role?: UserRole | null): boolean {
-  return role === 'CUSTOMER' || role === 'COMMUNITY' || role === 'RESTAURANT';
+function normalizeRole(role?: UserRole | string | null): UserRole | null {
+  if (!role) {
+    return null;
+  }
+
+  const normalizedRole = role.toUpperCase();
+  if (
+    normalizedRole === 'CUSTOMER' ||
+    normalizedRole === 'PRODUCER' ||
+    normalizedRole === 'COMMUNITY' ||
+    normalizedRole === 'RESTAURANT' ||
+    normalizedRole === 'ADMIN'
+  ) {
+    return normalizedRole;
+  }
+
+  return null;
 }
 
-export function isBulkBuyerRole(role?: UserRole | null): boolean {
-  return role === 'COMMUNITY' || role === 'RESTAURANT';
+export function isBuyerRole(role?: UserRole | string | null): boolean {
+  const normalizedRole = normalizeRole(role);
+  return normalizedRole === 'CUSTOMER' || normalizedRole === 'COMMUNITY' || normalizedRole === 'RESTAURANT';
+}
+
+export function isBulkBuyerRole(role?: UserRole | string | null): boolean {
+  const normalizedRole = normalizeRole(role);
+  return normalizedRole === 'COMMUNITY' || normalizedRole === 'RESTAURANT';
 }

@@ -44,6 +44,7 @@ class ProducerProductSerializer(serializers.ModelSerializer):
             "season_reminder_message",
             "is_currently_in_season",
             "stock_quantity",
+            "low_stock_threshold",
             "allergen_information",
             "harvest_date",
             "image_url",

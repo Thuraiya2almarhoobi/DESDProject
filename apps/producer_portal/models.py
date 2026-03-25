@@ -61,6 +61,10 @@ class ProducerProduct(models.Model):
         validators=[MinValueValidator(1), MaxValueValidator(12)],
     )
     stock_quantity = models.PositiveIntegerField(default=0)
+    low_stock_threshold = models.PositiveIntegerField(
+        default=10,
+        validators=[MinValueValidator(1), MaxValueValidator(9999)],
+    )
     allergen_information = models.CharField(max_length=255, blank=True)
     harvest_date = models.DateField()
     image_url = models.URLField(blank=True)
