@@ -9,7 +9,7 @@ import tempfile
 import re
 from urllib.parse import unquote
 from rest_framework import status
-from rest_framework.test import APITestCase
+from rest_framework.test import APIClient, APITestCase
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.orders.models import CustomerProfile as OrdersCustomerProfile
@@ -269,6 +269,32 @@ class AccountsLoginTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
         self.assertEqual(response.data.get("detail"), "Invalid credentials")
+
+    def test_login_succeeds_even_when_django_session_cookie_exists(self):
+        UserModel.objects.create_user(
+            email="session-login-user@example.com",
+            password="StrongPass123!",
+            role=User.Role.PRODUCER,
+        )
+        admin_user = UserModel.objects.create_user(
+            email="session-admin@example.com",
+            password="StrongPass123!",
+            role=User.Role.ADMIN,
+            is_staff=True,
+            is_superuser=True,
+        )
+
+        api_client = APIClient(enforce_csrf_checks=True)
+        api_client.force_login(admin_user)
+
+        response = api_client.post(
+            reverse("auth-login"),
+            {"email": "session-login-user@example.com", "password": "StrongPass123!"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["user"]["role"], User.Role.PRODUCER)
 
     def test_remember_me_issues_longer_refresh_lifetime(self):
         from datetime import timedelta

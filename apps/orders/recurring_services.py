@@ -78,9 +78,12 @@ def _delivery_date_for_producer(
     return max(candidate, earliest)
 
 
-def _build_template_item_rows_from_cart(user) -> list[dict]:
+def _build_template_item_rows_from_cart(
+    user,
+    selected_cart_item_ids: list[int] | None = None,
+) -> list[dict]:
     cart = get_or_create_cart(user)
-    groups = get_cart_groups(cart)
+    groups = get_cart_groups(cart, selected_cart_item_ids)
     rows: list[dict] = []
     for group in groups:
         for item in group.items:
@@ -100,7 +103,8 @@ def create_recurring_template_from_checkout(
     *,
     reserve_payment: bool = False,
 ) -> tuple[RecurringOrderTemplate, Order]:
-    item_rows = _build_template_item_rows_from_cart(user)
+    selected_cart_item_ids = payload.get("selected_cart_item_ids")
+    item_rows = _build_template_item_rows_from_cart(user, selected_cart_item_ids)
     if not item_rows:
         raise ValueError("Cart is empty.")
 

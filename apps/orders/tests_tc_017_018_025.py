@@ -411,6 +411,68 @@ class RestaurantRecurringOrderTests(APITestCase):
         self.assertEqual(initial_order.payment_status, Order.PaymentStatus.PENDING)
         self.assertTrue(PaymentTransaction.objects.filter(order=initial_order, provider="stripe").exists())
 
+    @patch("apps.payments.services.create_stripe_checkout_session_for_order")
+    def test_restaurant_recurring_creation_respects_selected_cart_items_for_single_producer_checkout(
+        self,
+        mock_checkout_session,
+    ):
+        mock_checkout_session.return_value = StripeCheckoutSessionResult(
+            session_id="cs_test_restaurant_selected_single",
+            checkout_url="https://stripe.test/restaurant-selected-single",
+            publishable_key="pk_test_restaurant",
+            test_mode=True,
+        )
+
+        self.client.post(
+            "/api/orders/cart/items/",
+            {"product_id": self.product_a.id, "quantity": "10"},
+            format="json",
+        )
+        self.client.post(
+            "/api/orders/cart/items/",
+            {"product_id": self.product_b.id, "quantity": "8"},
+            format="json",
+        )
+
+        cart_res = self.client.get("/api/orders/cart/")
+        self.assertEqual(cart_res.status_code, status.HTTP_200_OK)
+        selected_cart_item_id = None
+        for group in cart_res.data["groups"]:
+            for item in group["items"]:
+                if item["product_id"] == self.product_a.id:
+                    selected_cart_item_id = item["cart_item_id"]
+                    break
+            if selected_cart_item_id is not None:
+                break
+
+        self.assertIsNotNone(selected_cart_item_id)
+
+        today = timezone.localdate()
+        response = self.client.post(
+            "/api/restaurant/recurring-orders/",
+            {
+                "frequency": "fortnightly",
+                "order_day": 2,
+                "delivery_day": 0,
+                "delivery_address": "12 Restaurant Lane, Bristol",
+                "customer_postcode": "BS1 4DJ",
+                "payment_method": "stripe_checkout",
+                "selected_cart_item_ids": [selected_cart_item_id],
+                "delivery_date": (today + timedelta(days=3)).isoformat(),
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        template = RecurringOrderTemplate.objects.get(id=response.data["template"]["id"])
+        self.assertEqual(template.items.count(), 1)
+        self.assertEqual(template.items.first().product_id, self.product_a.id)
+
+        initial_order = Order.objects.get(id=response.data["initial_order"]["id"])
+        self.assertEqual(initial_order.sub_orders.count(), 1)
+        self.assertEqual(initial_order.sub_orders.first().producer_id, self.producer_a.id)
+        self.assertTrue(PaymentTransaction.objects.filter(order=initial_order, provider="stripe").exists())
+
     def test_tc018_create_template_override_and_run_generation(self):
         self.client.post(
             "/api/orders/cart/items/",

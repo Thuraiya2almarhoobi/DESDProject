@@ -253,6 +253,7 @@ def _build_me_payload(request):
 
 
 class BaseRegistrationView(APIView):
+    authentication_classes = ()
     permission_classes = (AllowAny,)
     throttle_classes = (RegisterAnonThrottle, RegisterUserThrottle)
     serializer_class = None
@@ -288,6 +289,7 @@ class RestaurantRegistrationView(BaseRegistrationView):
 
 
 class LoginView(APIView):
+    authentication_classes = ()
     permission_classes = (AllowAny,)
     throttle_classes = (LoginAnonThrottle, LoginUserThrottle)
 
@@ -329,6 +331,7 @@ class LoginView(APIView):
 
 
 class VerifyEmailView(APIView):
+    authentication_classes = ()
     permission_classes = (AllowAny,)
 
     def post(self, request):
@@ -357,6 +360,7 @@ class VerifyEmailView(APIView):
 
 
 class PasswordResetRequestView(APIView):
+    authentication_classes = ()
     permission_classes = (AllowAny,)
     throttle_classes = (RegisterAnonThrottle, RegisterUserThrottle)
 
@@ -378,6 +382,7 @@ class PasswordResetRequestView(APIView):
 
 
 class PasswordResetConfirmView(APIView):
+    authentication_classes = ()
     permission_classes = (AllowAny,)
     throttle_classes = (RegisterAnonThrottle, RegisterUserThrottle)
 

@@ -123,6 +123,8 @@ class Command(BaseCommand):
                 address = Address.objects.filter(user=user, is_default=True).order_by("id").first()
 
             if address is None:
+                if is_default:
+                    Address.objects.filter(user=user).update(is_default=False)
                 return Address.objects.create(
                     user=user,
                     label=label,
@@ -138,10 +140,10 @@ class Command(BaseCommand):
             address.line2 = line2
             address.city = city
             address.postcode = postcode
-            address.is_default = is_default
-            address.save(update_fields=["label", "line1", "line2", "city", "postcode", "is_default"])
             if is_default:
                 Address.objects.filter(user=user).exclude(pk=address.pk).update(is_default=False)
+            address.is_default = is_default
+            address.save(update_fields=["label", "line1", "line2", "city", "postcode", "is_default"])
             return address
 
         customer_address = upsert_address(
