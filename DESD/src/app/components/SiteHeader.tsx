@@ -28,6 +28,8 @@ interface SiteHeaderProps {
   searchQuery?: string;
   onSearchQueryChange?: (value: string) => void;
   searchPlaceholder?: string;
+  showLocationBar?: boolean;
+  locationCity?: string;
 }
 
 function getRoleSummary(role?: string | null): string | null {
@@ -53,6 +55,8 @@ export function SiteHeader({
   searchQuery = '',
   onSearchQueryChange,
   searchPlaceholder = 'Search products, producers, categories...',
+  showLocationBar = false,
+  locationCity = 'Bristol',
 }: SiteHeaderProps) {
   const HEADER_EXPAND_THRESHOLD = 8;
   const HEADER_COLLAPSE_THRESHOLD = 96;
@@ -60,13 +64,7 @@ export function SiteHeader({
 
   const navigate = useNavigate();
   const location = useLocation();
-  const {
-    user,
-    profile,
-    logout,
-    addresses,
-    stopCustomerPreview,
-  } = useAuth();
+  const { user, profile, logout, addresses, stopCustomerPreview } = useAuth();
   const { getTotalItems } = useCart();
   const headerRef = useRef<HTMLElement | null>(null);
   const collapsedStateLockUntil = useRef(0);
@@ -102,9 +100,10 @@ export function SiteHeader({
         ? Number(profile.address)
         : null;
   const producerAddress =
-    (producerAddressId
-      ? addresses.find((address) => address.id === producerAddressId)
-      : null) || addresses.find((address) => address.is_default) || addresses[0] || null;
+    (producerAddressId ? addresses.find((address) => address.id === producerAddressId) : null) ||
+    addresses.find((address) => address.is_default) ||
+    addresses[0] ||
+    null;
   const producerOriginPostcode = producerAddress?.postcode || '';
   const brandLinkTarget = !user
     ? '/'
@@ -258,9 +257,7 @@ export function SiteHeader({
           {!isCollapsed && (
             <>
               <p className="text-sm text-[oklch(0.38_0.03_145)]">
-                {!user
-                  ? 'Browse first, then sign in when you are ready to order.'
-                  : `Signed in as ${customerName}`}
+                {!user ? 'Browse first, then sign in when you are ready to order.' : `Signed in as ${customerName}`}
               </p>
               {roleSummary && <p className="text-xs text-[oklch(0.43_0.03_145)]">{roleSummary}</p>}
               {isBuyer && defaultAddressText && (
@@ -287,18 +284,18 @@ export function SiteHeader({
             className={cn('h-auto items-start text-left', compactProfileButtonClass, isCollapsed && 'items-center')}
           >
             <MapPin className="mt-0.5 size-4 shrink-0 text-[oklch(0.38_0.04_145)]" />
-              <span className="flex flex-col leading-tight">
-                {!isCollapsed && (
-                  <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-[oklch(0.46_0.03_145)]">
-                    {buyerPostcodeLabel}
-                  </span>
-                )}
-                <span className="max-w-[8rem] truncate text-sm font-semibold text-[oklch(0.24_0.03_145)]">
-                  {displayedDeliveryPostcode || 'Set postcode'}
+            <span className="flex flex-col leading-tight">
+              {!isCollapsed && (
+                <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-[oklch(0.46_0.03_145)]">
+                  {buyerPostcodeLabel}
                 </span>
+              )}
+              <span className="max-w-[8rem] truncate text-sm font-semibold text-[oklch(0.24_0.03_145)]">
+                {displayedDeliveryPostcode || 'Set postcode'}
               </span>
-            </Button>
-          )}
+            </span>
+          </Button>
+        )}
 
         {isProducer && (
           <Button
@@ -326,9 +323,7 @@ export function SiteHeader({
             <ShoppingCart className="size-4 sm:mr-2" />
             <span className="hidden sm:inline">{user?.role === 'CUSTOMER' ? 'Cart' : 'Order Cart'}</span>
             {getTotalItems() > 0 && (
-              <Badge className="ml-2 flex h-5 min-w-5 items-center justify-center px-1.5">
-                {getTotalItems()}
-              </Badge>
+              <Badge className="ml-2 flex h-5 min-w-5 items-center justify-center px-1.5">{getTotalItems()}</Badge>
             )}
           </Button>
         )}
@@ -383,12 +378,8 @@ export function SiteHeader({
                   </>
                 ) : (
                   <>
-                    <DropdownMenuItem onClick={() => navigate('/account')}>
-                      Account Information
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => navigate(getDashboardPathForRole(user.role))}
-                    >
+                    <DropdownMenuItem onClick={() => navigate('/account')}>Account Information</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => navigate(getDashboardPathForRole(user.role))}>
                       Go to Dashboard
                     </DropdownMenuItem>
                   </>
@@ -478,7 +469,12 @@ export function SiteHeader({
     >
       <div className="mx-auto max-w-7xl px-4">
         {showSearch ? (
-          <div className={cn('space-y-3 transition-[padding] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]', isCollapsed ? 'py-2' : 'py-3')}>
+          <div
+            className={cn(
+              'space-y-3 transition-[padding] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]',
+              isCollapsed ? 'py-2' : 'py-3',
+            )}
+          >
             <div
               className={cn(
                 'overflow-hidden transition-[max-height,opacity,transform,margin] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]',
@@ -489,7 +485,12 @@ export function SiteHeader({
               <div className="pb-1 pt-1">{compactHeaderRow}</div>
             </div>
 
-            <div className={cn('transition-[gap] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]', isCollapsed ? 'flex items-center gap-3' : 'block')}>
+            <div
+              className={cn(
+                'transition-[gap] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]',
+                isCollapsed ? 'flex items-center gap-3' : 'block',
+              )}
+            >
               {isCollapsed && collapsedSearchBrand}
               {searchInput}
             </div>
@@ -507,7 +508,12 @@ export function SiteHeader({
             )}
           </div>
         ) : (
-          <div className={cn('transition-[padding] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]', isCollapsed ? 'py-2' : 'py-4')}>
+          <div
+            className={cn(
+              'transition-[padding] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]',
+              isCollapsed ? 'py-2' : 'py-4',
+            )}
+          >
             {compactHeaderRow}
             {showNavigation && (
               <div
@@ -523,6 +529,29 @@ export function SiteHeader({
           </div>
         )}
       </div>
+
+      {showLocationBar && (
+        <div className="border-t border-[oklch(0.9_0.02_145)] border-b bg-[#f4f9f5]">
+          <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-2 text-sm text-[oklch(0.35_0.03_145)] sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2">
+              <MapPin className="size-4 text-[#1a5c35]" />
+              <span>
+                Showing producers near <span className="font-semibold text-[#1a5c35]">{locationCity}</span>{' '}
+                <span className="text-[oklch(0.52_0.02_145)]">.</span>{' '}
+              </span>
+              <button
+                type="button"
+                onClick={() => navigate('/browse')}
+                className="font-medium text-[#1a5c35] underline underline-offset-4 hover:text-[#154a2a]"
+              >
+                Change location
+              </button>
+            </div>
+
+            <span className="text-xs font-medium text-[#1a5c35]">Browse freely - no account needed</span>
+          </div>
+        </div>
+      )}
     </header>
   );
 }

@@ -1,5 +1,5 @@
 ﻿import { useState, useMemo, useEffect } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import { Filter, X, Plus, Minus, AlertCircle, AlertTriangle, Star } from 'lucide-react';
 import { toast } from 'sonner';
 import { Product, UserRole } from '../types';
@@ -61,12 +61,13 @@ function getPriceBounds(priceFilter: PriceFilter): { minPrice?: number; maxPrice
 
 export function MarketplacePage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const { addToCartAndWait, getProductCartQuantity, undoLastAdd } = useCart();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<string[]>(fallbackCategories);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(() => searchParams.get('q') || '');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(() => searchParams.get('q') || '');
   const [selectedCategories, setSelectedCategories] = useState<string[]>(['All']);
   const [showOnlyOrganic, setShowOnlyOrganic] = useState(false);
   const [priceFilter, setPriceFilter] = useState<PriceFilter>('any');
@@ -170,6 +171,29 @@ export function MarketplacePage() {
     }, 300);
     return () => clearTimeout(timer);
   }, [searchQuery]);
+
+  useEffect(() => {
+    const nextQuery = searchParams.get('q') || '';
+    if (nextQuery !== searchQuery) {
+      setSearchQuery(nextQuery);
+      setDebouncedSearchQuery(nextQuery);
+    }
+  }, [searchParams, searchQuery]);
+
+  useEffect(() => {
+    const currentQuery = searchParams.get('q') || '';
+    if (currentQuery === debouncedSearchQuery) {
+      return;
+    }
+
+    const nextParams = new URLSearchParams(searchParams);
+    if (debouncedSearchQuery) {
+      nextParams.set('q', debouncedSearchQuery);
+    } else {
+      nextParams.delete('q');
+    }
+    setSearchParams(nextParams, { replace: true });
+  }, [debouncedSearchQuery, searchParams, setSearchParams]);
 
   // Show skeleton briefly on local filter/sort changes.
   useEffect(() => {

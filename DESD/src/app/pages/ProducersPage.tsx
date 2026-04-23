@@ -2,7 +2,6 @@ import { ArrowRight, BadgeCheck, Boxes, ClipboardList, Wallet } from 'lucide-rea
 import { Link } from 'react-router';
 
 import { SiteHeader } from '../components/SiteHeader';
-import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
 import { getPortalDefinition } from '../lib/portalConfig';
@@ -51,9 +50,6 @@ export function ProducersPage() {
       <main className="mx-auto max-w-7xl space-y-12 px-4 py-10 sm:py-14">
         <section className="grid gap-8 lg:grid-cols-[1.15fr_0.85fr] lg:items-start">
           <div className="space-y-6">
-            <Badge className="rounded-full border border-[oklch(0.82_0.03_145)] bg-white/80 px-4 py-1 text-[0.7rem] font-semibold tracking-[0.22em] text-[oklch(0.42_0.05_145)] uppercase shadow-sm">
-              {producerDefinition.title}
-            </Badge>
             <div className="space-y-4">
               <h1 className="max-w-3xl text-4xl font-semibold tracking-tight text-[oklch(0.24_0.02_145)] sm:text-5xl">
                 Sell through a producer workflow that stays operationally clear.
