@@ -34,6 +34,8 @@ services:
       EMAIL_USE_TLS: "${EMAIL_USE_TLS:-true}"
       EMAIL_USE_SSL: "${EMAIL_USE_SSL:-false}"
       DEFAULT_FROM_EMAIL: "${DEFAULT_FROM_EMAIL:-noreply@localfood.test}"
+      ACCOUNT_EMAIL_SUPPRESS_DOMAINS: "${ACCOUNT_EMAIL_SUPPRESS_DOMAINS:-example.com,example.org,example.net,invalid,localhost,local,localfood.test,test}"
+      ACCOUNT_EMAIL_SUPPRESS_LOCAL_PARTS: "${ACCOUNT_EMAIL_SUPPRESS_LOCAL_PARTS:-dummy,example,fake,test}"
       STRIPE_PUBLISHABLE_KEY: "${STRIPE_PUBLISHABLE_KEY:-}"
       STRIPE_SECRET_KEY: "${STRIPE_SECRET_KEY:-sk_test_51_placeholder_replace_me}"
       STRIPE_WEBHOOK_SECRET: "${STRIPE_WEBHOOK_SECRET:-whsec_placeholder_replace_me}"

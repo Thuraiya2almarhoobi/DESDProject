@@ -32,10 +32,13 @@ UserModel = get_user_model()
 @override_settings(
     EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
     FRONTEND_URL="http://localhost:5173",
+    ACCOUNT_EMAIL_SUPPRESS_DOMAINS="",
+    ACCOUNT_EMAIL_SUPPRESS_LOCAL_PARTS="",
 )
 class AccountsRegistrationTests(APITestCase):
     def setUp(self):
         super().setUp()
+        cache.clear()
         mail.outbox = []
 
     def _assert_profile_for_role(self, user, role):
@@ -136,6 +139,36 @@ class AccountsRegistrationTests(APITestCase):
 
         self.assertEqual(len(mail.outbox), len(cases))
         self.assertIn("/verify-email?token=", mail.outbox[-1].body)
+
+    @override_settings(
+        ACCOUNT_EMAIL_SUPPRESS_DOMAINS="example.com",
+        ACCOUNT_EMAIL_SUPPRESS_LOCAL_PARTS="",
+    )
+    def test_registration_with_dummy_email_saves_user_without_sending_email(self):
+        response = self.client.post(
+            reverse("register-customer"),
+            {
+                "email": "demo-customer@example.com",
+                "password": "StrongPass123!",
+                "confirm_password": "StrongPass123!",
+                "full_name": "Demo Customer",
+                "phone": "07111115555",
+                "delivery_address": "45 Park Street, Bristol",
+                "postcode": "BS1 5JG",
+                "accept_terms": True,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data.get("detail"), "Registration successful.")
+        self.assertEqual(response.data.get("email_delivery"), {
+            "sent": False,
+            "skipped": True,
+            "reason": "suppressed_domain",
+        })
+        self.assertTrue(UserModel.objects.filter(email="demo-customer@example.com").exists())
+        self.assertEqual(len(mail.outbox), 0)
 
     def test_customer_registration_requires_terms_acceptance(self):
         response = self.client.post(
@@ -447,10 +480,13 @@ class AccountsEditableProfileBootstrapTests(APITestCase):
 @override_settings(
     EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
     FRONTEND_URL="http://localhost:5173",
+    ACCOUNT_EMAIL_SUPPRESS_DOMAINS="",
+    ACCOUNT_EMAIL_SUPPRESS_LOCAL_PARTS="",
 )
 class AccountsVerificationAndPasswordResetTests(APITestCase):
     def setUp(self):
         super().setUp()
+        cache.clear()
         mail.outbox = []
 
     def test_verify_email_endpoint_marks_email_verified(self):
@@ -492,6 +528,27 @@ class AccountsVerificationAndPasswordResetTests(APITestCase):
             {"email": "unknown@example.com"},
             format="json",
         )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["detail"], "If the email exists, a reset link has been sent.")
+        self.assertEqual(len(mail.outbox), 0)
+
+    @override_settings(
+        ACCOUNT_EMAIL_SUPPRESS_DOMAINS="example.com",
+        ACCOUNT_EMAIL_SUPPRESS_LOCAL_PARTS="",
+    )
+    def test_password_reset_skips_dummy_email_without_error(self):
+        UserModel.objects.create_user(
+            email="reset-dummy@example.com",
+            password="OldPassword123!",
+            role=User.Role.CUSTOMER,
+        )
+
+        response = self.client.post(
+            reverse("auth-password-reset-request"),
+            {"email": "reset-dummy@example.com"},
+            format="json",
+        )
+
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["detail"], "If the email exists, a reset link has been sent.")
         self.assertEqual(len(mail.outbox), 0)

@@ -180,6 +180,23 @@ JWT_REMEMBER_ME_REFRESH_LIFETIME = timedelta(days=JWT_REMEMBER_ME_REFRESH_DAYS)
 EMAIL_VERIFICATION_TOKEN_MAX_AGE = int(os.getenv("EMAIL_VERIFICATION_TOKEN_MAX_AGE", "86400"))
 PASSWORD_RESET_TOKEN_MAX_AGE = int(os.getenv("PASSWORD_RESET_TOKEN_MAX_AGE", "1800"))
 
+
+def _optional_env(name: str, default: str = "") -> str:
+    value = os.getenv(name)
+    if value is None or not value.strip():
+        return default
+    return value
+
+
+ACCOUNT_EMAIL_SUPPRESS_DOMAINS = _optional_env(
+    "ACCOUNT_EMAIL_SUPPRESS_DOMAINS",
+    "example.com,example.org,example.net,invalid,localhost,local,localfood.test,test",
+)
+ACCOUNT_EMAIL_SUPPRESS_LOCAL_PARTS = _optional_env(
+    "ACCOUNT_EMAIL_SUPPRESS_LOCAL_PARTS",
+    "dummy,example,fake,test",
+)
+
 SMTP_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 CONSOLE_BACKEND = "django.core.mail.backends.console.EmailBackend"
 REQUESTED_EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", CONSOLE_BACKEND)
@@ -256,6 +273,11 @@ LOGGING = {
         "apps.accounts.auth": {
             "handlers": ["console"],
             "level": os.getenv("ACCOUNTS_AUTH_LOG_LEVEL", "INFO"),
+            "propagate": False,
+        },
+        "apps.accounts.email": {
+            "handlers": ["console"],
+            "level": os.getenv("ACCOUNTS_EMAIL_LOG_LEVEL", "INFO"),
             "propagate": False,
         },
     },

@@ -262,13 +262,25 @@ class BaseRegistrationView(APIView):
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
-        try:
-            send_email_verification_message(user)
-        except Exception:
-            logger.exception("Failed to send verification email for user_id=%s", user.id)
+        email_delivery = send_email_verification_message(user)
+        if not email_delivery.sent and not email_delivery.skipped:
+            logger.warning(
+                "Verification email was not sent for user_id=%s reason=%s",
+                user.id,
+                email_delivery.reason,
+            )
         logger.info("Registration successful for email=%s role=%s", user.email, user.role)
         response_payload = _build_auth_payload(user)
-        response_payload["detail"] = "Registration successful, check your email to verify."
+        response_payload["detail"] = (
+            "Registration successful, check your email to verify."
+            if email_delivery.sent
+            else "Registration successful."
+        )
+        response_payload["email_delivery"] = {
+            "sent": email_delivery.sent,
+            "skipped": email_delivery.skipped,
+            "reason": email_delivery.reason,
+        }
         return Response(response_payload, status=status.HTTP_201_CREATED)
 
 
@@ -371,10 +383,13 @@ class PasswordResetRequestView(APIView):
         normalized_email = UserModel.objects.normalize_email(email)
         user = UserModel.objects.filter(email__iexact=normalized_email).first()
         if user is not None:
-            try:
-                send_password_reset_message(user)
-            except Exception:
-                logger.exception("Failed to send password reset email for user_id=%s", user.id)
+            email_delivery = send_password_reset_message(user)
+            if not email_delivery.sent and not email_delivery.skipped:
+                logger.warning(
+                    "Password reset email was not sent for user_id=%s reason=%s",
+                    user.id,
+                    email_delivery.reason,
+                )
         return Response(
             {"detail": "If the email exists, a reset link has been sent."},
             status=status.HTTP_200_OK,
