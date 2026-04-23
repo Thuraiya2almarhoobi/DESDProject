@@ -237,3 +237,40 @@
     line-height: 1.5;
   }
 }
+
+html.landing-snap-mode {
+  scroll-behavior: smooth;
+  scroll-padding-top: 7.5rem;
+  scroll-snap-type: y mandatory;
+}
+
+body.landing-snap-mode {
+  overscroll-behavior-y: contain;
+}
+
+@layer components {
+  .landing-snap-panel {
+    min-height: calc(100svh - 7.5rem);
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+  }
+}
+
+@media (min-width: 768px) {
+  html.landing-snap-mode {
+    scroll-padding-top: 7rem;
+  }
+
+  @layer components {
+    .landing-snap-panel {
+      min-height: calc(100svh - 7rem);
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.landing-snap-mode {
+    scroll-behavior: auto;
+    scroll-snap-type: y proximity;
+  }
+}

@@ -11,6 +11,7 @@ from apps.accounts.models import (
     ProducerProfile as EditableProducerProfile,
 )
 from apps.content.models import FarmStory, Recipe, RecipeProduct
+from apps.orders.marketplace_sync import _available_orders_business_name
 from apps.orders.models import (
     CustomerProfile,
     Order,
@@ -162,16 +163,45 @@ class Command(BaseCommand):
             },
         )
 
-        bristol_farm, _ = Producer.objects.update_or_create(
-            business_name="Bristol Valley Farm",
-            defaults={
-                "user": producer_user,
-                "contact_email": producer_user.email,
-                "phone": "01179123456",
-                "postcode": "BS1 4DJ",
-                "lead_time_hours": 48,
+        def upsert_orders_producer(*, user, business_name: str, phone: str, postcode: str, lead_time_hours: int) -> Producer:
+            producer = Producer.objects.filter(user=user).first()
+            if producer is None:
+                producer = Producer.objects.filter(business_name=business_name).first()
+
+            desired_business_name = _available_orders_business_name(
+                business_name,
+                user=user,
+                exclude_pk=producer.pk if producer else None,
+            )
+            defaults = {
+                "user": user,
+                "business_name": desired_business_name,
+                "contact_email": user.email,
+                "phone": phone,
+                "postcode": postcode,
+                "lead_time_hours": lead_time_hours,
                 "is_active": True,
-            },
+            }
+
+            if producer is None:
+                return Producer.objects.create(**defaults)
+
+            updated_fields: list[str] = []
+            for field_name, value in defaults.items():
+                if getattr(producer, field_name) != value:
+                    setattr(producer, field_name, value)
+                    updated_fields.append(field_name)
+
+            if updated_fields:
+                producer.save(update_fields=[*updated_fields, "updated_at"])
+            return producer
+
+        bristol_farm = upsert_orders_producer(
+            user=producer_user,
+            business_name="Bristol Valley Farm",
+            phone="01179123456",
+            postcode="BS1 4DJ",
+            lead_time_hours=48,
         )
         bristol_farm_address = upsert_address(
             producer_user,
@@ -192,16 +222,12 @@ class Command(BaseCommand):
             },
         )
 
-        hillside_dairy, _ = Producer.objects.update_or_create(
+        hillside_dairy = upsert_orders_producer(
+            user=producer_two_user,
             business_name="Hillside Dairy",
-            defaults={
-                "user": producer_two_user,
-                "contact_email": producer_two_user.email,
-                "phone": "01179001122",
-                "postcode": "BS3 2AA",
-                "lead_time_hours": 72,
-                "is_active": True,
-            },
+            phone="01179001122",
+            postcode="BS3 2AA",
+            lead_time_hours=72,
         )
         hillside_dairy_address = upsert_address(
             producer_two_user,

@@ -47,9 +47,6 @@ export function AboutPage() {
       <main className="mx-auto max-w-7xl space-y-12 px-4 py-10 sm:py-14">
         <section className="grid gap-8 lg:grid-cols-[1.2fr_0.8fr] lg:items-start">
           <div className="space-y-6">
-            <div className="inline-flex items-center rounded-full border border-[oklch(0.84_0.03_145)] bg-white/80 px-4 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-[oklch(0.42_0.05_145)]">
-              About the platform
-            </div>
             <div className="space-y-4">
               <h1 className="max-w-3xl text-4xl font-semibold tracking-tight text-[oklch(0.24_0.02_145)] sm:text-5xl">
                 Local ordering with clearer producer, delivery, and payment visibility.

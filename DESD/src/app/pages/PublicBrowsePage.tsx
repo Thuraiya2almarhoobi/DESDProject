@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { AlertCircle, ArrowRight, Search } from 'lucide-react';
 
 import { fetchMarketplaceProductsFromApi } from '../services/productApi';
@@ -18,8 +18,9 @@ import { SurplusInfo } from '../components/SurplusInfo';
 type SortOption = 'featured' | 'price-low' | 'price-high' | 'nearest';
 
 export function PublicBrowsePage() {
+  const [searchParams] = useSearchParams();
   const [products, setProducts] = useState<Product[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(() => searchParams.get('q') || '');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [sortBy, setSortBy] = useState<SortOption>('featured');
   const [showOnlyInStock, setShowOnlyInStock] = useState(true);
@@ -53,6 +54,10 @@ export function PublicBrowsePage() {
       mounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    setSearchQuery(searchParams.get('q') || '');
+  }, [searchParams]);
 
   const categories = useMemo(() => {
     return ['All', ...Array.from(new Set(products.map((product) => product.category || 'Uncategorised'))).sort()];
@@ -102,9 +107,10 @@ export function PublicBrowsePage() {
     <div className="min-h-screen bg-gradient-to-br from-[oklch(0.98_0.01_145)] to-[oklch(0.96_0.02_150)]">
       <SiteHeader
         showSearch
+        showLocationBar
+        locationCity="Bristol"
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
-        searchPlaceholder="Search local products, producers, categories..."
       />
 
       <main className="mx-auto max-w-7xl space-y-6 px-4 py-6">
@@ -194,7 +200,7 @@ export function PublicBrowsePage() {
                 </p>
                 <p className="text-xs text-[oklch(0.42_0.03_145)]">Open any product to inspect details before signing in.</p>
               </div>
-              <div className="hidden items-center gap-2 rounded-full border border-[oklch(0.9_0.02_145)] bg-[oklch(0.985_0.006_145)] px-3 py-2 text-xs text-[oklch(0.38_0.03_145)] sm:flex">
+              <div className="hidden items-center gap-2 text-xs text-[oklch(0.38_0.03_145)] sm:flex">
                 <Search className="size-3.5" />
                 Search stays available in the header above.
               </div>

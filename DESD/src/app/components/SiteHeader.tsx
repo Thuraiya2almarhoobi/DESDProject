@@ -1,23 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import type { FormEvent, MouseEvent } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
-import { LogOut, MapPin, Search, ShoppingCart, Sprout, User, X } from 'lucide-react';
+import { LogOut, MapPin, Menu, Search, ShoppingCart, Sprout, User, X } from 'lucide-react';
 
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
-import { apiJson } from '../lib/api';
 import { clearPendingCustomerPreviewExitTarget } from '../lib/customerPreview';
 import { getDashboardPathForRole } from '../lib/roleRouting';
 import { getSiteNavItems, isSiteNavItemActive } from '../lib/siteNavigation';
-import { Badge } from './ui/badge';
-import { Button, buttonVariants } from './ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from './ui/dropdown-menu';
+import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { cn } from './ui/utils';
 
@@ -27,21 +18,22 @@ interface SiteHeaderProps {
   searchQuery?: string;
   onSearchQueryChange?: (value: string) => void;
   searchPlaceholder?: string;
+  showLocationBar?: boolean;
+  locationCity?: string;
 }
 
-function getRoleSummary(role?: string | null): string | null {
-  switch (role) {
-    case 'COMMUNITY':
-      return 'Role: COMMUNITY | Bulk multi-producer ordering interface';
-    case 'RESTAURANT':
-      return 'Role: RESTAURANT | Recurring-order marketplace interface';
-    case 'PRODUCER':
-      return 'Role: PRODUCER | Manage supply, incoming orders, and settlements';
-    case 'ADMIN':
-      return 'Role: ADMIN | Monitor platform commissions and operations';
-    default:
-      return null;
-  }
+function isMarketingPath(pathname: string): boolean {
+  return (
+    pathname === '/' ||
+    pathname === '/about' ||
+    pathname === '/producers' ||
+    pathname === '/browse' ||
+    pathname.startsWith('/browse/')
+  );
+}
+
+function canOrder(role?: string | null): boolean {
+  return role === 'CUSTOMER' || role === 'COMMUNITY' || role === 'RESTAURANT';
 }
 
 export function SiteHeader({
@@ -49,184 +41,49 @@ export function SiteHeader({
   showNavigation = true,
   searchQuery = '',
   onSearchQueryChange,
-  searchPlaceholder = 'Search products, producers, categories...',
+  searchPlaceholder = 'Search produce, farms, or categories…',
+  showLocationBar = false,
+  locationCity = 'Bristol',
 }: SiteHeaderProps) {
-  const HEADER_SCROLL_TOP_THRESHOLD = 24;
-  const HEADER_SCROLL_DELTA_THRESHOLD = 12;
-  const HEADER_STATE_LOCK_MS = 260;
-
   const navigate = useNavigate();
   const location = useLocation();
-  const {
-    user,
-    profile,
-    logout,
-    addresses,
-    stopCustomerPreview,
-  } = useAuth();
+  const { user, logout, stopCustomerPreview } = useAuth();
   const { getTotalItems } = useCart();
-  const headerRef = useRef<HTMLElement | null>(null);
-  const lastScrollY = useRef(0);
-  const isCollapsedRef = useRef(false);
-  const scrollStateLockUntil = useRef(0);
-  const [isCollapsed, setIsCollapsed] = useState(false);
-  const [profilePostcode, setProfilePostcode] = useState('');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [localSearchQuery, setLocalSearchQuery] = useState('');
 
-  const isActualCustomer = user?.role === 'CUSTOMER';
-  const isProducer = user?.role === 'PRODUCER';
-  const customerName = (user?.name || '').trim() || 'Customer';
-  const roleSummary = getRoleSummary(user?.role);
-  const navItems = useMemo(() => getSiteNavItems(user?.role), [user?.role]);
-  const defaultAddressText = useMemo(() => {
-    if (!addresses || addresses.length === 0) {
-      return '';
+  const isMarketingSurface = isMarketingPath(location.pathname);
+  const isAuthenticated = Boolean(user);
+  const isBuyer = canOrder(user?.role);
+  const renderSearch = showSearch || showNavigation;
+  const navItems = useMemo(() => {
+    if (!showNavigation) {
+      return [];
     }
-
-    const defaultAddress = addresses.find((address) => address.is_default) || addresses[0];
-    return [defaultAddress.line1, defaultAddress.city, defaultAddress.postcode].filter(Boolean).join(', ');
-  }, [addresses]);
-  const deliveryPostcode = useMemo(() => {
-    if (!addresses || addresses.length === 0) {
-      return '';
+    if (isMarketingSurface) {
+      return getSiteNavItems(null);
     }
+    return user ? getSiteNavItems(user.role) : getSiteNavItems(null);
+  }, [isMarketingSurface, showNavigation, user]);
 
-    const defaultAddress = addresses.find((address) => address.is_default) || addresses[0];
-    return defaultAddress.postcode || '';
-  }, [addresses]);
-  const displayedDeliveryPostcode = deliveryPostcode || profilePostcode;
-  const producerAddressId =
-    typeof profile?.address === 'number'
-      ? profile.address
-      : typeof profile?.address === 'string'
-        ? Number(profile.address)
-        : null;
-  const producerAddress =
-    (producerAddressId
-      ? addresses.find((address) => address.id === producerAddressId)
-      : null) || addresses.find((address) => address.is_default) || addresses[0] || null;
-  const producerOriginPostcode = producerAddress?.postcode || '';
-  const brandLinkTarget = !user
-    ? '/'
-    : user.role === 'ADMIN'
-      ? getDashboardPathForRole(user.role)
-      : '/marketplace';
-
-  const updateCollapsedState = (nextCollapsed: boolean) => {
-    if (isCollapsedRef.current === nextCollapsed) {
-      return;
-    }
-
-    const lockUntil = Date.now() + HEADER_STATE_LOCK_MS;
-    isCollapsedRef.current = nextCollapsed;
-    scrollStateLockUntil.current = lockUntil;
-    setIsCollapsed(nextCollapsed);
-  };
+  const brandLinkTarget = isMarketingSurface ? '/' : user ? getDashboardPathForRole(user.role) : '/';
+  const searchTargetPath =
+    !user || isMarketingSurface || user.role === 'ADMIN' ? '/browse' : '/marketplace';
+  const searchValue = onSearchQueryChange ? searchQuery : localSearchQuery;
+  const cartItemCount = getTotalItems();
 
   useEffect(() => {
-    isCollapsedRef.current = isCollapsed;
-  }, [isCollapsed]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    isCollapsedRef.current = false;
-    scrollStateLockUntil.current = 0;
-    setIsCollapsed(false);
-    lastScrollY.current = window.scrollY;
+    setIsMobileMenuOpen(false);
   }, [location.pathname, location.search]);
 
   useEffect(() => {
-    if (typeof window === 'undefined') {
+    if (onSearchQueryChange) {
       return;
     }
 
-    let ticking = false;
-
-    const updateHeaderState = () => {
-      const currentScrollY = window.scrollY;
-      const now = Date.now();
-      const collapseStartThreshold = showSearch ? 88 : 64;
-
-      if (now < scrollStateLockUntil.current) {
-        lastScrollY.current = currentScrollY;
-        ticking = false;
-        return;
-      }
-
-      if (currentScrollY <= HEADER_SCROLL_TOP_THRESHOLD) {
-        updateCollapsedState(false);
-      } else if (currentScrollY < collapseStartThreshold) {
-        updateCollapsedState(false);
-      } else {
-        const scrollDelta = currentScrollY - lastScrollY.current;
-
-        if (scrollDelta > HEADER_SCROLL_DELTA_THRESHOLD) {
-          updateCollapsedState(true);
-        } else if (scrollDelta < -HEADER_SCROLL_DELTA_THRESHOLD) {
-          updateCollapsedState(false);
-        }
-      }
-
-      lastScrollY.current = currentScrollY;
-      ticking = false;
-    };
-
-    const handleScroll = () => {
-      if (ticking) {
-        return;
-      }
-      ticking = true;
-      window.requestAnimationFrame(updateHeaderState);
-    };
-
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, [showSearch]);
-
-  useEffect(() => {
-    if (!isActualCustomer || deliveryPostcode) {
-      setProfilePostcode('');
-      return;
-    }
-
-    let mounted = true;
-
-    const loadProfilePostcode = async () => {
-      try {
-        const payload = await apiJson<{ postcode: string }>('/api/orders/profile/');
-        if (mounted) {
-          setProfilePostcode(payload.postcode || '');
-        }
-      } catch {
-        if (mounted) {
-          setProfilePostcode('');
-        }
-      }
-    };
-
-    void loadProfilePostcode();
-
-    return () => {
-      mounted = false;
-    };
-  }, [deliveryPostcode, isActualCustomer]);
-
-  const handleLogout = () => {
-    clearPendingCustomerPreviewExitTarget();
-    stopCustomerPreview();
-    logout();
-    navigate('/');
-  };
-
-  const openDeliveryProfile = () => {
-    navigate('/account#delivery-profile');
-  };
-
-  const openProducerProfile = () => {
-    navigate('/account#business-profile');
-  };
+    const queryFromUrl = new URLSearchParams(location.search).get('q') || '';
+    setLocalSearchQuery(queryFromUrl);
+  }, [location.search, onSearchQueryChange]);
 
   useEffect(() => {
     if (user?.role === 'PRODUCER') {
@@ -235,253 +92,272 @@ export function SiteHeader({
     }
   }, [stopCustomerPreview, user?.role]);
 
-  const compactHeaderRow = (
-    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-      <Link to={brandLinkTarget} className="flex items-start gap-3">
-        <div className="flex size-11 items-center justify-center rounded-2xl bg-gradient-to-br from-[oklch(0.45_0.12_155)] to-[oklch(0.55_0.10_150)] shadow-sm">
-          <Sprout className="size-5 text-white" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-semibold text-[oklch(0.24_0.03_145)]">Local Food Marketplace</h1>
-          {!isCollapsed && (
-            <>
-              <p className="text-sm text-[oklch(0.38_0.03_145)]">
-                {!user
-                  ? 'Browse first, then sign in when you are ready to order.'
-                  : `Signed in as ${customerName}`}
-              </p>
-              {roleSummary && <p className="text-xs text-[oklch(0.43_0.03_145)]">{roleSummary}</p>}
-              {isActualCustomer && defaultAddressText && (
-                <p className="max-w-[24rem] truncate text-xs text-[oklch(0.43_0.03_145)]">
-                  Delivery address: {defaultAddressText}
-                </p>
-              )}
-              {isProducer && producerAddress && (
-                <p className="max-w-[24rem] truncate text-xs text-[oklch(0.43_0.03_145)]">
-                  Dispatch postcode: {producerAddress.postcode}
-                </p>
-              )}
-            </>
-          )}
-        </div>
-      </Link>
+  const updateSearchValue = (value: string) => {
+    if (onSearchQueryChange) {
+      onSearchQueryChange(value);
+      return;
+    }
 
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        {isActualCustomer && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={openDeliveryProfile}
-            className="h-auto min-h-10 items-start gap-2 px-3 py-2 text-left"
-          >
-            <MapPin className="mt-0.5 size-4 shrink-0 text-[oklch(0.38_0.04_145)]" />
-            <span className="flex flex-col leading-tight">
-              <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-[oklch(0.46_0.03_145)]">
-                Delivering to
-              </span>
-              <span className="max-w-[8rem] truncate text-sm font-semibold text-[oklch(0.24_0.03_145)]">
-                {displayedDeliveryPostcode || 'Set postcode'}
-              </span>
-            </span>
-          </Button>
-        )}
+    setLocalSearchQuery(value);
+  };
 
-        {isProducer && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={openProducerProfile}
-            className="h-auto min-h-10 items-start gap-2 px-3 py-2 text-left"
-          >
-            <MapPin className="mt-0.5 size-4 shrink-0 text-[oklch(0.38_0.04_145)]" />
-            <span className="flex flex-col leading-tight">
-              <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-[oklch(0.46_0.03_145)]">
-                Delivering from
-              </span>
-              <span className="max-w-[8rem] truncate text-sm font-semibold text-[oklch(0.24_0.03_145)]">
-                {producerOriginPostcode || 'Set postcode'}
-              </span>
-            </span>
-          </Button>
-        )}
+  const handleSamePageClick = (event: MouseEvent<HTMLAnchorElement>, target: string) => {
+    if (location.pathname === target) {
+      event.preventDefault();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    setIsMobileMenuOpen(false);
+  };
 
-        {isActualCustomer && (
-          <Button variant="outline" size="sm" onClick={() => navigate('/cart')} className="relative">
-            <ShoppingCart className="size-4 sm:mr-2" />
-            <span className="hidden sm:inline">Cart</span>
-            {getTotalItems() > 0 && (
-              <Badge className="ml-2 flex h-5 min-w-5 items-center justify-center px-1.5">
-                {getTotalItems()}
-              </Badge>
-            )}
-          </Button>
-        )}
+  const handleSearchSubmit = (event?: FormEvent<HTMLFormElement>) => {
+    event?.preventDefault();
+    const nextQuery = searchValue.trim();
+    const nextPath = nextQuery ? `${searchTargetPath}?q=${encodeURIComponent(nextQuery)}` : searchTargetPath;
+    navigate(nextPath);
+    setIsMobileMenuOpen(false);
+  };
 
-        {!user && (
-          <>
-            <Button asChild variant="ghost" size="sm">
-              <Link to="/portal/producer">Producer Portal</Link>
-            </Button>
-            <Button asChild variant="outline" size="sm">
-              <Link to="/login">Sign In</Link>
-            </Button>
-            <Button asChild size="sm">
-              <Link to="/select-portal?mode=register">Sign Up</Link>
-            </Button>
-          </>
-        )}
+  const handleLogout = () => {
+    clearPendingCustomerPreviewExitTarget();
+    stopCustomerPreview();
+    logout();
+    navigate('/');
+  };
 
-        {user && (
-          <>
-            <Button variant="ghost" size="sm" onClick={handleLogout}>
-              <LogOut className="size-4 sm:mr-2" />
-              <span className="hidden sm:inline">Sign Out</span>
-            </Button>
-
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                type="button"
-                aria-label="Open account menu"
-                className={`${buttonVariants({ variant: 'ghost', size: 'sm' })} focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2`}
-              >
-                <User className="size-4" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuLabel>Hello, {customerName}</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                {isActualCustomer ? (
-                  <>
-                    <DropdownMenuLabel>Account</DropdownMenuLabel>
-                    <DropdownMenuItem onClick={() => navigate('/account')}>Account Information</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => navigate('/settings')}>Settings</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => navigate('/orders/history')}>Order History</DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuLabel>Explore</DropdownMenuLabel>
-                    <DropdownMenuItem onClick={() => navigate('/map')}>Producers Near Me</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => navigate('/content/feed')}>Recipes & Stories</DropdownMenuItem>
-                  </>
-                ) : (
-                  <>
-                    <DropdownMenuItem onClick={() => navigate('/account')}>
-                      Account Information
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => navigate(getDashboardPathForRole(user.role))}
-                    >
-                      Go to Dashboard
-                    </DropdownMenuItem>
-                  </>
-                )}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleLogout} className="text-red-600">
-                  <LogOut className="mr-2 size-4" />
-                  Logout
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </>
-        )}
-      </div>
-    </div>
-  );
-
-  const primaryNav = (
-    <div className="overflow-x-auto pb-1">
-      <nav
-        aria-label="Primary"
-        className="inline-flex min-w-max max-w-full flex-wrap items-center gap-2 rounded-[1.5rem] border border-[oklch(0.88_0.02_145)] bg-[oklch(0.985_0.008_145)] p-2 shadow-sm"
+  const desktopActionButtons = !isAuthenticated ? (
+    <>
+      <Button
+        asChild
+        variant="outline"
+        size="sm"
+        className="border-[#1a5c35] text-[#1a5c35] hover:bg-[#f4f9f5] hover:text-[#1a5c35]"
       >
-        {navItems.map((item) => {
-          const isActive = isSiteNavItemActive(location.pathname, item);
-
-          return (
-            <Link
-              key={item.label}
-              to={item.to}
-              className={cn(
-                'inline-flex min-h-10 items-center rounded-full px-4 py-2 text-sm font-medium transition-colors',
-                isActive
-                  ? 'bg-[oklch(0.94_0.05_145)] text-[oklch(0.28_0.06_145)] shadow-sm'
-                  : 'text-[oklch(0.4_0.03_145)] hover:bg-white hover:text-[oklch(0.28_0.04_145)]',
-              )}
-            >
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
-    </div>
+        <Link to="/portal/producer">Producer portal</Link>
+      </Button>
+      <Button asChild variant="ghost" size="sm" className="text-[#1a5c35] hover:bg-[#f4f9f5]">
+        <Link to="/login">Sign in</Link>
+      </Button>
+      <Button asChild size="sm" className="bg-[#1a5c35] text-white hover:bg-[#154a2a]">
+        <Link to="/select-portal?mode=register">Sign up</Link>
+      </Button>
+    </>
+  ) : (
+    <>
+      {isBuyer ? (
+        <Button
+          asChild
+          variant="outline"
+          size="sm"
+          className="border-[#1a5c35] text-[#1a5c35] hover:bg-[#f4f9f5] hover:text-[#1a5c35]"
+        >
+          <Link to="/cart">
+            <ShoppingCart className="size-4" />
+            Cart
+            {cartItemCount > 0 ? (
+              <span className="ml-1 inline-flex min-w-5 items-center justify-center rounded-full bg-[#1a5c35] px-1.5 py-0.5 text-[11px] font-semibold text-white">
+                {cartItemCount}
+              </span>
+            ) : null}
+          </Link>
+        </Button>
+      ) : (
+        <Button
+          asChild
+          variant="outline"
+          size="sm"
+          className="border-[#1a5c35] text-[#1a5c35] hover:bg-[#f4f9f5] hover:text-[#1a5c35]"
+        >
+          <Link to={getDashboardPathForRole(user.role)}>Dashboard</Link>
+        </Button>
+      )}
+      <Button asChild variant="ghost" size="sm" className="text-[#1a5c35] hover:bg-[#f4f9f5]">
+        <Link to="/account">
+          <User className="size-4" />
+          Account
+        </Link>
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        onClick={handleLogout}
+        className="bg-[#1a5c35] text-white hover:bg-[#154a2a]"
+      >
+        <LogOut className="size-4" />
+        Sign out
+      </Button>
+    </>
   );
 
   return (
-    <header
-      ref={headerRef}
-      style={{ overflowAnchor: 'none' }}
-      className="sticky top-0 z-30 border-b border-[oklch(0.88_0.02_145)] bg-white/84 shadow-sm backdrop-blur-sm"
-    >
-      <div className="mx-auto max-w-7xl px-4">
-        {showSearch ? (
-          <div className="space-y-3 py-3">
-            <div
-              className={cn(
-                'overflow-hidden transition-[max-height,opacity,transform,margin] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]',
-                isCollapsed ? 'max-h-0 -translate-y-1 opacity-0' : 'max-h-[12rem] translate-y-0 opacity-100',
-              )}
-              aria-hidden={isCollapsed}
+    <div className="sticky top-0 z-30 border-b border-[oklch(0.88_0.02_145)] bg-white/95 shadow-sm backdrop-blur-sm">
+      <header>
+        <div className="mx-auto max-w-7xl px-4">
+          <div className="hidden h-[60px] items-center gap-4 md:flex">
+            <Link
+              to={brandLinkTarget}
+              className="flex shrink-0 items-center gap-3 text-[#1a5c35]"
+              onClick={(event) => handleSamePageClick(event, brandLinkTarget)}
             >
-              <div className="pb-1 pt-1">{compactHeaderRow}</div>
-            </div>
+              <div className="flex size-9 items-center justify-center rounded-xl bg-[#1a5c35] shadow-sm">
+                <Sprout className="size-4 text-white" />
+              </div>
+              <span className="text-base font-semibold tracking-tight">Local Food Marketplace</span>
+            </Link>
 
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                id="marketplace-search"
-                placeholder={searchPlaceholder}
-                value={searchQuery}
-                onChange={(event) => onSearchQueryChange?.(event.target.value)}
-                className="pl-10 pr-10"
-              />
-              {searchQuery && (
+            <div className="h-6 w-px shrink-0 bg-[oklch(0.88_0.02_145)]" />
+
+            {showNavigation ? (
+              <nav aria-label="Primary" className="flex shrink-0 items-center gap-1 overflow-x-auto">
+                {navItems.map((item) => {
+                  const isActive = isSiteNavItemActive(location.pathname, item);
+
+                  return (
+                    <Link
+                      key={item.label}
+                      to={item.to}
+                      onClick={(event) => handleSamePageClick(event, item.to)}
+                      className={cn(
+                        'rounded-full px-3.5 py-2 text-sm font-medium transition-colors',
+                        isActive
+                          ? 'bg-[#edf6ef] text-[#1a5c35]'
+                          : 'text-[oklch(0.38_0.03_145)] hover:bg-[#f4f9f5] hover:text-[#1a5c35]',
+                      )}
+                    >
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </nav>
+            ) : null}
+
+            {renderSearch ? (
+              <form onSubmit={handleSearchSubmit} className="relative min-w-[220px] flex-1">
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[oklch(0.45_0.03_145)]" />
+                <Input
+                  value={searchValue}
+                  onChange={(event) => updateSearchValue(event.target.value)}
+                  placeholder={searchPlaceholder}
+                  className="h-10 rounded-full border-[oklch(0.88_0.02_145)] bg-white pl-10 pr-10 shadow-none focus-visible:border-[#1a5c35] focus-visible:ring-[#1a5c35]/15"
+                />
+                {searchValue ? (
+                  <button
+                    type="button"
+                    onClick={() => updateSearchValue('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[oklch(0.45_0.03_145)] transition-colors hover:text-[#1a5c35]"
+                    aria-label="Clear search"
+                  >
+                    <X className="size-4" />
+                  </button>
+                ) : null}
+              </form>
+            ) : (
+              <div className="flex-1" />
+            )}
+
+            <div className="flex shrink-0 items-center justify-end gap-2">{desktopActionButtons}</div>
+          </div>
+
+          <div className="flex h-[60px] items-center justify-between gap-3 md:hidden">
+            <Link
+              to={brandLinkTarget}
+              className="flex min-w-0 items-center gap-3 text-[#1a5c35]"
+              onClick={(event) => handleSamePageClick(event, brandLinkTarget)}
+            >
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#1a5c35] shadow-sm">
+                <Sprout className="size-4 text-white" />
+              </div>
+              <span className="truncate text-sm font-semibold tracking-tight">Local Food Marketplace</span>
+            </Link>
+
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-expanded={isMobileMenuOpen}
+              aria-label={isMobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+              onClick={() => setIsMobileMenuOpen((current) => !current)}
+              className="text-[#1a5c35] hover:bg-[#f4f9f5]"
+            >
+              {isMobileMenuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
+            </Button>
+          </div>
+
+          {isMobileMenuOpen ? (
+            <div className="border-t border-[oklch(0.9_0.02_145)] py-4 md:hidden">
+              {renderSearch ? (
+                <form onSubmit={handleSearchSubmit} className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[oklch(0.45_0.03_145)]" />
+                  <Input
+                    value={searchValue}
+                    onChange={(event) => updateSearchValue(event.target.value)}
+                    placeholder={searchPlaceholder}
+                    className="h-10 rounded-full border-[oklch(0.88_0.02_145)] bg-white pl-10 pr-10 shadow-none focus-visible:border-[#1a5c35] focus-visible:ring-[#1a5c35]/15"
+                  />
+                  {searchValue ? (
+                    <button
+                      type="button"
+                      onClick={() => updateSearchValue('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[oklch(0.45_0.03_145)] transition-colors hover:text-[#1a5c35]"
+                      aria-label="Clear search"
+                    >
+                      <X className="size-4" />
+                    </button>
+                  ) : null}
+                </form>
+              ) : null}
+
+              {showNavigation ? (
+                <div className={cn('grid gap-2', renderSearch ? 'mt-4' : '')}>
+                  {navItems.map((item) => {
+                    const isActive = isSiteNavItemActive(location.pathname, item);
+
+                    return (
+                      <Link
+                        key={item.label}
+                        to={item.to}
+                        onClick={(event) => handleSamePageClick(event, item.to)}
+                        className={cn(
+                          'rounded-2xl px-4 py-3 text-sm font-medium transition-colors',
+                          isActive
+                            ? 'bg-[#edf6ef] text-[#1a5c35]'
+                            : 'border border-[oklch(0.9_0.02_145)] bg-white text-[oklch(0.34_0.03_145)] hover:bg-[#f4f9f5] hover:text-[#1a5c35]',
+                        )}
+                      >
+                        {item.label}
+                      </Link>
+                    );
+                  })}
+                </div>
+              ) : null}
+
+              <div className={cn('grid gap-2', renderSearch || showNavigation ? 'mt-4' : '')}>{desktopActionButtons}</div>
+            </div>
+          ) : null}
+        </div>
+
+        {showLocationBar ? (
+          <div className="border-t border-[oklch(0.9_0.02_145)] border-b bg-[#f4f9f5]">
+            <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-2 text-sm text-[oklch(0.35_0.03_145)] sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-2">
+                <MapPin className="size-4 text-[#1a5c35]" />
+                <span>
+                  Showing producers near <span className="font-semibold text-[#1a5c35]">{locationCity}</span>{' '}
+                  <span className="text-[oklch(0.52_0.02_145)]">·</span>{' '}
+                </span>
                 <button
                   type="button"
-                  onClick={() => onSearchQueryChange?.('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
-                  aria-label="Clear search"
+                  onClick={() => navigate('/browse')}
+                  className="font-medium text-[#1a5c35] underline underline-offset-4 hover:text-[#154a2a]"
                 >
-                  <X className="size-4" />
+                  Change location
                 </button>
-              )}
-            </div>
+              </div>
 
-            {showNavigation && (
-              <div
-                className={cn(
-                  'overflow-hidden transition-[max-height,opacity,transform,margin] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]',
-                  isCollapsed ? 'max-h-0 -translate-y-1 opacity-0' : 'max-h-32 translate-y-0 opacity-100',
-                )}
-                aria-hidden={isCollapsed}
-              >
-                {primaryNav}
-              </div>
-            )}
+              <span className="text-xs font-medium text-[#1a5c35]">Browse freely — no account needed</span>
+            </div>
           </div>
-        ) : (
-          <div className="py-4">
-            {compactHeaderRow}
-            {showNavigation && (
-              <div
-                className={cn(
-                  'overflow-hidden transition-[max-height,opacity,transform,padding] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]',
-                  isCollapsed ? 'max-h-0 -translate-y-1 pt-0 opacity-0' : 'max-h-[10rem] translate-y-0 pt-4 opacity-100',
-                )}
-                aria-hidden={isCollapsed}
-              >
-                {primaryNav}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    </header>
+        ) : null}
+      </header>
+    </div>
   );
 }
