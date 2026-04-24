@@ -21,6 +21,7 @@ import { useSafeBack } from '../../lib/navigation';
 import { AvailabilityBadge, OrganicBadge, SurplusBadge } from '../../components/ProductBadges';
 import { ImageSourceField } from '../../components/ImageSourceField';
 import { SiteHeader } from '../../components/SiteHeader';
+import { PageLoadingSkeleton } from '../../components/LoadingSkeletons';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
@@ -750,12 +751,7 @@ export function ProducerInventoryPage() {
         </div>
 
         {loading ? (
-          <Card>
-            <CardContent className="py-12 text-center text-gray-600">
-              <Loader2 className="size-6 animate-spin mx-auto mb-3" />
-              Loading producer inventory...
-            </CardContent>
-          </Card>
+          <PageLoadingSkeleton rows={4} cards={3} />
         ) : filteredProducts.length === 0 ? (
           <Card>
             <CardContent className="py-12 text-center">

@@ -1186,7 +1186,10 @@ export function ProductDetailPage() {
               </AccordionTrigger>
               <AccordionContent className="pb-4">
                 {linkedRecipesLoading ? (
-                  <p className="text-sm text-gray-600">Loading linked recipes...</p>
+                  <div className="space-y-3">
+                    <Skeleton className="h-20 w-full" />
+                    <Skeleton className="h-20 w-full" />
+                  </div>
                 ) : linkedRecipes.length > 0 ? (
                   <div className="space-y-3">
                     {linkedRecipes.map((recipe) => {

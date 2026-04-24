@@ -5,6 +5,7 @@ import { apiJson } from '../lib/api';
 import { getGoogleMapsEmbedUrl, getGoogleMapsSearchUrl } from '../lib/googleMaps';
 import { useSafeBack } from '../lib/navigation';
 import { SiteHeader } from '../components/SiteHeader';
+import { PageLoadingSkeleton } from '../components/LoadingSkeletons';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Input } from '../components/ui/input';
@@ -153,9 +154,7 @@ export function MapPage() {
         </Card>
 
         {loading ? (
-          <Card>
-            <CardContent className="py-10 text-center text-gray-600">Loading producer map data...</CardContent>
-          </Card>
+          <PageLoadingSkeleton rows={2} cards={3} />
         ) : error ? (
           <Card>
             <CardContent className="py-10 text-center text-red-700">{error}</CardContent>

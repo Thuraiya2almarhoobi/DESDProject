@@ -8,6 +8,7 @@ import { useSafeBack } from '../lib/navigation';
 import { useAuth } from '../contexts/AuthContext';
 import { ImageSourceField } from '../components/ImageSourceField';
 import { SiteHeader } from '../components/SiteHeader';
+import { FeedLoadingSkeleton } from '../components/LoadingSkeletons';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
@@ -16,6 +17,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Checkbox } from '../components/ui/checkbox';
+import { Skeleton } from '../components/ui/skeleton';
 
 type FeedFilter = 'all' | 'recipe' | 'story';
 
@@ -469,11 +471,7 @@ export function ContentFeedPage() {
         </Tabs>
 
         {loading ? (
-          <Card>
-            <CardContent className="py-10 text-center text-gray-600">
-              Loading content feed...
-            </CardContent>
-          </Card>
+          <FeedLoadingSkeleton rows={4} />
         ) : visibleFeed.length === 0 ? (
           <Card>
             <CardContent className="py-10 text-center text-gray-600">
@@ -533,7 +531,11 @@ export function ContentFeedPage() {
                     </div>
 
                     {detailLoadingKey === key && (
-                      <p className="text-sm text-gray-600">Loading details...</p>
+                      <div className="space-y-3 rounded-md border bg-gray-50 p-3">
+                        <Skeleton className="h-40 w-full" />
+                        <Skeleton className="h-4 w-3/4" />
+                        <Skeleton className="h-4 w-full" />
+                      </div>
                     )}
 
                     {details && (

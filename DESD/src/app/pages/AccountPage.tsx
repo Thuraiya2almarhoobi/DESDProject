@@ -7,6 +7,7 @@ import { apiJson } from '../lib/api';
 import { getDashboardPathForRole } from '../lib/roleRouting';
 import { useSafeBack } from '../lib/navigation';
 import { SiteHeader } from '../components/SiteHeader';
+import { PageLoadingSkeleton } from '../components/LoadingSkeletons';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Input } from '../components/ui/input';
@@ -564,9 +565,7 @@ export function AccountPage() {
         </div>
 
         {loading ? (
-          <Card>
-            <CardContent className="py-10 text-center text-gray-600">Loading account details...</CardContent>
-          </Card>
+          <PageLoadingSkeleton rows={4} cards={3} />
         ) : (
           <>
             <Card>

@@ -28,6 +28,7 @@ import {
 import { useSafeBack } from '../lib/navigation';
 import { LiveDeliveryMap } from '../components/LiveDeliveryMap';
 import { SiteHeader } from '../components/SiteHeader';
+import { PageLoadingSkeleton } from '../components/LoadingSkeletons';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
@@ -776,7 +777,7 @@ export function OrderHistoryPage() {
             <>
               <Separator />
               {detailLoading || !selectedOrder ? (
-                <p className="text-sm text-gray-600">Loading order details...</p>
+                <PageLoadingSkeleton rows={2} cards={2} />
               ) : (
                 <>
                   {activeOrderView === 'details' && (
@@ -1069,9 +1070,7 @@ export function OrderHistoryPage() {
         </Card>
 
         {loading ? (
-          <Card>
-            <CardContent className="py-10 text-center text-gray-600">Loading your orders...</CardContent>
-          </Card>
+          <PageLoadingSkeleton rows={4} cards={3} />
         ) : orders.length === 0 ? (
           <Card>
             <CardContent className="py-10 text-center">

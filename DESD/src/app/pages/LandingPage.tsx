@@ -2,8 +2,9 @@ import { useEffect } from 'react';
 import {
   ArrowRight,
   Building2,
-  Lock,
+  CheckCircle2,
   MapPin,
+  Route,
   ShieldCheck,
   ShoppingBasket,
   Sprout,
@@ -15,81 +16,52 @@ import { Link } from 'react-router';
 
 import { SiteHeader } from '../components/SiteHeader';
 import { Button } from '../components/ui/button';
-import { Card, CardContent } from '../components/ui/card';
 
 const stats = [
-  { number: '28+', label: 'Local Producers' },
-  { number: '500+', label: 'Fresh Products' },
-  { number: '48h', label: 'Average Delivery' },
+  { number: '28+', label: 'Local producers' },
+  { number: '500+', label: 'Fresh products' },
+  { number: '48h', label: 'Typical delivery' },
 ];
 
-const featureCards = [
-  {
-    icon: Sprout,
-    title: 'See exactly where it comes from',
-    description:
-      'Producer location, food miles, and delivery context visible throughout browsing - not hidden until checkout.',
-    accent: '#1a5c35',
-  },
-  {
-    icon: MapPin,
-    title: 'Seasonal availability, always visible',
-    description:
-      'Harvest windows and seasonal context shown on every product so you know what to expect across the year.',
-    accent: '#2d7a4a',
-  },
-  {
-    icon: Truck,
-    title: 'Delivered in 48 hours or less',
-    description:
-      'Coordinated community deliveries with multiple options. Choose what suits your schedule.',
-    accent: '#4a9a64',
-  },
-  {
-    icon: ShieldCheck,
-    title: 'Allergens and organic status inline',
-    description:
-      'Full compliance detail sits inside the product view - not buried in a separate document or gated behind sign-up.',
-    accent: '#7dba94',
-  },
+const productSignals = [
+  { icon: MapPin, title: 'Food miles visible', body: 'Producer location and journey context stay present while browsing.' },
+  { icon: Sprout, title: 'Seasonal by default', body: 'Harvest windows and availability help buyers choose what makes sense now.' },
+  { icon: ShieldCheck, title: 'Compliance in context', body: 'Allergens, organic status, and product detail sit inside the product view.' },
+  { icon: Truck, title: 'Delivery made explicit', body: 'Orders can be grouped by producer and tracked through clear delivery timing.' },
 ];
 
 const roles = [
   {
     icon: ShoppingBasket,
     title: 'Customer',
-    description:
-      'Shop fresh local produce and products. Support local farmers while enjoying the highest quality ingredients.',
-    cta: 'Browse as customer',
+    description: 'Browse local products, compare origin detail, and order only when ready.',
+    cta: 'Browse public market',
     href: '/browse',
-  },
-  {
-    icon: UtensilsCrossed,
-    title: 'Restaurant',
-    description:
-      'Source consistent supply of premium local ingredients. Create repeatable orders and manage your supply chain efficiently.',
-    cta: 'Restaurant access',
-    href: '/portal/restaurant',
-  },
-  {
-    icon: Users,
-    title: 'Community',
-    description:
-      'Coordinate bulk orders across your network. Manage community deliveries and support local food access for all.',
-    cta: 'Community portal',
-    href: '/portal/community',
   },
   {
     icon: Building2,
     title: 'Producer',
-    description:
-      'Sell directly to your local community. Reach customers who value quality and are willing to pay fairly for your work.',
+    description: 'Manage stock, orders, payment visibility, and product storytelling in one place.',
     cta: 'Producer information',
     href: '/producers',
   },
+  {
+    icon: Users,
+    title: 'Community',
+    description: 'Coordinate multi-producer buying for groups that need cleaner local food access.',
+    cta: 'Community portal',
+    href: '/portal/community',
+  },
+  {
+    icon: UtensilsCrossed,
+    title: 'Restaurant',
+    description: 'Plan repeatable demand for local ingredients without losing supply context.',
+    cta: 'Restaurant access',
+    href: '/portal/restaurant',
+  },
 ];
 
-const panelClass = 'landing-snap-panel flex items-center py-6 sm:py-8';
+const panelClass = 'landing-snap-panel market-section flex items-center';
 
 export function LandingPage() {
   useEffect(() => {
@@ -103,187 +75,211 @@ export function LandingPage() {
   }, []);
 
   return (
-    <div className="landing-page-shell min-h-screen bg-[linear-gradient(180deg,oklch(0.988_0.008_145),oklch(0.958_0.02_145))]">
+    <div className="market-page landing-page-shell min-h-screen">
       <SiteHeader showLocationBar locationCity="Bristol" />
 
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:py-8">
-        <section aria-labelledby="home-hero-heading" className={panelClass}>
-          <div className="relative w-full py-4 sm:py-6">
-            <div className="pointer-events-none absolute left-1/2 top-14 h-72 w-[min(92vw,54rem)] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,oklch(0.93_0.03_145)_0%,rgba(255,255,255,0)_72%)] opacity-90" />
-            <div className="pointer-events-none absolute left-[8%] top-24 h-28 w-28 rounded-full bg-[#edf5ef] opacity-70 blur-2xl" />
-            <div className="pointer-events-none absolute right-[10%] top-10 h-36 w-36 rounded-full bg-[#e5f1e8] opacity-80 blur-3xl" />
-
-            <div className="relative space-y-8 text-center sm:space-y-10">
-              <div className="mx-auto max-w-4xl space-y-5">
-                <div className="inline-flex rounded-full border border-[oklch(0.88_0.02_145)] bg-white/75 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-[#1a5c35] shadow-sm">
-                  Local marketplace
-                </div>
-                <h1
-                  id="home-hero-heading"
-                  className="text-balance text-4xl font-bold tracking-tight text-[oklch(0.24_0.02_145)] sm:text-5xl lg:text-6xl"
-                >
-                  Local Food, Fresher Every Day
+      <main>
+        <section aria-labelledby="home-hero-heading" className={`${panelClass} market-section-cream`}>
+          <div className="mx-auto grid w-full min-w-0 max-w-7xl gap-6 px-4 lg:grid-cols-[1.08fr_0.92fr] lg:items-center xl:gap-10">
+            <div className="min-w-0 space-y-6 xl:space-y-8">
+              <div className="space-y-4 xl:space-y-5">
+                <h1 id="home-hero-heading" className="market-hero-title max-w-5xl">
+                  <span className="block">Food with its</span>
+                  <span className="block">route still</span>
+                  <span className="block">attached.</span>
                 </h1>
-                <p className="mx-auto max-w-3xl text-lg leading-8 text-[oklch(0.36_0.03_145)] sm:text-xl">
-                  Connect directly with local farmers, producers, and community vendors. Buy fresh, eat local, support
-                  your neighbors.
+                <p className="market-copy max-w-2xl">
+                  Connect directly with local farmers, producers, and community vendors. Buy fresh, eat local, and see
+                  the origin, season, and delivery context before an account is ever required.
                 </p>
               </div>
 
-              <div className="flex flex-wrap items-center justify-center gap-3">
-                <Button asChild size="lg" className="min-h-11 bg-[#1a5c35] px-7 text-white hover:bg-[#154a2a]">
-                  <Link to="/browse">Get Started</Link>
+              <div className="flex flex-wrap gap-3">
+                <Button asChild size="lg" className="market-button-primary min-h-11 px-7">
+                  <Link to="/browse">
+                    Start browsing
+                    <ArrowRight className="size-4" />
+                  </Link>
                 </Button>
-                <Button
-                  asChild
-                  size="lg"
-                  variant="outline"
-                  className="min-h-11 border-[#1a5c35] bg-white/70 px-7 text-[#1a5c35] hover:bg-[#f4f9f5] hover:text-[#1a5c35]"
+                <Button asChild size="lg" variant="outline" className="market-button-outline min-h-11 bg-white/45 px-7">
+                  <Link to="/about">How it works</Link>
+                </Button>
+              </div>
+
+              <div className="grid max-w-2xl gap-3 sm:grid-cols-2">
+                <Link
+                  to="/register/producer"
+                  className="group rounded-2xl border border-[#e4e1d8] bg-[#fffefa]/80 p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-[var(--forest-green)] hover:shadow-md"
                 >
-                  <Link to="/about">Learn More</Link>
-                </Button>
+                  <span className="text-sm font-semibold text-[var(--forest-green)]">Interested in selling?</span>
+                  <span className="mt-1 flex items-center justify-between gap-3 text-lg font-semibold text-[oklch(0.23_0.034_87)]">
+                    Join us as a producer
+                    <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
+                  </span>
+                </Link>
+                <Link
+                  to="/login"
+                  className="group rounded-2xl border border-[#e4e1d8] bg-white/45 p-4 text-left transition-all hover:-translate-y-0.5 hover:border-[var(--forest-green)] hover:bg-[#fffefa]"
+                >
+                  <span className="text-sm font-semibold text-[oklch(0.42_0.032_118)]">Already have an account?</span>
+                  <span className="mt-1 flex items-center justify-between gap-3 text-lg font-semibold text-[var(--forest-green)]">
+                    Sign in
+                    <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
+                  </span>
+                </Link>
               </div>
+            </div>
 
-              <div className="flex items-center justify-center gap-2 text-sm leading-6 text-[oklch(0.38_0.03_145)]">
-                <Lock className="size-4 shrink-0 text-[#1a5c35]" />
-                <span>No account required to browse. Sign in only when ordering.</span>
-              </div>
+            <div className="market-display-panel relative w-full min-w-0 max-w-[calc(100vw-2rem)] overflow-hidden rounded-[2rem] p-4 sm:max-w-full sm:p-6 xl:p-7">
+              <div className="absolute inset-x-6 top-1/2 h-px market-route-line" />
+              <div className="relative grid gap-4 xl:gap-5">
+                <div className="grid min-w-0 grid-cols-3 gap-3">
+                  {stats.map((stat) => (
+                    <div key={stat.label} className="min-w-0 border-l border-[oklch(0.78_0.04_80)] pl-3 sm:pl-4">
+                      <p className="text-2xl font-bold text-[var(--forest-green)] sm:text-4xl">{stat.number}</p>
+                      <p className="mt-1 text-[0.62rem] font-semibold uppercase tracking-[0.08em] text-[oklch(0.42_0.035_110)] sm:text-xs sm:tracking-[0.12em]">
+                        {stat.label}
+                      </p>
+                    </div>
+                  ))}
+                </div>
 
-              <div className="mx-auto max-w-5xl">
-                <Card className="overflow-hidden rounded-[2rem] border-[oklch(0.88_0.02_145)] bg-white/94 shadow-lg">
-                  <CardContent className="p-0">
-                    <dl className="grid divide-y divide-[oklch(0.9_0.02_145)] sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-                      {stats.map((stat) => (
-                        <div key={stat.label} className="px-6 py-8">
-                          <dt className="text-xs font-semibold uppercase tracking-[0.16em] text-[oklch(0.43_0.04_145)]">
-                            {stat.label}
-                          </dt>
-                          <dd className="mt-3 text-4xl font-bold tracking-tight text-[#1a5c35]">{stat.number}</dd>
-                        </div>
-                      ))}
-                    </dl>
-                  </CardContent>
-                </Card>
+                <div className="grid gap-3 rounded-[1.25rem] bg-[var(--forest-green)] p-4 text-white xl:p-5">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-sm text-white/62">Today near Bristol</p>
+                      <p className="mt-1 text-2xl font-semibold">Green Valley Farm</p>
+                    </div>
+                    <Route className="size-8 text-white/70" />
+                  </div>
+                  <div className="grid gap-2 text-sm text-white/74 sm:grid-cols-3">
+                    <span>18.4 food miles</span>
+                    <span>Harvested this week</span>
+                    <span>48h delivery window</span>
+                  </div>
+                </div>
+
+                <div className="hidden gap-3 sm:grid sm:grid-cols-2">
+                  <div className="rounded-[1rem] bg-white/68 p-3.5 xl:p-4">
+                    <p className="text-sm font-semibold text-[var(--forest-green)]">Seasonal signal</p>
+                    <p className="mt-2 text-sm leading-6 text-[oklch(0.4_0.035_110)]">
+                      Product pages show harvest dates, availability windows, and source detail together.
+                    </p>
+                  </div>
+                  <div className="rounded-[1rem] bg-[#f4f2eb] p-3.5 xl:p-4">
+                    <p className="text-sm font-semibold text-[var(--forest-green)]">Buyer confidence</p>
+                    <p className="mt-2 text-sm leading-6 text-[oklch(0.4_0.035_78)]">
+                      Allergens and organic status appear inline before checkout.
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         </section>
 
-        <section aria-labelledby="home-features" className={panelClass}>
-          <div className="w-full py-4 sm:py-6">
-            <div className="space-y-8">
-              <div className="mx-auto max-w-3xl space-y-4 text-center">
-                <div className="inline-flex rounded-full bg-[#edf5ef] px-4 py-1.5 text-xs font-semibold tracking-[0.01em] text-[#1a5c35]">
-                  Why it works
-                </div>
-                <h2
-                  id="home-features"
-                  className="text-balance text-3xl font-bold tracking-tight text-[oklch(0.24_0.02_145)] sm:text-4xl lg:text-5xl"
-                >
-                  Built so you can see everything before you order
-                </h2>
-                <p className="mx-auto max-w-2xl text-base leading-7 text-[oklch(0.36_0.03_145)] sm:text-lg">
-                  Every step of the marketplace shows you the detail that usually gets hidden: who grew it, when it&apos;s
-                  available, what&apos;s in it, and how far it travelled.
-                </p>
-              </div>
+        <section aria-labelledby="home-signals" className={`${panelClass} market-section-white`}>
+          <div className="mx-auto grid w-full max-w-7xl gap-6 px-4 lg:grid-cols-[0.9fr_1.1fr] lg:items-center xl:gap-10">
+            <div className="space-y-5">
+              <h2 id="home-signals" className="market-section-title max-w-3xl text-[oklch(0.23_0.034_87)]">
+                The detail is not buried at the end.
+              </h2>
+              <p className="market-copy max-w-xl">
+                Every step of the marketplace keeps the important context in view: who produced it, when it is
+                available, what is inside it, and how it gets to the buyer.
+              </p>
+            </div>
 
-              <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
-                {featureCards.map((feature) => {
-                  const Icon = feature.icon;
+            <div className="grid gap-x-8 gap-y-7 md:grid-cols-2">
+              {productSignals.map((signal) => {
+                const Icon = signal.icon;
 
-                  return (
-                    <Card
-                      key={feature.title}
-                      className="h-full rounded-[8px] border-[oklch(0.88_0.02_145)] border-t-2 bg-[linear-gradient(180deg,white,oklch(0.986_0.008_145))] shadow-sm"
-                      style={{ borderTopColor: feature.accent }}
-                    >
-                      <CardContent className="flex h-full flex-col gap-4 p-6">
-                        <div className="flex size-9 items-center justify-center rounded-[8px] bg-[#1a5c35] shadow-sm">
-                          <Icon className="size-4 text-white" />
-                        </div>
-                        <div className="space-y-2">
-                          <h3 className="text-lg font-semibold text-[oklch(0.24_0.02_145)]">{feature.title}</h3>
-                          <p className="text-sm leading-6 text-[oklch(0.36_0.03_145)]">{feature.description}</p>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
+                return (
+                  <div key={signal.title} className="grid grid-cols-[2.75rem_1fr] gap-4 border-t border-[oklch(0.84_0.035_100)] pt-5">
+                    <div className="flex size-11 items-center justify-center rounded-[0.8rem] bg-[color-mix(in_srgb,var(--forest-green)_7%,white)]">
+                      <Icon className="size-5 text-[var(--forest-green)]" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-[oklch(0.24_0.035_92)]">{signal.title}</h3>
+                      <p className="mt-2 text-sm leading-6 text-[oklch(0.42_0.032_118)]">{signal.body}</p>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </section>
 
-        <section aria-labelledby="home-roles" className={panelClass}>
-          <div className="w-full bg-[#f7faf7] py-4 sm:py-6">
-            <div className="space-y-8">
-              <div className="mx-auto max-w-3xl space-y-4 text-center">
-                <div className="inline-flex rounded-full bg-[#edf5ef] px-4 py-1.5 text-[11px] font-semibold tracking-[0.01em] text-[#1a5c35]">
-                  Who is it for
-                </div>
-                <h2
-                  id="home-roles"
-                  className="text-balance text-3xl font-bold tracking-tight text-[oklch(0.24_0.02_145)] sm:text-4xl lg:text-5xl"
-                >
-                  The platform works differently depending on how you use it
+        <section aria-labelledby="home-roles" className={`${panelClass} market-section-green`}>
+          <div className="mx-auto w-full max-w-7xl px-4">
+            <div className="grid gap-10 lg:grid-cols-[0.85fr_1.15fr] lg:items-end">
+              <div className="space-y-5">
+                <h2 id="home-roles" className="market-section-title max-w-3xl">
+                  Different jobs, one consistent flow.
                 </h2>
-                <p className="mx-auto max-w-2xl text-base leading-7 text-[oklch(0.36_0.03_145)] sm:text-lg">
-                  Most visitors start as customers. You can take on other roles - or combine them - from the same account.
+                <p className="market-copy max-w-xl">
+                  Customers, producers, community buyers, and restaurants use role-specific tools without splitting the
+                  marketplace into disconnected experiences.
                 </p>
               </div>
 
-              <div className="grid gap-5 md:grid-cols-2">
+              <div className="grid gap-1 overflow-hidden rounded-[1.75rem] border border-white/15 bg-white/10 p-1 md:grid-cols-2">
                 {roles.map((role, index) => {
                   const Icon = role.icon;
-                  const isPrimary = index === 0;
 
                   return (
-                    <Card
+                    <Link
                       key={role.title}
-                      className={`h-full rounded-[10px] bg-white text-[oklch(0.24_0.02_145)] shadow-sm ${
-                        isPrimary ? 'border-2 border-[#1a5c35]' : 'border-[oklch(0.88_0.02_145)]'
-                      }`}
+                      to={role.href}
+                      className="group min-h-[clamp(9.5rem,22svh,13rem)] bg-white/[0.08] p-5 transition-colors hover:bg-white/[0.16]"
                     >
-                      <CardContent className="flex h-full flex-col gap-5 p-6 text-left">
-                        {isPrimary ? (
-                          <div className="w-fit rounded-full bg-[#ddf0e3] px-3 py-1 text-[11px] font-semibold text-[#1a5c35]">
-                            Most visitors start here
-                          </div>
-                        ) : null}
-
-                        <div
-                          className={`flex size-12 items-center justify-center rounded-[10px] ${
-                            isPrimary ? 'bg-[#1a5c35]' : 'bg-[#edf5ef]'
-                          }`}
-                        >
-                          <Icon className={`size-5 ${isPrimary ? 'text-white' : 'text-[#1a5c35]'}`} />
+                      <div className="flex h-full flex-col">
+                        <div className="flex items-start justify-between gap-4">
+                          <Icon className="size-6 text-[oklch(0.84_0.08_80)]" />
+                          <span className="text-sm text-white/45">0{index + 1}</span>
                         </div>
-
-                        <div className="space-y-3">
-                          <h3 className="text-2xl font-semibold text-[oklch(0.24_0.02_145)]">{role.title}</h3>
-                          <p className="text-base leading-7 text-[oklch(0.36_0.03_145)]">{role.description}</p>
-                        </div>
-
-                        <Button
-                          asChild
-                          variant={isPrimary ? 'default' : 'outline'}
-                          className={`mt-auto min-h-11 w-full justify-between ${
-                            isPrimary
-                              ? 'bg-[#1a5c35] text-white hover:bg-[#154a2a]'
-                              : 'border-[#1a5c35] bg-transparent text-[#1a5c35] hover:bg-[#f4f9f5] hover:text-[#1a5c35]'
-                          }`}
-                        >
-                          <Link to={role.href}>
+                        <div className="mt-auto space-y-3">
+                          <h3 className="text-2xl font-semibold">{role.title}</h3>
+                          <p className="text-sm leading-6 text-white/70">{role.description}</p>
+                          <span className="inline-flex items-center gap-2 text-sm font-semibold text-white">
                             {role.cta}
-                            <ArrowRight className="size-4" />
-                          </Link>
-                        </Button>
-                      </CardContent>
-                    </Card>
+                            <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
+                          </span>
+                        </div>
+                      </div>
+                    </Link>
                   );
                 })}
               </div>
+            </div>
+          </div>
+        </section>
+
+        <section aria-labelledby="home-cta" className={`${panelClass} market-section-brown`}>
+          <div className="mx-auto grid w-full max-w-7xl gap-6 px-4 lg:grid-cols-[1fr_0.8fr] lg:items-center xl:gap-8">
+            <div className="space-y-5">
+              <h2 id="home-cta" className="market-section-title max-w-4xl">
+                Inspect the market before you commit to it.
+              </h2>
+              <p className="market-copy max-w-2xl">
+                Public browsing is read-only by design. You can inspect products and producers freely, then sign in when
+                you are ready to place a real order.
+              </p>
+            </div>
+
+            <div className="space-y-5 border-l border-[#e4e1d8] pl-6">
+              {['Browse products and producers', 'Compare food miles and seasonal detail', 'Create an account only at checkout'].map((item) => (
+                <div key={item} className="flex items-center gap-3 text-lg font-semibold">
+                  <CheckCircle2 className="size-5 shrink-0 text-[var(--forest-green)]" />
+                  <span>{item}</span>
+                </div>
+              ))}
+              <Button asChild size="lg" className="market-button-primary mt-3 min-h-11 px-7">
+                <Link to="/browse">
+                  Open public browse
+                  <ArrowRight className="size-4" />
+                </Link>
+              </Button>
             </div>
           </div>
         </section>
