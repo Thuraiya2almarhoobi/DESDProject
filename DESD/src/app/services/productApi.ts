@@ -1,6 +1,13 @@
-﻿import { Product, AvailabilityType } from '../types';
+import { Product, AvailabilityType } from '../types';
 import { resolveApiPathBase } from '../lib/apiBase';
 
+/**
+ * Marketplace and producer-product API helpers.
+ *
+ * The backend returns compact REST payloads, while the frontend needs a richer
+ * Product shape for cards, detail views, filters, and producer inventory
+ * screens. This module translates between those two models.
+ */
 type BackendAvailability = 'in_season' | 'year_round' | 'unavailable';
 
 interface BackendProduct {
@@ -93,6 +100,8 @@ function serializeAllergens(allergens?: string[]): string {
 }
 
 export function backendProductToFrontend(product: BackendProduct): Product {
+  // Enrich the backend payload with UI-ready derived data such as display
+  // labels, fallback imagery, and surplus pricing context.
   const allergens = parseAllergens(product.allergen_information);
   const price = Number(product.price);
   const discount = product.surplus_discount_percent ?? undefined;
@@ -240,3 +249,4 @@ export async function patchProducerProductInApi(
   const product = await parseResponse<BackendProduct>(res);
   return backendProductToFrontend(product);
 }
+

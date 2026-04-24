@@ -15,6 +15,8 @@ from .services import (
     refresh_delivery_job,
 )
 
+# Delivery-facing API views for Stuart webhooks and producer delivery actions.
+
 
 def _producer_owned_sub_order(user, sub_order_id: int) -> ProducerSubOrder:
     producer = get_object_or_404(Producer, user=user, is_active=True)
@@ -26,6 +28,8 @@ def _producer_owned_sub_order(user, sub_order_id: int) -> ProducerSubOrder:
 
 
 class StuartWebhookAPIView(APIView):
+    """Receive Stuart delivery updates and apply them to local delivery state."""
+
     permission_classes = [permissions.AllowAny]
     authentication_classes: list = []
 
@@ -49,6 +53,8 @@ class StuartWebhookAPIView(APIView):
 
 
 class ProducerDeliveryRetryAPIView(APIView):
+    """Dispatch or re-dispatch a producer sub-order to Stuart."""
+
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, sub_order_id: int):
@@ -78,6 +84,8 @@ class ProducerDeliveryRetryAPIView(APIView):
 
 
 class ProducerDeliveryRefreshAPIView(APIView):
+    """Refresh the latest Stuart delivery state for a producer sub-order."""
+
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, sub_order_id: int):
@@ -102,6 +110,8 @@ class ProducerDeliveryRefreshAPIView(APIView):
 
 
 class ProducerDeliveryCancelAPIView(APIView):
+    """Cancel the Stuart delivery attached to a producer sub-order."""
+
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, sub_order_id: int):
@@ -125,6 +135,8 @@ class ProducerDeliveryCancelAPIView(APIView):
 
 
 class ProducerDeliveryRestartSimulationAPIView(APIView):
+    """Restart local delivery simulation timing for demo/test environments."""
+
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, sub_order_id: int):

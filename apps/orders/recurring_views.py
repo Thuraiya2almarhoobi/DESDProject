@@ -30,6 +30,8 @@ from .serializers import (
     RecurringOrderTemplateUpdateSerializer,
 )
 
+# Restaurant recurring-order API views and template lifecycle endpoints.
+
 
 def _template_payload(template: RecurringOrderTemplate) -> dict:
     payload = RecurringOrderTemplateSerializer(template).data
@@ -49,6 +51,8 @@ def _template_payload(template: RecurringOrderTemplate) -> dict:
 
 
 class RestaurantRecurringOrderListCreateAPIView(APIView):
+    """List a restaurant's recurring templates or create a new one from checkout."""
+
     permission_classes = [IsAuthenticated, IsRestaurant]
 
     def get(self, request):
@@ -106,6 +110,8 @@ class RestaurantRecurringOrderListCreateAPIView(APIView):
 
 
 class RestaurantRecurringOrderDetailAPIView(APIView):
+    """Read or partially update one recurring-order template."""
+
     permission_classes = [IsAuthenticated, IsRestaurant]
 
     def get(self, request, pk: int):
@@ -128,6 +134,8 @@ class RestaurantRecurringOrderDetailAPIView(APIView):
 
 
 class RestaurantRecurringOrderNextInstanceAPIView(APIView):
+    """Edit the next generated instance for a recurring template before it runs."""
+
     permission_classes = [IsAuthenticated, IsRestaurant]
 
     def patch(self, request, pk: int):
@@ -158,6 +166,8 @@ class RestaurantRecurringOrderNextInstanceAPIView(APIView):
 
 
 class RestaurantRecurringOrderRunAPIView(APIView):
+    """Generate due recurring orders for one restaurant or all restaurants as admin."""
+
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
@@ -199,6 +209,8 @@ class RestaurantRecurringOrderRunAPIView(APIView):
 
 
 class RestaurantRecurringOrderGeneratedListAPIView(APIView):
+    """List orders already generated from a recurring template."""
+
     permission_classes = [IsAuthenticated, IsRestaurant]
 
     def get(self, request, pk: int):

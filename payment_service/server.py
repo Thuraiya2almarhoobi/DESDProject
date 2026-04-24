@@ -7,8 +7,19 @@ from wsgiref.simple_server import make_server
 
 import stripe
 
+"""
+Minimal internal Stripe wrapper service.
+
+Why this exists:
+- Django talks to this service instead of scattering Stripe SDK calls across
+  the main web app
+- provider secrets stay inside the payments container boundary
+- test-mode validation is centralized in one place
+"""
+
 
 def _response(start_response, status_code: int, payload: dict[str, Any]) -> list[bytes]:
+    """Return a small JSON WSGI response without depending on a larger framework."""
     status_text = {
         200: "200 OK",
         201: "201 Created",
@@ -44,6 +55,7 @@ def _read_json_body(environ) -> dict[str, Any]:
 
 
 def _require_service_token(environ) -> None:
+    """Reject requests that do not present the shared internal service token."""
     expected = (os.getenv("PAYMENT_SERVICE_SHARED_SECRET", "") or "").strip()
     if not expected:
         return
@@ -53,6 +65,7 @@ def _require_service_token(environ) -> None:
 
 
 def _validated_stripe_keys() -> tuple[str, str]:
+    """Ensure only configured Stripe test keys are accepted in this environment."""
     secret_key = (os.getenv("STRIPE_SECRET_KEY", "") or "").strip()
     publishable_key = (os.getenv("STRIPE_PUBLISHABLE_KEY", "") or "").strip()
 
@@ -100,6 +113,7 @@ def _stripe_payload(obj: Any) -> dict[str, Any]:
 
 
 def _handle_create_checkout_session(body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+    """Create a hosted Stripe Checkout session for an order prepared by Django."""
     publishable_key = _configure_stripe()
     session = stripe.checkout.Session.create(
         mode="payment",
@@ -129,6 +143,7 @@ def _handle_create_checkout_session(body: dict[str, Any]) -> tuple[int, dict[str
 
 
 def _handle_retrieve_checkout_session(body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+    """Read back hosted checkout status after the browser returns to the app."""
     _configure_stripe()
     session_id = str(body.get("session_id") or "")
     if not session_id:
@@ -150,6 +165,7 @@ def _handle_retrieve_checkout_session(body: dict[str, Any]) -> tuple[int, dict[s
 
 
 def _handle_verify_webhook(body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+    """Verify a Stripe webhook payload/signature pair for the Django app."""
     _configure_stripe()
     webhook_secret = _validated_webhook_secret()
     payload = str(body.get("payload") or "").encode("utf-8")
@@ -164,6 +180,7 @@ def _handle_verify_webhook(body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
 
 
 def application(environ, start_response):
+    """WSGI entrypoint exposing health, checkout-session, and webhook endpoints."""
     method = environ.get("REQUEST_METHOD", "GET").upper()
     path = environ.get("PATH_INFO", "")
 

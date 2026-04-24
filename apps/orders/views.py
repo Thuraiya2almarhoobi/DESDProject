@@ -38,6 +38,10 @@ from .services import (
     reorder_order_to_cart,
 )
 
+# Core ordering and marketplace transaction views.
+# This file covers browsing helpers, cart operations, checkout, order history,
+# reviews, and producer-facing sub-order workflow.
+
 TRUE_VALUES = {"1", "true", "yes", "on"}
 FALSE_VALUES = {"0", "false", "no", "off"}
 
@@ -221,6 +225,8 @@ def _producer_sub_order_payload(sub_order: ProducerSubOrder) -> dict:
 
 
 class CustomerProfileAPIView(APIView):
+    """Return or update the buyer profile used during ordering."""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -236,6 +242,8 @@ class CustomerProfileAPIView(APIView):
 
 
 class ProducerListCreateAPIView(APIView):
+    """List producers relevant to the ordering domain or create producer records."""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -250,6 +258,8 @@ class ProducerListCreateAPIView(APIView):
 
 
 class ProductListCreateAPIView(APIView):
+    """List marketplace products with filters, or create products where allowed."""
+
     permission_classes = [permissions.AllowAny]
 
     def get_permissions(self):
@@ -313,6 +323,8 @@ class ProductListCreateAPIView(APIView):
 
 
 class ProductDetailAPIView(generics.RetrieveAPIView):
+    """Return one marketplace product with full buyer-facing detail."""
+
     permission_classes = [permissions.AllowAny]
     serializer_class = MarketplaceProductSerializer
 
@@ -325,6 +337,8 @@ class ProductDetailAPIView(generics.RetrieveAPIView):
 
 
 class ProductReviewsAPIView(APIView):
+    """List or create product reviews tied to marketplace products."""
+
     permission_classes = [permissions.AllowAny]
 
     def get_permissions(self):
@@ -371,6 +385,8 @@ class ProductReviewsAPIView(APIView):
         return Response(ProductReviewSerializer(review).data, status=response_status)
 
 class ProductReviewEligibilityAPIView(APIView):
+    """Report whether the current user is eligible to review a product."""
+
     permission_classes = [permissions.AllowAny]
 
     def get(self, request, product_id: int):
@@ -411,6 +427,8 @@ class ProductReviewEligibilityAPIView(APIView):
 
 
 class ProductReviewResponseAPIView(APIView):
+    """Allow a producer to respond to a product review."""
+
     permission_classes = [IsAuthenticated]
 
     def post(self, request, product_id: int, review_id: int):
@@ -443,6 +461,8 @@ class ProductReviewResponseAPIView(APIView):
 
 
 class ProductReviewModerationAPIView(APIView):
+    """Allow moderators/admins to approve or reject review content."""
+
     permission_classes = [IsAuthenticated]
 
     def post(self, request, product_id: int, review_id: int):
@@ -467,6 +487,8 @@ class ProductReviewModerationAPIView(APIView):
 
 
 class PendingReviewModerationQueueAPIView(APIView):
+    """List reviews waiting for moderation review."""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -486,6 +508,8 @@ class PendingReviewModerationQueueAPIView(APIView):
 
 
 class CartAPIView(APIView):
+    """Return the current cart or clear/replace it through cart-level actions."""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -494,6 +518,8 @@ class CartAPIView(APIView):
 
 
 class CartItemAddAPIView(APIView):
+    """Add a product to the cart while enforcing server-side quantity rules."""
+
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
@@ -549,6 +575,8 @@ class CartItemAddAPIView(APIView):
 
 
 class CartItemDetailAPIView(APIView):
+    """Update or remove one existing cart item."""
+
     permission_classes = [IsAuthenticated]
 
     def patch(self, request, item_id: int):
@@ -586,6 +614,8 @@ class CartItemDetailAPIView(APIView):
 
 
 class CheckoutPreviewAPIView(APIView):
+    """Preview totals, commission, and delivery constraints before checkout."""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -594,6 +624,8 @@ class CheckoutPreviewAPIView(APIView):
 
 
 class CheckoutAPIView(APIView):
+    """Convert the current cart into an order and trigger payment flow selection."""
+
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
@@ -663,6 +695,8 @@ class CheckoutAPIView(APIView):
 
 
 class OrderHistoryAPIView(APIView):
+    """List previous orders for the signed-in buyer/community/restaurant user."""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -704,6 +738,8 @@ class OrderHistoryAPIView(APIView):
 
 
 class OrderDetailAPIView(APIView):
+    """Return the detailed breakdown for one historical order."""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request, order_id: int):
@@ -716,6 +752,8 @@ class OrderDetailAPIView(APIView):
 
 
 class OrderReorderAPIView(APIView):
+    """Copy a historical order back into the current cart."""
+
     permission_classes = [IsAuthenticated]
 
     def post(self, request, order_id: int):
@@ -727,6 +765,8 @@ class OrderReorderAPIView(APIView):
 
 
 class OrderReceiptAPIView(APIView):
+    """Return a receipt/export-friendly representation of an order."""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request, order_id: int):
@@ -767,6 +807,8 @@ class OrderReceiptAPIView(APIView):
 
 
 class ProducerSubOrderListAPIView(APIView):
+    """List producer-specific sub-orders created from multi-vendor orders."""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -782,6 +824,8 @@ class ProducerSubOrderListAPIView(APIView):
 
 
 class ProducerSubOrderStatusUpdateAPIView(APIView):
+    """Advance a producer sub-order through the permitted status transitions."""
+
     permission_classes = [IsAuthenticated]
 
     @transaction.atomic

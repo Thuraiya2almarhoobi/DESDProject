@@ -2,6 +2,12 @@ export const ACCESS_TOKEN_KEY = 'desd_access_token';
 export const REFRESH_TOKEN_KEY = 'desd_refresh_token';
 export const USER_ROLE_KEY = 'desd_user_role';
 
+/**
+ * Browser storage helpers for JWT auth and remembered role state.
+ *
+ * Tokens can live in localStorage or sessionStorage depending on the user's
+ * remember-me preference.
+ */
 function getSessionStore(): Storage | null {
   if (typeof window === 'undefined') {
     return null;
@@ -54,6 +60,8 @@ function inferRememberPreference(): boolean {
 }
 
 export function setAuthTokens(access: string, refresh: string, rememberMe = inferRememberPreference()): void {
+  // Clear both stores first so a previous session does not leave stale tokens
+  // behind when the storage target changes.
   clearKeyFromAllStores(ACCESS_TOKEN_KEY);
   clearKeyFromAllStores(REFRESH_TOKEN_KEY);
   const sessionStore = getSessionStore();

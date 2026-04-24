@@ -6,6 +6,8 @@ try:
     from rest_framework_simplejwt.views import TokenRefreshView
 except ModuleNotFoundError:  # Offline fallback when simplejwt is unavailable.
     class TokenRefreshView(APIView):
+        """Fallback token-refresh endpoint used when SimpleJWT is unavailable."""
+
         def post(self, request):
             return Response(
                 {"detail": "Token refresh unavailable: djangorestframework-simplejwt is not installed."},
@@ -32,6 +34,12 @@ from .views import (
     VerifyEmailView,
 )
 
+# Accounts API surface:
+# - role-specific registration
+# - login/token refresh
+# - email verification and password reset
+# - current user/profile/address endpoints
+# - role-gated probe endpoints used by RBAC checks
 urlpatterns = [
     path("auth/register/customer/", CustomerRegistrationView.as_view(), name="register-customer"),
     path("auth/register/producer/", ProducerRegistrationView.as_view(), name="register-producer"),

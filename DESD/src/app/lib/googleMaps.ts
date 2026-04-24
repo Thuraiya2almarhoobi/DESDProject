@@ -4,6 +4,13 @@ const GOOGLE_MAPS_SEARCH_BASE = 'https://www.google.com/maps/search/';
 const GOOGLE_MAPS_DIRECTIONS_BASE = 'https://www.google.com/maps/dir/';
 const GOOGLE_MAPS_JS_BASE = 'https://maps.googleapis.com/maps/api/js';
 
+/**
+ * Google Maps helper functions used by product detail and live delivery UI.
+ *
+ * The project uses:
+ * - static embed/search/directions URLs for lightweight map views
+ * - lazy loading of the JavaScript API for interactive delivery tracking
+ */
 declare global {
   interface Window {
     google?: any;
@@ -83,6 +90,8 @@ export function getGoogleMapsDirectionsUrl(
 }
 
 export async function loadGoogleMapsJavaScriptApi(): Promise<any | null> {
+  // Memoize script loading on window so repeated visits do not inject duplicate
+  // script tags or race each other.
   const apiKey = getGoogleMapsApiKey();
   if (!apiKey) {
     return null;

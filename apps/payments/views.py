@@ -26,8 +26,12 @@ from .services import (
     verify_and_construct_stripe_event,
 )
 
+# Payment-facing API views for Stripe checkout and producer settlements.
+
 
 class StripeCheckoutSessionCreateAPIView(APIView):
+    """Create a hosted Stripe Checkout session for the current buyer's order."""
+
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
@@ -57,6 +61,8 @@ class StripeCheckoutSessionCreateAPIView(APIView):
 
 
 class StripeWebhookAPIView(APIView):
+    """Receive Stripe webhook callbacks and hand them to the payment service."""
+
     permission_classes = [permissions.AllowAny]
     authentication_classes: list = []
 
@@ -78,6 +84,8 @@ class StripeWebhookAPIView(APIView):
 
 
 class StripeCheckoutSessionConfirmAPIView(APIView):
+    """Confirm the outcome of a Stripe Checkout return using the session ID."""
+
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
@@ -106,6 +114,8 @@ class StripeCheckoutSessionConfirmAPIView(APIView):
 
 
 class StripeCheckoutCancelAPIView(APIView):
+    """Release reserved stock and cancel a Stripe-driven checkout attempt."""
+
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
@@ -128,6 +138,8 @@ class StripeCheckoutCancelAPIView(APIView):
 
 
 class WeeklySettlementListAPIView(generics.ListAPIView):
+    """List weekly settlement summaries for the signed-in producer."""
+
     serializer_class = WeeklySettlementSerializer
     permission_classes = [permissions.IsAuthenticated]
 
@@ -136,6 +148,8 @@ class WeeklySettlementListAPIView(generics.ListAPIView):
 
 
 class WeeklySettlementDetailAPIView(generics.RetrieveAPIView):
+    """Return one producer settlement with its line-level breakdown."""
+
     serializer_class = WeeklySettlementSerializer
     permission_classes = [permissions.IsAuthenticated]
 
@@ -144,6 +158,8 @@ class WeeklySettlementDetailAPIView(generics.RetrieveAPIView):
 
 
 class WeeklySettlementExportCSVAPIView(APIView):
+    """Export a producer settlement as CSV for reporting/accounting workflows."""
+
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, pk: int):
@@ -188,6 +204,8 @@ class WeeklySettlementExportCSVAPIView(APIView):
 
 
 class TriggerWeeklySettlementsAPIView(APIView):
+    """Staff-only endpoint that runs the settlement generation process."""
+
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):

@@ -1,5 +1,7 @@
 services:
   web:
+    # Main application container that serves both Django APIs and the built
+    # React frontend.
     build:
       context: .
       args:
@@ -60,6 +62,8 @@ services:
       "
 
   payments:
+    # Internal Stripe wrapper service used by Django for checkout sessions,
+    # webhook verification, and payment state lookup.
     build:
       context: .
       dockerfile: payment_service/Dockerfile
@@ -76,6 +80,8 @@ services:
       retries: 12
 
   stuart:
+    # Internal Stuart wrapper service used for delivery-job creation,
+    # cancellation, refresh, and sandbox OAuth handling.
     build:
       context: .
       dockerfile: stuart_service/Dockerfile
@@ -94,6 +100,7 @@ services:
       retries: 12
 
   db:
+    # Primary runtime database. The active project setup uses PostgreSQL.
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: "${POSTGRES_DB:-bristol_marketplace}"
@@ -108,5 +115,7 @@ services:
       retries: 12
 
 volumes:
+  # Named volumes keep database state and uploaded media across container
+  # rebuilds.
   postgres_data:
   media_data:

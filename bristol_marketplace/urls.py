@@ -21,8 +21,14 @@ from django.urls import include, path, re_path
 
 from .views import frontend_app
 
+# Project-level routing split:
+# - `/api/...` is handled by Django REST Framework apps
+# - `/django-admin/` is the stock Django table admin
+# - everything else is sent to the React SPA entrypoint
+
 urlpatterns = [
-    # Catalog endpoints preserved at /api/products and /api/categories for existing test/frontend contracts.
+    # Catalog endpoints are exposed twice so older test contracts and newer
+    # namespaced frontend calls both remain valid.
     path("api/", include("apps.catalog.urls")),
     path("api/catalog/", include("apps.catalog.urls")),
     path("api/orders/", include("apps.orders.urls")),
@@ -35,9 +41,11 @@ urlpatterns = [
     path("api/geo/", include("apps.geo.urls")),
     path("api/content/", include("apps.content.urls")),
     path("api/accounts/", include("apps.accounts.urls")),
-    # Keep Django's table-based admin on a separate route so /admin/* can belong to the custom admin SPA.
+    # Keep Django's table-based admin on a separate route so /admin/* belongs
+    # to the custom React administrator experience.
     path("django-admin/", admin.site.urls),
-    # Serve the React/Vite frontend for all application routes, including the custom /admin/* workspace.
+    # Serve the React/Vite frontend for all non-API application routes,
+    # including the custom /admin/* workspace.
     re_path(r"^(?!api/|django-admin/|static/|media/).*$", frontend_app, name="frontend-app"),
 ]
 

@@ -40,6 +40,18 @@ import { ProducersPage } from './pages/ProducersPage';
 import { RestaurantDashboardPage } from './pages/restaurant/RestaurantDashboardPage';
 import { RestaurantRecurringOrdersPage } from './pages/restaurant/RestaurantRecurringOrdersPage';
 
+/**
+ * Central frontend route map.
+ *
+ * Layout structure:
+ * - AppShell wraps the whole SPA
+ * - SiteShell provides shared public/buyer-facing chrome
+ * - AdminLayout provides the separate administrator workspace
+ *
+ * Security structure:
+ * - ProtectedRoute allows a set of authenticated roles
+ * - RoleProtectedRoute restricts a route to one required role
+ */
 export const router = createBrowserRouter([
   {
     element: <AppShell />,
@@ -47,6 +59,7 @@ export const router = createBrowserRouter([
       {
         element: <SiteShell />,
         children: [
+          // Public marketing and discovery pages.
           {
             path: '/',
             element: <LandingPage />,
@@ -95,7 +108,8 @@ export const router = createBrowserRouter([
             path: '/portal/admin',
             element: <Navigate to="/admin/login" replace />,
           },
-          // Customer routes
+          // Shared buyer-side routes. Community and restaurant accounts reuse
+          // the same purchasing journey as customers.
           {
             path: '/marketplace',
             element: (
@@ -186,6 +200,8 @@ export const router = createBrowserRouter([
           },
         ],
       },
+      // Standalone authentication routes sit outside SiteShell because they
+      // use focused layouts rather than the main marketplace chrome.
       {
         path: '/login',
         element: <LoginPage />,
@@ -218,6 +234,8 @@ export const router = createBrowserRouter([
         path: '/admin/login',
         element: <AdminLoginPage />,
       },
+      // Custom admin SPA. This is intentionally separate from Django's stock
+      // table-based admin, which lives under /django-admin/.
       {
         element: (
           <RoleProtectedRoute requiredRole="ADMIN">
@@ -275,7 +293,7 @@ export const router = createBrowserRouter([
         path: '/access-denied',
         element: <AccessDeniedPage />,
       },
-      // Producer routes
+      // Producer workspace routes.
       {
         path: '/producer/dashboard',
         element: (
@@ -308,7 +326,7 @@ export const router = createBrowserRouter([
           </RoleProtectedRoute>
         ),
       },
-      // Community routes
+      // Community workspace routes.
       {
         path: '/community/dashboard',
         element: (
@@ -317,7 +335,7 @@ export const router = createBrowserRouter([
           </RoleProtectedRoute>
         ),
       },
-      // Restaurant routes
+      // Restaurant workspace routes.
       {
         path: '/restaurant/dashboard',
         element: (

@@ -13,6 +13,16 @@ import { Product, CartItem, CartByProducer } from '../types';
 import { ApiCart, ApiCartGroup, ApiCartItem, apiJson } from '../lib/api';
 import { useAuth } from './AuthContext';
 
+/**
+ * Cart context coordinates the buyer-side ordering flow.
+ *
+ * The server remains the source of truth for pricing, grouping, and stock
+ * rules. This provider reshapes that server cart into UI-friendly data for:
+ * - cart pages
+ * - checkout
+ * - mini-cart indicators
+ * - add/remove/update actions
+ */
 interface CartContextType {
   items: CartItem[];
   selectedCartItemIds: string[];
@@ -163,6 +173,8 @@ function cartItemIdsFromApiCart(cart: ApiCart | null): string[] {
 }
 
 export function CartProvider({ children }: { children: ReactNode }) {
+  // Cart data is refreshed from Django whenever the signed-in user changes so
+  // cross-role state does not leak between sessions.
   const { user } = useAuth();
   const [cart, setCart] = useState<ApiCart | null>(null);
   const [isLoading, setIsLoading] = useState(false);

@@ -18,6 +18,8 @@ from .models import Order
 
 MONEY_Q = Decimal("0.01")
 
+# Administrator commission-reporting views used by the custom admin dashboard.
+
 
 def _money(value: Decimal) -> Decimal:
     return value.quantize(MONEY_Q)
@@ -87,6 +89,8 @@ def _order_breakdown(order: Order) -> dict:
 
 
 class AdminCommissionReportAPIView(APIView):
+    """Return commission totals and per-order breakdowns for a date range."""
+
     permission_classes = [IsAuthenticated, IsAdmin]
 
     def get(self, request):
@@ -131,6 +135,8 @@ class AdminCommissionReportAPIView(APIView):
 
 
 class AdminCommissionReportDetailAPIView(APIView):
+    """Return the detailed commission/payment breakdown for one order."""
+
     permission_classes = [IsAuthenticated, IsAdmin]
 
     def get(self, request, order_id: int):
@@ -161,6 +167,8 @@ class AdminCommissionReportDetailAPIView(APIView):
 
 
 class AdminCommissionReportExportCSVAPIView(APIView):
+    """Export the filtered commission report in CSV format."""
+
     permission_classes = [IsAuthenticated, IsAdmin]
 
     def get(self, request):
@@ -213,6 +221,8 @@ class AdminCommissionReportExportCSVAPIView(APIView):
 
 
 class AdminCommissionMonthlySummaryAPIView(APIView):
+    """Return a month-by-month commission summary for the selected year."""
+
     permission_classes = [IsAuthenticated, IsAdmin]
 
     def get(self, request):
@@ -247,6 +257,8 @@ class AdminCommissionMonthlySummaryAPIView(APIView):
 
 
 class AdminCommissionYTDSummaryAPIView(APIView):
+    """Return a year-to-date commission summary for the selected year."""
+
     permission_classes = [IsAuthenticated, IsAdmin]
 
     def get(self, request):

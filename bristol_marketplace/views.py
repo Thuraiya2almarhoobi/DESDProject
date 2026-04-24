@@ -6,6 +6,7 @@ from django.shortcuts import render
 
 
 def _load_frontend_assets() -> tuple[str | None, list[str]]:
+    """Read Vite's manifest so Django can inject the correct built asset files."""
     manifest_path = Path(settings.FRONTEND_DIST_DIR) / ".vite" / "manifest.json"
     if not manifest_path.exists():
         return None, []
@@ -28,6 +29,7 @@ def _load_frontend_assets() -> tuple[str | None, list[str]]:
 
 
 def frontend_app(request):
+    """Serve the React SPA shell for any non-API application route."""
     js_file, css_files = _load_frontend_assets()
     return render(
         request,

@@ -2,6 +2,16 @@ import { Product } from '../types';
 import { resolveApiOriginBase } from './apiBase';
 import { clearAuthStorage, getAccessToken, getRefreshToken, setAuthTokens } from './tokenStorage';
 
+/**
+ * Shared frontend API client helpers.
+ *
+ * This module centralizes:
+ * - base URL handling
+ * - auth header injection
+ * - token refresh on 401 responses
+ * - shared response/error parsing
+ * - TypeScript payload shapes reused across pages
+ */
 const AUTH_STORAGE_KEY = 'desd_basic_auth_token';
 const API_BASE = resolveApiOriginBase(import.meta.env.VITE_API_BASE, '');
 
@@ -260,6 +270,8 @@ function toUrl(path: string): string {
 }
 
 function buildHeaders(inputHeaders?: HeadersInit): Headers {
+  // Prefer bearer tokens. A fallback basic token is still supported for demo
+  // flows that bootstrap auth before JWT state is available.
   const headers = new Headers(inputHeaders);
   const accessToken = getAccessToken();
   const basicToken = getBasicAuthToken();

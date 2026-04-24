@@ -37,6 +37,10 @@ ALLOWED_HOSTS = [
 HAS_CORSHEADERS = importlib.util.find_spec("corsheaders") is not None
 HAS_SIMPLEJWT = importlib.util.find_spec("rest_framework_simplejwt") is not None
 
+# Installed apps are grouped by responsibility:
+# - Django defaults
+# - third-party API/auth support
+# - marketplace domain apps under `apps.*`
 INSTALLED_APPS = [
     # Django default apps
     "django.contrib.admin",
@@ -96,8 +100,8 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'bristol_marketplace.wsgi.application'
 
-# Database
-# https://docs.djangoproject.com/en/6.0/ref/settings/#databases
+# Active runtime database configuration. In Docker this points to PostgreSQL;
+# local defaults are also set up for the containerized database service.
 DATABASES = {
     "default": {
         "ENGINE": os.getenv("DJANGO_DB_ENGINE", "django.db.backends.postgresql"),
@@ -144,7 +148,7 @@ STATICFILES_DIRS = [
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
-# Vite frontend output location used by Django template view.
+# Vite frontend output location used by Django's SPA-serving view.
 FRONTEND_DIST_DIR = BASE_DIR / "DESD" / "dist"
 
 AUTH_USER_MODEL = "accounts.User"
@@ -215,6 +219,8 @@ if REQUESTED_EMAIL_BACKEND == SMTP_BACKEND and not smtp_config_present:
 else:
     EMAIL_BACKEND = REQUESTED_EMAIL_BACKEND
 
+# DRF configuration controls authentication behaviour and abuse-prevention
+# throttles for sensitive endpoints such as registration and login.
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         (

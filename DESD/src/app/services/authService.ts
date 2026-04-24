@@ -8,6 +8,16 @@ import {
 import { resolveApiPathBase } from '../lib/apiBase';
 import { UserRole } from '../types';
 
+/**
+ * Authentication-facing REST client.
+ *
+ * This file owns requests for:
+ * - login
+ * - role-specific registration
+ * - current user lookup
+ * - email verification
+ * - password reset
+ */
 export interface AuthUserPayload {
   id: number;
   email: string;
@@ -164,6 +174,8 @@ async function postAuthPayload<TPayload>(
   payload: TPayload,
   rememberMe = true,
 ): Promise<AuthTokensPayload> {
+  // Auth endpoints all return tokens + a user summary, so the shared helper can
+  // store session state before React context consumes the payload.
   const response = await requestJson<AuthTokensPayload>(
     url,
     {

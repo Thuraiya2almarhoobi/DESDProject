@@ -1,3 +1,13 @@
+/**
+ * API base resolution helpers.
+ *
+ * The same frontend can run:
+ * - inside Django on port 8000
+ * - in a standalone Vite dev server
+ *
+ * When served by Django we intentionally use same-origin API paths so the SPA
+ * and backend behave like one application.
+ */
 function trimTrailingSlash(value: string): string {
   return value.replace(/\/+$/, '');
 }

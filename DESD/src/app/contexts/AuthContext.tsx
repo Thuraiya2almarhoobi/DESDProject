@@ -17,6 +17,15 @@ import {
 import { setBasicAuthToken } from '../lib/api';
 import { getAccessToken } from '../lib/tokenStorage';
 
+/**
+ * Frontend authentication context.
+ *
+ * This provider is the client-side source of truth for:
+ * - the signed-in user and role
+ * - the role-specific profile returned by `/api/accounts/me/`
+ * - saved addresses used by checkout/account pages
+ * - login, logout, registration, and preview-mode helpers
+ */
 type AuthResult =
   | {
       success: true;
@@ -167,6 +176,8 @@ function errorMessageFromUnknown(error: unknown): string {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  // Persisted auth state is restored on refresh so protected routes and shared
+  // navigation can react immediately without forcing a new login.
   const [user, setUser] = useState<User | null>(() => loadStoredUser());
   const [profile, setProfile] = useState<Record<string, unknown> | null>(null);
   const [addresses, setAddresses] = useState<MePayload['addresses']>([]);

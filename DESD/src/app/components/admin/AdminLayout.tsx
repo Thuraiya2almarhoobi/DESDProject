@@ -11,13 +11,13 @@ const navigationItems = [
   {
     to: '/admin/dashboard',
     label: 'Overview',
-    description: 'Commission health and audit coverage',
+    description: 'Live commission and moderation summary',
     icon: LayoutDashboard,
   },
   {
     to: '/admin/financial-reports',
     label: 'Financial Reports',
-    description: 'Order-by-order commission reporting',
+    description: 'Auditable order and settlement reporting',
     icon: ChartColumnBig,
   },
 ];
@@ -43,6 +43,14 @@ function getSectionTitle(pathname: string): string {
   return 'Admin overview';
 }
 
+function getSectionSubtitle(pathname: string): string {
+  if (pathname.startsWith('/admin/financial-reports') || pathname.startsWith('/admin/commission')) {
+    return 'Filter reporting periods, review order-level commission detail, and export auditable results.';
+  }
+
+  return 'Monitor commission health, track recent orders, and action moderation from one workspace.';
+}
+
 export function AdminLayout() {
   const { user, logout } = useAuth();
   const location = useLocation();
@@ -54,28 +62,35 @@ export function AdminLayout() {
   };
 
   const displayName = user?.name || user?.email || 'Admin User';
+  const secondaryAction = location.pathname.startsWith('/admin/financial-reports')
+    ? { to: '/admin/dashboard', label: 'Open overview' }
+    : { to: '/admin/financial-reports', label: 'Open reports' };
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(15,118,110,0.10),_transparent_35%),linear-gradient(180deg,_#f7fbf9_0%,_#eef4f2_45%,_#f8fbfa_100%)] text-slate-900">
-      <aside className="fixed inset-y-0 left-0 hidden w-72 flex-col border-r border-slate-200/80 bg-slate-950 px-6 py-8 text-white lg:flex">
+    <div className="min-h-screen overflow-x-hidden bg-[radial-gradient(circle_at_top,_rgba(45,92,65,0.08),_transparent_30%),linear-gradient(180deg,_#eef2ec_0%,_#f5f7f3_55%,_#eef2ed_100%)] text-[#182219]">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-72 flex-col border-r border-[#233128] bg-[linear-gradient(180deg,#18231b_0%,#111913_100%)] px-6 py-6 text-[#eef4ee] lg:flex">
         <Link to="/admin/dashboard" className="flex items-center gap-3">
-          <div className="flex size-12 items-center justify-center rounded-2xl bg-emerald-500/20 text-emerald-200 ring-1 ring-emerald-300/30">
+          <div className="flex size-12 items-center justify-center rounded-2xl bg-[#203227] text-[#d8ead9] ring-1 ring-[#39513d]">
             <ShieldCheck className="size-6" />
           </div>
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.35em] text-emerald-200/80">DESD Network</p>
-            <p className="text-lg font-semibold">Admin Control</p>
+            <p className="text-[0.68rem] font-semibold uppercase tracking-[0.32em] text-[#9db69f]">DESD network</p>
+            <p className="mt-1 text-lg font-semibold text-white">Admin workspace</p>
           </div>
         </Link>
 
-        <div className="mt-8 rounded-3xl border border-white/10 bg-white/5 p-5">
-          <Badge className="rounded-full bg-emerald-400/15 px-3 py-1 text-emerald-100 shadow-none hover:bg-emerald-400/15">
-            Staff-only access
-          </Badge>
-          <h2 className="mt-4 text-xl font-semibold">Commission monitoring workspace</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-300">
-            Separate routing, separate login, and reporting screens focused on commission accuracy, payout traceability,
-            CSV export, and period summaries.
+        <div className="mt-8 rounded-3xl border border-[#2a3d2f] bg-[#1e2c21] p-5">
+          <div className="flex flex-wrap gap-2">
+            <Badge className="rounded-full bg-[#2c4330] px-3 py-1 text-[#d9eedb] shadow-none hover:bg-[#2c4330]">
+              Staff only
+            </Badge>
+            <Badge className="rounded-full bg-[#243726] px-3 py-1 text-[#b6d6b8] shadow-none hover:bg-[#243726]">
+              Live finance
+            </Badge>
+          </div>
+          <h2 className="mt-4 text-base font-semibold text-white">Commission operations</h2>
+          <p className="mt-2 text-sm leading-6 text-[#b6c7b7]">
+            Purpose-built admin tooling for commission oversight, reporting, and audit traceability.
           </p>
         </div>
 
@@ -91,40 +106,40 @@ export function AdminLayout() {
                   cn(
                     'group flex items-start gap-3 rounded-3xl border px-4 py-4 transition-all',
                     isActive
-                      ? 'border-emerald-300/40 bg-emerald-400/15 text-white shadow-[0_16px_40px_rgba(16,185,129,0.18)]'
-                      : 'border-white/8 bg-white/4 text-slate-200 hover:border-white/15 hover:bg-white/8',
+                      ? 'border-[#44644c] bg-[#243827] text-white shadow-[0_18px_36px_rgba(5,10,7,0.26)]'
+                      : 'border-[#243127] bg-[#162119] text-[#d0ddd1] hover:border-[#2f4234] hover:bg-[#1b281e]',
                   )
                 }
               >
-                <div className="mt-1 rounded-2xl bg-white/10 p-2 text-emerald-100 transition-colors group-hover:bg-white/15">
+                <div className="mt-1 rounded-2xl bg-[#203227] p-2 text-[#bfe0c0] transition-colors group-hover:bg-[#29402d]">
                   <Icon className="size-4" />
                 </div>
                 <div>
                   <p className="font-semibold">{item.label}</p>
-                  <p className="mt-1 text-sm leading-5 text-slate-300">{item.description}</p>
+                  <p className="mt-1 text-sm leading-5 text-[#afc1b1]">{item.description}</p>
                 </div>
               </NavLink>
             );
           })}
         </nav>
 
-        <div className="mt-auto rounded-3xl border border-white/10 bg-white/5 p-4">
+        <div className="mt-auto rounded-3xl border border-[#2a3d2f] bg-[#152017] p-4">
           <div className="flex items-center gap-3">
-            <Avatar className="size-11 border border-white/15">
-              <AvatarFallback className="bg-emerald-500/20 text-sm font-semibold text-emerald-100">
+            <Avatar className="size-11 border border-[#314934]">
+              <AvatarFallback className="bg-[#223626] text-sm font-semibold text-[#d8ead9]">
                 {getInitials(displayName)}
               </AvatarFallback>
             </Avatar>
             <div className="min-w-0">
-              <p className="truncate font-semibold">{displayName}</p>
-              <p className="truncate text-sm text-slate-300">{user?.email}</p>
+              <p className="truncate font-semibold text-white">{displayName}</p>
+              <p className="truncate text-sm text-[#afc1b1]">{user?.email}</p>
             </div>
           </div>
 
           <Button
             type="button"
             variant="outline"
-            className="mt-4 w-full justify-between border-white/15 bg-transparent text-white hover:bg-white/10 hover:text-white"
+            className="mt-4 w-full justify-between border-[#39513d] bg-transparent text-[#dbe9dc] hover:bg-[#223626] hover:text-white"
             onClick={handleSignOut}
           >
             Sign out
@@ -133,36 +148,42 @@ export function AdminLayout() {
         </div>
       </aside>
 
-      <div className="lg:pl-72">
-        <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/85 backdrop-blur-xl">
+      <div className="min-w-0 lg:ml-72">
+        <header className="sticky top-0 z-20 w-full border-b border-[#d6ddd0] bg-[#f7f8f4]/92 backdrop-blur-xl">
           <div className="flex flex-col gap-4 px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
             <div>
-              <div className="flex items-center gap-2 text-sm text-slate-500">
-                <Activity className="size-4 text-emerald-600" />
-                Separate administrator workspace
+              <div className="flex items-center gap-2 text-sm text-[#5f6d61]">
+                <Activity className="size-4 text-[var(--forest-green)]" />
+                DESD admin console
               </div>
-              <h1 className="mt-1 text-2xl font-semibold text-slate-950">{getSectionTitle(location.pathname)}</h1>
-              <p className="mt-1 text-sm text-slate-600">
-                Pre-registered administrators can audit 5% network commission totals without entering the public
-                marketplace flow.
-              </p>
+              <h1 className="mt-1 text-3xl font-semibold tracking-tight text-[#182219]">{getSectionTitle(location.pathname)}</h1>
+              <p className="mt-1 text-sm text-[#5f6d61]">{getSectionSubtitle(location.pathname)}</p>
             </div>
 
-            <div className="flex items-center gap-3">
-              <Button asChild variant="outline" className="hidden sm:inline-flex">
-                <Link to="/admin/financial-reports">Open reports</Link>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="hidden rounded-2xl border border-[#d6ddd0] bg-white px-4 py-3 text-left xl:block">
+                <p className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-[#6d7c6f]">Workspace</p>
+                <p className="mt-1 text-sm font-medium text-[#243127]">Commission, audit, and moderation</p>
+              </div>
+              <Button
+                asChild
+                variant="outline"
+                className="border-[#c7d0c1] bg-white text-[var(--forest-green)] hover:bg-[#edf2eb] hover:text-[var(--forest-green)]"
+              >
+                <Link to={secondaryAction.to}>{secondaryAction.label}</Link>
               </Button>
-              <Button type="button" className="bg-emerald-700 text-white hover:bg-emerald-800" onClick={handleSignOut}>
+              <Button type="button" className="bg-[var(--forest-green)] text-white hover:bg-[var(--forest-green)]" onClick={handleSignOut}>
                 Sign out
               </Button>
             </div>
           </div>
         </header>
 
-        <main className="px-4 py-6 sm:px-6 lg:px-8">
+        <main className="min-w-0 px-4 py-6 sm:px-6 lg:px-8">
           <Outlet />
         </main>
       </div>
     </div>
   );
 }
+

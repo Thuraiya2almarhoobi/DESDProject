@@ -62,20 +62,32 @@ ALLOWED_IMAGE_UPLOAD_TYPES = {
 MAX_IMAGE_UPLOAD_BYTES = 5 * 1024 * 1024
 IMAGE_UPLOAD_SCOPES = {"general", "products", "recipes", "stories"}
 
+# Accounts/authentication view module.
+# This file owns registration, login, email verification, password reset,
+# current-user profile retrieval, editable addresses, uploads, and RBAC probes.
+
 
 class RegisterAnonThrottle(AnonRateThrottle):
+    """Throttle anonymous registration/password-reset traffic."""
+
     scope = "register_anon"
 
 
 class RegisterUserThrottle(UserRateThrottle):
+    """Throttle authenticated registration/password-reset traffic."""
+
     scope = "register_user"
 
 
 class LoginAnonThrottle(AnonRateThrottle):
+    """Throttle anonymous login attempts to reduce brute-force abuse."""
+
     scope = "login_anon"
 
 
 class LoginUserThrottle(UserRateThrottle):
+    """Throttle authenticated login/refresh-style retry traffic."""
+
     scope = "login_user"
 
 
@@ -253,6 +265,8 @@ def _build_me_payload(request):
 
 
 class BaseRegistrationView(APIView):
+    """Shared role-registration workflow that returns auth tokens on success."""
+
     authentication_classes = ()
     permission_classes = (AllowAny,)
     throttle_classes = (RegisterAnonThrottle, RegisterUserThrottle)
@@ -285,22 +299,32 @@ class BaseRegistrationView(APIView):
 
 
 class CustomerRegistrationView(BaseRegistrationView):
+    """Create a customer account and customer profile."""
+
     serializer_class = CustomerRegistrationSerializer
 
 
 class ProducerRegistrationView(BaseRegistrationView):
+    """Create a producer account and producer profile."""
+
     serializer_class = ProducerRegistrationSerializer
 
 
 class CommunityRegistrationView(BaseRegistrationView):
+    """Create a community organizer account and profile."""
+
     serializer_class = CommunityRegistrationSerializer
 
 
 class RestaurantRegistrationView(BaseRegistrationView):
+    """Create a restaurant account and restaurant profile."""
+
     serializer_class = RestaurantRegistrationSerializer
 
 
 class LoginView(APIView):
+    """Authenticate a user and return JWT tokens plus the user summary."""
+
     authentication_classes = ()
     permission_classes = (AllowAny,)
     throttle_classes = (LoginAnonThrottle, LoginUserThrottle)
@@ -343,6 +367,8 @@ class LoginView(APIView):
 
 
 class VerifyEmailView(APIView):
+    """Mark a user email as verified when given a valid signed token."""
+
     authentication_classes = ()
     permission_classes = (AllowAny,)
 
@@ -372,6 +398,8 @@ class VerifyEmailView(APIView):
 
 
 class PasswordResetRequestView(APIView):
+    """Accept an email address and send a password-reset message if it exists."""
+
     authentication_classes = ()
     permission_classes = (AllowAny,)
     throttle_classes = (RegisterAnonThrottle, RegisterUserThrottle)
@@ -397,6 +425,8 @@ class PasswordResetRequestView(APIView):
 
 
 class PasswordResetConfirmView(APIView):
+    """Validate a reset token and set the user's new password."""
+
     authentication_classes = ()
     permission_classes = (AllowAny,)
     throttle_classes = (RegisterAnonThrottle, RegisterUserThrottle)
@@ -441,6 +471,8 @@ class PasswordResetConfirmView(APIView):
 
 
 class MeView(APIView):
+    """Return the signed-in user's role summary, editable profile, and addresses."""
+
     permission_classes = (IsAuthenticated,)
 
     def get(self, request):
@@ -474,6 +506,8 @@ class MeView(APIView):
 
 
 class AddressListCreateView(generics.ListCreateAPIView):
+    """List or create saved addresses for the current user."""
+
     serializer_class = AddressSerializer
     permission_classes = (IsAuthenticated,)
 
@@ -482,6 +516,8 @@ class AddressListCreateView(generics.ListCreateAPIView):
 
 
 class AddressDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """Retrieve, update, or delete one saved address owned by the user."""
+
     serializer_class = AddressSerializer
     permission_classes = (IsAuthenticated,)
 
@@ -490,6 +526,8 @@ class AddressDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 
 class ImageUploadView(APIView):
+    """Handle authenticated image uploads for products, recipes, stories, and avatars."""
+
     permission_classes = (IsAuthenticated,)
     parser_classes = (MultiPartParser, FormParser)
 
@@ -533,6 +571,8 @@ class ImageUploadView(APIView):
 
 
 class CustomerOnlyView(APIView):
+    """Simple RBAC probe endpoint for customer-only access checks."""
+
     permission_classes = (IsAuthenticated, IsCustomer)
 
     def get(self, request):
@@ -540,6 +580,8 @@ class CustomerOnlyView(APIView):
 
 
 class ProducerOnlyView(APIView):
+    """Simple RBAC probe endpoint for producer-only access checks."""
+
     permission_classes = (IsAuthenticated, IsProducer)
 
     def get(self, request):
@@ -547,6 +589,8 @@ class ProducerOnlyView(APIView):
 
 
 class CommunityOnlyView(APIView):
+    """Simple RBAC probe endpoint for community-only access checks."""
+
     permission_classes = (IsAuthenticated, IsCommunity)
 
     def get(self, request):
@@ -554,6 +598,8 @@ class CommunityOnlyView(APIView):
 
 
 class RestaurantOnlyView(APIView):
+    """Simple RBAC probe endpoint for restaurant-only access checks."""
+
     permission_classes = (IsAuthenticated, IsRestaurant)
 
     def get(self, request):
@@ -561,6 +607,8 @@ class RestaurantOnlyView(APIView):
 
 
 class AdminOnlyView(APIView):
+    """Simple RBAC probe endpoint for admin-only access checks."""
+
     permission_classes = (IsAuthenticated, IsAdmin)
 
     def get(self, request):

@@ -9,6 +9,15 @@ from wsgiref.simple_server import make_server
 
 import requests
 
+"""
+Internal Stuart delivery wrapper service.
+
+Responsibilities:
+- authenticate against Stuart using OAuth client credentials
+- normalize Django delivery requests into Stuart job payloads
+- hide provider-specific request/response details from the main web app
+"""
+
 TOKEN_CACHE: dict[str, Any] = {
     "access_token": "",
     "expires_at": 0.0,
@@ -52,6 +61,7 @@ def _read_json_body(environ) -> dict[str, Any]:
 
 
 def _require_service_token(environ) -> None:
+    """Reject requests that do not present the shared internal service token."""
     expected = (os.getenv("STUART_SERVICE_SHARED_SECRET", "") or "").strip()
     if not expected:
         return
@@ -100,6 +110,7 @@ def _default_headers() -> dict[str, str]:
 
 
 def _oauth_token() -> str:
+    """Fetch and cache a Stuart OAuth token for outbound sandbox requests."""
     if TOKEN_CACHE["access_token"] and float(TOKEN_CACHE["expires_at"]) > time.time() + 60:
         return str(TOKEN_CACHE["access_token"])
 
@@ -185,6 +196,7 @@ def _extract(path_payload: Any, *paths: tuple[str, ...]) -> Any:
 
 
 def _normalised_create_payload(body: dict[str, Any]) -> dict[str, Any]:
+    """Translate the app's delivery shape into Stuart's expected job schema."""
     pickup = body.get("pickup") or {}
     dropoff = body.get("dropoff") or {}
     if not pickup.get("address"):
@@ -237,6 +249,7 @@ def _normalised_create_payload(body: dict[str, Any]) -> dict[str, Any]:
 
 
 def _map_job_payload(payload: dict[str, Any], fallback_client_reference: str = "") -> dict[str, Any]:
+    """Normalize varied Stuart payloads into one stable shape for Django."""
     delivery = {}
     deliveries = _extract(payload, ("deliveries",), ("job", "deliveries"), ("details", "deliveries"))
     if isinstance(deliveries, list) and deliveries:
@@ -319,6 +332,7 @@ def _map_job_payload(payload: dict[str, Any], fallback_client_reference: str = "
 
 
 def _stuart_request(method: str, path: str, *, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Perform a signed request against the Stuart sandbox API."""
     response = requests.request(
         method,
         f"{_base_url()}{path}",
@@ -367,6 +381,7 @@ def _handle_cancel_job(body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
 
 
 def application(environ, start_response):
+    """WSGI entrypoint exposing health and internal Stuart job endpoints."""
     method = environ.get("REQUEST_METHOD", "GET").upper()
     path = environ.get("PATH_INFO", "")
 
