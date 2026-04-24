@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { apiBlob, apiJson } from '../../lib/api';
 import { useSafeBack } from '../../lib/navigation';
 import { SiteHeader } from '../../components/SiteHeader';
+import { PageLoadingSkeleton } from '../../components/LoadingSkeletons';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
@@ -173,10 +174,7 @@ export function ProducerPaymentsPage() {
           </CardHeader>
           <CardContent>
             {loading ? (
-              <div className="py-10 text-center text-gray-600">
-                <Loader2 className="size-6 animate-spin mx-auto mb-3" />
-                Loading settlement history...
-              </div>
+              <PageLoadingSkeleton rows={3} cards={2} />
             ) : settlements.length === 0 ? (
               <div className="py-10 text-center text-gray-600">No weekly settlements found yet.</div>
             ) : (

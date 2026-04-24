@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
+import { FeedLoadingSkeleton, PageLoadingSkeleton } from '../../components/LoadingSkeletons';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
 import { apiJson } from '../../lib/api';
 import { formatAdminCurrency, formatAdminDate, getDefaultAdminDateRange } from '../../lib/adminReporting';
@@ -250,7 +251,7 @@ export function AdminDashboardPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {loading ? <p className="text-sm text-slate-500">Loading overview...</p> : null}
+            {loading ? <PageLoadingSkeleton rows={2} cards={3} /> : null}
             {!loading && recentOrders.length === 0 ? (
               <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-600">
                 No commission-report orders were found in the current two-week window.
@@ -337,7 +338,7 @@ export function AdminDashboardPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             {pendingReviewsLoading ? (
-              <p className="text-sm text-slate-500">Loading review queue...</p>
+              <FeedLoadingSkeleton rows={3} />
             ) : null}
 
             {!pendingReviewsLoading && pendingReviews.length === 0 ? (

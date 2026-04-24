@@ -24,6 +24,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { apiJson } from '../../lib/api';
 import { fetchProducerProductsFromApi } from '../../services/productApi';
 import { SiteHeader } from '../../components/SiteHeader';
+import { PageLoadingSkeleton } from '../../components/LoadingSkeletons';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
@@ -295,12 +296,7 @@ export function ProducerDashboardPage() {
 
       <main className="max-w-6xl mx-auto px-4 py-8 space-y-8">
         {loading ? (
-          <Card>
-            <CardContent className="py-16 text-center text-gray-600">
-              <Loader2 className="size-7 animate-spin mx-auto mb-3" />
-              Loading live producer metrics...
-            </CardContent>
-          </Card>
+          <PageLoadingSkeleton rows={3} cards={3} />
         ) : (
           <>
             <section>

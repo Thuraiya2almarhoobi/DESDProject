@@ -2,6 +2,8 @@
   --lfm-primary: #2d5016;
   --lfm-primary-light: #3a6b1f;
   --lfm-primary-dark: #1f3810;
+  --lfm-brown: #765233;
+  --lfm-brown-light: #eadfce;
   --lfm-accent: #4fb07f;
   --lfm-accent-light: #6cc896;
   --lfm-bg-light: #f8faf5;
@@ -115,12 +117,12 @@
 
 .lfm-btn-secondary {
   background: transparent;
-  color: var(--lfm-primary);
-  border: 2px solid var(--lfm-primary);
+  color: var(--lfm-brown);
+  border: 2px solid var(--lfm-brown);
 }
 
 .lfm-btn-secondary:hover {
-  background: var(--lfm-primary);
+  background: var(--lfm-brown);
   color: white;
 }
 
@@ -277,8 +279,8 @@
 
 .lfm-section-label {
   display: inline-block;
-  background: rgba(79, 176, 127, 0.15);
-  color: var(--lfm-primary);
+  background: var(--lfm-brown-light);
+  color: var(--lfm-brown);
   padding: 0.5rem 1.5rem;
   border-radius: 50px;
   font-size: 0.85rem;
@@ -609,8 +611,8 @@
 .lfm-form-group input:focus,
 .lfm-form-group select:focus {
   outline: none;
-  border-color: var(--lfm-accent);
-  box-shadow: 0 0 0 3px rgba(79, 176, 127, 0.1);
+  border-color: var(--lfm-brown);
+  box-shadow: 0 0 0 3px rgba(118, 82, 51, 0.12);
 }
 
 .lfm-form-options {
@@ -622,7 +624,7 @@
 }
 
 .lfm-form-options a {
-  color: var(--lfm-primary);
+  color: var(--lfm-brown);
   text-decoration: none;
 }
 
@@ -678,7 +680,7 @@
 }
 
 .lfm-auth-switch a {
-  color: var(--lfm-primary);
+  color: var(--lfm-brown);
   font-weight: 600;
   text-decoration: none;
 }
@@ -725,15 +727,15 @@
 }
 
 .lfm-role-selector:hover {
-  border-color: var(--lfm-accent);
-  background: rgba(79, 176, 127, 0.05);
+  border-color: var(--lfm-brown);
+  background: rgba(118, 82, 51, 0.06);
   transform: translateY(-2px);
 }
 
 .lfm-role-selector.active {
-  border-color: var(--lfm-primary);
-  background: rgba(45, 80, 22, 0.08);
-  box-shadow: inset 0 0 0 1px rgba(45, 80, 22, 0.06);
+  border-color: var(--lfm-brown);
+  background: rgba(118, 82, 51, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(118, 82, 51, 0.08);
 }
 
 .lfm-role-selector .role-icon {

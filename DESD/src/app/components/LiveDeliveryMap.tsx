@@ -42,6 +42,74 @@ function interpolateCoordinates(from: CoordinatePoint, to: CoordinatePoint, prog
   };
 }
 
+function toLatLngLiteral(point: CoordinatePoint): { lat: number; lng: number } {
+  return { lat: point.lat, lng: point.lng };
+}
+
+function getDistanceMeters(from: CoordinatePoint, to: CoordinatePoint): number {
+  const earthRadiusMeters = 6371000;
+  const fromLat = (from.lat * Math.PI) / 180;
+  const toLat = (to.lat * Math.PI) / 180;
+  const deltaLat = ((to.lat - from.lat) * Math.PI) / 180;
+  const deltaLng = ((to.lng - from.lng) * Math.PI) / 180;
+
+  const a =
+    Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+    Math.cos(fromLat) * Math.cos(toLat) * Math.sin(deltaLng / 2) * Math.sin(deltaLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return earthRadiusMeters * c;
+}
+
+function getSimulationProgress(simulationStartedAt?: string | null, simulationDurationSeconds?: number): number | null {
+  if (!simulationStartedAt || !simulationDurationSeconds || simulationDurationSeconds <= 0) {
+    return null;
+  }
+
+  const startedAt = Date.parse(simulationStartedAt);
+  if (!Number.isFinite(startedAt)) {
+    return null;
+  }
+
+  const durationMs = Math.max(1, simulationDurationSeconds * 1000);
+  return clamp((Date.now() - startedAt) / durationMs, 0, 1);
+}
+
+function getPointAlongRoute(route: CoordinatePoint[], progress: number): CoordinatePoint | null {
+  if (route.length === 0) {
+    return null;
+  }
+  if (route.length === 1) {
+    return route[0];
+  }
+
+  const segmentLengths: number[] = [];
+  let totalDistance = 0;
+  for (let index = 1; index < route.length; index += 1) {
+    const length = getDistanceMeters(route[index - 1], route[index]);
+    segmentLengths.push(length);
+    totalDistance += length;
+  }
+
+  if (totalDistance <= 0) {
+    return route[0];
+  }
+
+  const targetDistance = clamp(progress, 0, 1) * totalDistance;
+  let travelledDistance = 0;
+
+  for (let index = 1; index < route.length; index += 1) {
+    const segmentDistance = segmentLengths[index - 1];
+    const nextTravelledDistance = travelledDistance + segmentDistance;
+    if (targetDistance <= nextTravelledDistance) {
+      const segmentProgress = segmentDistance <= 0 ? 0 : (targetDistance - travelledDistance) / segmentDistance;
+      return interpolateCoordinates(route[index - 1], route[index], segmentProgress);
+    }
+    travelledDistance = nextTravelledDistance;
+  }
+
+  return route[route.length - 1];
+}
+
 function createPinSvg(fillColor: string, foreground: string, iconMarkup: string): string {
   return `
     <svg width="42" height="52" viewBox="0 0 42 52" xmlns="http://www.w3.org/2000/svg">
@@ -103,6 +171,7 @@ function buildCourierMarkerIcon(maps: any) {
 function getSimulatedCourierPosition(
   pickup: CoordinatePoint | null,
   dropoff: CoordinatePoint | null,
+  routePath: CoordinatePoint[],
   simulationStartedAt?: string | null,
   simulationDurationSeconds?: number,
   testMode?: boolean,
@@ -111,19 +180,20 @@ function getSimulatedCourierPosition(
     return null;
   }
 
-  const startedAt = Date.parse(simulationStartedAt);
-  if (!Number.isFinite(startedAt)) {
+  const progress = getSimulationProgress(simulationStartedAt, simulationDurationSeconds);
+  if (progress === null) {
     return null;
   }
-
-  const durationMs = Math.max(1, simulationDurationSeconds * 1000);
-  const progress = clamp((Date.now() - startedAt) / durationMs, 0, 1);
 
   if (progress < 0.40) {
     return pickup;
   }
   if (progress >= 1) {
     return dropoff;
+  }
+
+  if (routePath.length > 1) {
+    return getPointAlongRoute(routePath, (progress - 0.40) / 0.60) || dropoff;
   }
 
   return interpolateCoordinates(pickup, dropoff, (progress - 0.40) / 0.60);
@@ -149,6 +219,7 @@ export function LiveDeliveryMap({
   const routeLineRef = useRef<any>(null);
   const [scriptReady, setScriptReady] = useState(false);
   const [scriptUnavailable, setScriptUnavailable] = useState(false);
+  const [routePath, setRoutePath] = useState<CoordinatePoint[]>([]);
   const [animatedCourierCoordinates, setAnimatedCourierCoordinates] = useState<CoordinatePoint | null>(courierCoordinates || null);
 
   const pickupCoordinates = pickup?.coordinates || null;
@@ -202,6 +273,51 @@ export function LiveDeliveryMap({
   }, [dropoffCoordinates, pickupCoordinates]);
 
   useEffect(() => {
+    if (!scriptReady || !pickupCoordinates || !dropoffCoordinates || !window.google?.maps) {
+      setRoutePath([]);
+      return;
+    }
+
+    let cancelled = false;
+    const maps = window.google.maps;
+    const directionsService = new maps.DirectionsService();
+
+    directionsService.route(
+      {
+        origin: toLatLngLiteral(pickupCoordinates),
+        destination: toLatLngLiteral(dropoffCoordinates),
+        travelMode: maps.TravelMode.DRIVING,
+      },
+      (result: any, status: string) => {
+        if (cancelled) {
+          return;
+        }
+
+        if (
+          status === maps.DirectionsStatus.OK &&
+          result?.routes?.[0]?.overview_path &&
+          Array.isArray(result.routes[0].overview_path)
+        ) {
+          const nextRoutePath = result.routes[0].overview_path
+            .map((point: any) => ({ lat: Number(point.lat()), lng: Number(point.lng()) }))
+            .filter((point: CoordinatePoint) => Number.isFinite(point.lat) && Number.isFinite(point.lng));
+
+          if (nextRoutePath.length > 1) {
+            setRoutePath(nextRoutePath);
+            return;
+          }
+        }
+
+        setRoutePath([pickupCoordinates, dropoffCoordinates]);
+      },
+    );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [dropoffCoordinates, pickupCoordinates, scriptReady]);
+
+  useEffect(() => {
     if (!pickupCoordinates || !dropoffCoordinates) {
       setAnimatedCourierCoordinates(courierCoordinates || null);
       return;
@@ -211,6 +327,7 @@ export function LiveDeliveryMap({
       const simulatedPosition = getSimulatedCourierPosition(
         pickupCoordinates,
         dropoffCoordinates,
+        routePath,
         simulationStartedAt,
         simulationDurationSeconds,
         testMode,
@@ -232,6 +349,7 @@ export function LiveDeliveryMap({
     courierCoordinates,
     dropoffCoordinates,
     pickupCoordinates,
+    routePath,
     simulationDurationSeconds,
     simulationStartedAt,
     testMode,
@@ -257,9 +375,9 @@ export function LiveDeliveryMap({
     }
 
     const map = mapInstanceRef.current;
+  const activeRoutePath = routePath.length > 1 ? routePath : [pickupCoordinates, dropoffCoordinates];
     const bounds = new maps.LatLngBounds();
-    bounds.extend(pickupCoordinates);
-    bounds.extend(dropoffCoordinates);
+  activeRoutePath.forEach((point) => bounds.extend(point));
 
     if (!pickupMarkerRef.current) {
       pickupMarkerRef.current = new maps.Marker({
@@ -287,7 +405,7 @@ export function LiveDeliveryMap({
 
     if (!routeLineRef.current) {
       routeLineRef.current = new maps.Polyline({
-        path: [pickupCoordinates, dropoffCoordinates],
+        path: activeRoutePath,
         geodesic: true,
         strokeColor: '#15803d',
         strokeOpacity: 0.9,
@@ -295,11 +413,11 @@ export function LiveDeliveryMap({
         map,
       });
     } else {
-      routeLineRef.current.setPath([pickupCoordinates, dropoffCoordinates]);
+      routeLineRef.current.setPath(activeRoutePath);
     }
 
     map.fitBounds(bounds, 56);
-  }, [dropoffCoordinates, dropoffLabel, pickupCoordinates, pickupLabel, scriptReady]);
+  }, [dropoffCoordinates, dropoffLabel, pickupCoordinates, pickupLabel, routePath, scriptReady]);
 
   useEffect(() => {
     if (!scriptReady || !window.google?.maps || !mapInstanceRef.current) {

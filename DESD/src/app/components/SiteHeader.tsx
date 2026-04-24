@@ -130,14 +130,14 @@ export function SiteHeader({
         asChild
         variant="outline"
         size="sm"
-        className="border-[#1a5c35] text-[#1a5c35] hover:bg-[#f4f9f5] hover:text-[#1a5c35]"
+        className="border-[var(--forest-green)] text-[var(--forest-green)] hover:bg-[color-mix(in_srgb,var(--forest-green)_8%,white)] hover:text-[var(--forest-green)]"
       >
         <Link to="/portal/producer">Producer portal</Link>
       </Button>
-      <Button asChild variant="ghost" size="sm" className="text-[#1a5c35] hover:bg-[#f4f9f5]">
+      <Button asChild variant="ghost" size="sm" className="text-[var(--forest-green)] hover:bg-[color-mix(in_srgb,var(--forest-green)_6%,white)]">
         <Link to="/login">Sign in</Link>
       </Button>
-      <Button asChild size="sm" className="bg-[#1a5c35] text-white hover:bg-[#154a2a]">
+      <Button asChild size="sm" className="bg-[var(--forest-green)] text-white hover:bg-[var(--forest-green)]">
         <Link to="/select-portal?mode=register">Sign up</Link>
       </Button>
     </>
@@ -148,13 +148,13 @@ export function SiteHeader({
           asChild
           variant="outline"
           size="sm"
-          className="border-[#1a5c35] text-[#1a5c35] hover:bg-[#f4f9f5] hover:text-[#1a5c35]"
+          className="border-[var(--forest-green)] text-[var(--forest-green)] hover:bg-[color-mix(in_srgb,var(--forest-green)_8%,white)] hover:text-[var(--forest-green)]"
         >
           <Link to="/cart">
             <ShoppingCart className="size-4" />
             Cart
             {cartItemCount > 0 ? (
-              <span className="ml-1 inline-flex min-w-5 items-center justify-center rounded-full bg-[#1a5c35] px-1.5 py-0.5 text-[11px] font-semibold text-white">
+              <span className="ml-1 inline-flex min-w-5 items-center justify-center rounded-full bg-[var(--forest-green)] px-1.5 py-0.5 text-[11px] font-semibold text-white">
                 {cartItemCount}
               </span>
             ) : null}
@@ -165,12 +165,12 @@ export function SiteHeader({
           asChild
           variant="outline"
           size="sm"
-          className="border-[#1a5c35] text-[#1a5c35] hover:bg-[#f4f9f5] hover:text-[#1a5c35]"
+          className="border-[var(--forest-green)] text-[var(--forest-green)] hover:bg-[color-mix(in_srgb,var(--forest-green)_8%,white)] hover:text-[var(--forest-green)]"
         >
           <Link to={getDashboardPathForRole(user.role)}>Dashboard</Link>
         </Button>
       )}
-      <Button asChild variant="ghost" size="sm" className="text-[#1a5c35] hover:bg-[#f4f9f5]">
+      <Button asChild variant="ghost" size="sm" className="text-[var(--forest-green)] hover:bg-[color-mix(in_srgb,var(--forest-green)_6%,white)]">
         <Link to="/account">
           <User className="size-4" />
           Account
@@ -180,7 +180,7 @@ export function SiteHeader({
         type="button"
         size="sm"
         onClick={handleLogout}
-        className="bg-[#1a5c35] text-white hover:bg-[#154a2a]"
+        className="bg-[var(--forest-green)] text-white hover:bg-[var(--forest-green)]"
       >
         <LogOut className="size-4" />
         Sign out
@@ -189,22 +189,22 @@ export function SiteHeader({
   );
 
   return (
-    <div className="sticky top-0 z-30 border-b border-[oklch(0.88_0.02_145)] bg-white/95 shadow-sm backdrop-blur-sm">
+    <div className="sticky top-0 z-30 border-b border-[#e4e1d8] bg-[#fffefa]/95 shadow-sm backdrop-blur-sm">
       <header>
         <div className="mx-auto max-w-7xl px-4">
           <div className="hidden h-[60px] items-center gap-4 md:flex">
             <Link
               to={brandLinkTarget}
-              className="flex shrink-0 items-center gap-3 text-[#1a5c35]"
+              className="flex shrink-0 items-center gap-3 text-[var(--forest-green)]"
               onClick={(event) => handleSamePageClick(event, brandLinkTarget)}
             >
-              <div className="flex size-9 items-center justify-center rounded-xl bg-[#1a5c35] shadow-sm">
+              <div className="flex size-9 items-center justify-center rounded-xl bg-[var(--forest-green)] shadow-sm">
                 <Sprout className="size-4 text-white" />
               </div>
               <span className="text-base font-semibold tracking-tight">Local Food Marketplace</span>
             </Link>
 
-            <div className="h-6 w-px shrink-0 bg-[oklch(0.88_0.02_145)]" />
+            <div className="h-6 w-px shrink-0 bg-[#e4e1d8]" />
 
             {showNavigation ? (
               <nav aria-label="Primary" className="flex shrink-0 items-center gap-1 overflow-x-auto">
@@ -219,8 +219,8 @@ export function SiteHeader({
                       className={cn(
                         'rounded-full px-3.5 py-2 text-sm font-medium transition-colors',
                         isActive
-                          ? 'bg-[#edf6ef] text-[#1a5c35]'
-                          : 'text-[oklch(0.38_0.03_145)] hover:bg-[#f4f9f5] hover:text-[#1a5c35]',
+                          ? 'bg-[color-mix(in_srgb,var(--forest-green)_9%,white)] text-[var(--forest-green)]'
+                          : 'text-[oklch(0.38_0.03_95)] hover:bg-[color-mix(in_srgb,var(--forest-green)_6%,white)] hover:text-[var(--forest-green)]',
                       )}
                     >
                       {item.label}
@@ -231,19 +231,19 @@ export function SiteHeader({
             ) : null}
 
             {renderSearch ? (
-              <form onSubmit={handleSearchSubmit} className="relative min-w-[220px] flex-1">
-                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[oklch(0.45_0.03_145)]" />
+              <form onSubmit={handleSearchSubmit} className="site-search-form relative min-w-[220px]">
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--forest-green)]" />
                 <Input
                   value={searchValue}
                   onChange={(event) => updateSearchValue(event.target.value)}
                   placeholder={searchPlaceholder}
-                  className="h-10 rounded-full border-[oklch(0.88_0.02_145)] bg-white pl-10 pr-10 shadow-none focus-visible:border-[#1a5c35] focus-visible:ring-[#1a5c35]/15"
+                  className="h-10 rounded-full border-[#e4e1d8] bg-[#fffefa] pl-10 pr-10 shadow-none focus-visible:border-[var(--forest-green)] focus-visible:ring-[var(--forest-green)]/15"
                 />
                 {searchValue ? (
                   <button
                     type="button"
                     onClick={() => updateSearchValue('')}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[oklch(0.45_0.03_145)] transition-colors hover:text-[#1a5c35]"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--forest-green)] transition-colors hover:text-[var(--forest-green)]"
                     aria-label="Clear search"
                   >
                     <X className="size-4" />
@@ -260,10 +260,10 @@ export function SiteHeader({
           <div className="flex h-[60px] items-center justify-between gap-3 md:hidden">
             <Link
               to={brandLinkTarget}
-              className="flex min-w-0 items-center gap-3 text-[#1a5c35]"
+              className="flex min-w-0 items-center gap-3 text-[var(--forest-green)]"
               onClick={(event) => handleSamePageClick(event, brandLinkTarget)}
             >
-              <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#1a5c35] shadow-sm">
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[var(--forest-green)] shadow-sm">
                 <Sprout className="size-4 text-white" />
               </div>
               <span className="truncate text-sm font-semibold tracking-tight">Local Food Marketplace</span>
@@ -276,7 +276,7 @@ export function SiteHeader({
               aria-expanded={isMobileMenuOpen}
               aria-label={isMobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
               onClick={() => setIsMobileMenuOpen((current) => !current)}
-              className="text-[#1a5c35] hover:bg-[#f4f9f5]"
+              className="text-[var(--forest-green)] hover:bg-[color-mix(in_srgb,var(--forest-green)_6%,white)]"
             >
               {isMobileMenuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
             </Button>
@@ -286,18 +286,18 @@ export function SiteHeader({
             <div className="border-t border-[oklch(0.9_0.02_145)] py-4 md:hidden">
               {renderSearch ? (
                 <form onSubmit={handleSearchSubmit} className="relative">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[oklch(0.45_0.03_145)]" />
+                  <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--forest-green)]" />
                   <Input
                     value={searchValue}
                     onChange={(event) => updateSearchValue(event.target.value)}
                     placeholder={searchPlaceholder}
-                    className="h-10 rounded-full border-[oklch(0.88_0.02_145)] bg-white pl-10 pr-10 shadow-none focus-visible:border-[#1a5c35] focus-visible:ring-[#1a5c35]/15"
+                    className="h-10 rounded-full border-[#e4e1d8] bg-[#fffefa] pl-10 pr-10 shadow-none focus-visible:border-[var(--forest-green)]"
                   />
                   {searchValue ? (
                     <button
                       type="button"
                       onClick={() => updateSearchValue('')}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[oklch(0.45_0.03_145)] transition-colors hover:text-[#1a5c35]"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--forest-green)] transition-colors hover:text-[var(--forest-green)]"
                       aria-label="Clear search"
                     >
                       <X className="size-4" />
@@ -319,8 +319,8 @@ export function SiteHeader({
                         className={cn(
                           'rounded-2xl px-4 py-3 text-sm font-medium transition-colors',
                           isActive
-                            ? 'bg-[#edf6ef] text-[#1a5c35]'
-                            : 'border border-[oklch(0.9_0.02_145)] bg-white text-[oklch(0.34_0.03_145)] hover:bg-[#f4f9f5] hover:text-[#1a5c35]',
+                            ? 'bg-[color-mix(in_srgb,var(--forest-green)_9%,white)] text-[var(--forest-green)]'
+                            : 'border border-[#e4e1d8] bg-[#fffefa] text-[oklch(0.34_0.03_95)] hover:bg-[color-mix(in_srgb,var(--forest-green)_6%,white)] hover:text-[var(--forest-green)]',
                         )}
                       >
                         {item.label}
@@ -336,24 +336,24 @@ export function SiteHeader({
         </div>
 
         {showLocationBar ? (
-          <div className="border-t border-[oklch(0.9_0.02_145)] border-b bg-[#f4f9f5]">
+          <div className="border-t border-[#e4e1d8] border-b bg-[#fffefa]">
             <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-2 text-sm text-[oklch(0.35_0.03_145)] sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-2">
-                <MapPin className="size-4 text-[#1a5c35]" />
+                <MapPin className="size-4 text-[var(--forest-green)]" />
                 <span>
-                  Showing producers near <span className="font-semibold text-[#1a5c35]">{locationCity}</span>{' '}
+                  Built for local ordering in <span className="font-semibold text-[var(--forest-green)]">{locationCity}</span>{' '}
                   <span className="text-[oklch(0.52_0.02_145)]">·</span>{' '}
                 </span>
                 <button
                   type="button"
                   onClick={() => navigate('/browse')}
-                  className="font-medium text-[#1a5c35] underline underline-offset-4 hover:text-[#154a2a]"
+                  className="font-medium text-[var(--forest-green)] underline underline-offset-4 hover:text-[var(--forest-green)]"
                 >
-                  Change location
+                  Browse the market
                 </button>
               </div>
 
-              <span className="text-xs font-medium text-[#1a5c35]">Browse freely — no account needed</span>
+              <span className="text-xs font-medium text-[var(--forest-green)]">Origin, seasonality, and delivery context stay visible</span>
             </div>
           </div>
         ) : null}

@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 
 import { apiJson } from '../../lib/api';
 import { SiteHeader } from '../../components/SiteHeader';
+import { PageLoadingSkeleton } from '../../components/LoadingSkeletons';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
@@ -179,9 +180,7 @@ export function RestaurantRecurringOrdersPage() {
         </Card>
 
         {loading ? (
-          <Card>
-            <CardContent className="p-6 text-sm text-gray-600">Loading recurring templates...</CardContent>
-          </Card>
+          <PageLoadingSkeleton rows={3} cards={2} />
         ) : activeTemplates.length === 0 ? (
           <Card>
             <CardContent className="p-6 text-sm text-gray-600">

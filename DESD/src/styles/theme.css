@@ -8,14 +8,16 @@
   
   /* Farm-inspired color palette */
   /* Earthy greens - primary palette */
-  --forest-green: oklch(0.45 0.12 155); /* Deep forest green */
-  --sage-green: oklch(0.68 0.08 145); /* Soft sage */
-  --moss-green: oklch(0.55 0.10 150); /* Natural moss */
-  --leaf-green: oklch(0.72 0.15 142); /* Fresh leaf */
+  --forest-green: #1a5c35; /* Single brand green */
+  --sage-green: var(--forest-green);
+  --moss-green: var(--forest-green);
+  --leaf-green: var(--forest-green);
   
   /* Warm earth tones */
-  --rich-soil: oklch(0.35 0.05 55); /* Dark brown */
-  --warm-earth: oklch(0.55 0.08 65); /* Medium brown */
+  --rich-soil: #29261d;
+  --warm-earth: #6f6a5f;
+  --cacao-brown: #7a7063; /* restrained warm neutral accent */
+  --copper-brown: #9b9184;
   --terracotta: oklch(0.60 0.12 45); /* Warm terracotta */
   --cream: oklch(0.96 0.02 85); /* Creamy off-white */
   
@@ -24,10 +26,10 @@
   --sunset-orange: oklch(0.68 0.18 55); /* Warm sunset */
   
   /* Semantic colors */
-  --background: oklch(0.98 0.01 100); /* Soft warm white */
+  --background: #fbfaf4; /* Soft warm white */
   --foreground: var(--rich-soil);
   
-  --card: #ffffff;
+  --card: #fffdf8;
   --card-foreground: var(--rich-soil);
   
   --popover: oklch(1 0 0);
@@ -36,22 +38,24 @@
   --primary: var(--forest-green);
   --primary-foreground: oklch(0.98 0 0);
   
-  --secondary: var(--sage-green);
+  --secondary: var(--earth-accent-soft);
   --secondary-foreground: var(--rich-soil);
   
   --muted: var(--cream);
   --muted-foreground: var(--warm-earth);
   
-  --accent: oklch(0.92 0.02 145); /* Very light sage */
-  --accent-foreground: var(--forest-green);
+  --accent: #f2f0e9;
+  --accent-foreground: var(--earth-accent);
+  --earth-accent: var(--cacao-brown);
+  --earth-accent-soft: #f2f0e9;
   
   --destructive: oklch(0.55 0.22 25); /* Earthy red */
   --destructive-foreground: #ffffff;
   
-  --border: oklch(0.88 0.02 145); /* Soft sage border */
+  --border: #e4e1d8;
   --input: transparent;
-  --input-background: oklch(0.97 0.01 145);
-  --switch-background: oklch(0.80 0.04 145);
+  --input-background: #fffdf8;
+  --switch-background: #e4e1d8;
   
   --font-weight-medium: 500;
   --font-weight-normal: 400;
@@ -68,13 +72,13 @@
   --radius: 0.625rem;
   
   /* Sidebar */
-  --sidebar: oklch(0.96 0.02 145);
+  --sidebar: #fbfaf4;
   --sidebar-foreground: var(--rich-soil);
   --sidebar-primary: var(--forest-green);
   --sidebar-primary-foreground: oklch(0.98 0 0);
-  --sidebar-accent: oklch(0.92 0.02 145);
-  --sidebar-accent-foreground: var(--forest-green);
-  --sidebar-border: oklch(0.88 0.02 145);
+  --sidebar-accent: #f2f0e9;
+  --sidebar-accent-foreground: var(--earth-accent);
+  --sidebar-border: #e4e1d8;
   --sidebar-ring: var(--moss-green);
 }
 
@@ -240,7 +244,7 @@
 
 html.landing-snap-mode {
   scroll-behavior: smooth;
-  scroll-padding-top: 7.5rem;
+  scroll-padding-top: 6.5rem;
   scroll-snap-type: y mandatory;
 }
 
@@ -250,20 +254,190 @@ body.landing-snap-mode {
 
 @layer components {
   .landing-snap-panel {
-    min-height: calc(100svh - 7.5rem);
+    min-height: calc(100svh - 6.5rem);
+    padding-block: clamp(1.5rem, 4svh, 4rem);
     scroll-snap-align: start;
     scroll-snap-stop: always;
+  }
+
+  .site-search-form {
+    flex: 0.85 1 17rem;
+    max-width: 24rem;
+    transition:
+      flex-basis 260ms ease,
+      max-width 260ms ease,
+      transform 260ms ease;
+  }
+
+  .site-search-form:focus-within {
+    flex-basis: 34rem;
+    max-width: 34rem;
+    transform: translateY(-1px);
+  }
+
+  .market-page {
+    background:
+      linear-gradient(180deg, #fbfaf4 0%, #f7f1e6 100%);
+    color: oklch(0.24 0.035 88);
+    overflow-x: hidden;
+  }
+
+  .market-section {
+    position: relative;
+    overflow: hidden;
+    border-top: 1px solid color-mix(in oklch, var(--forest-green) 16%, transparent);
+  }
+
+  .market-section-cream {
+    background: #fbfaf4;
+  }
+
+  .market-section-green {
+    background: var(--forest-green);
+    color: white;
+  }
+
+  .market-section-brown {
+    background: linear-gradient(180deg, #fffdf8 0%, #f4f2eb 100%);
+    color: oklch(0.23 0.034 87);
+  }
+
+  .market-section-white {
+    background: #fffdf8;
+  }
+
+  .market-eyebrow {
+    color: var(--earth-accent);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+  }
+
+  .market-hero-title {
+    font-family: var(--font-serif);
+    color: oklch(0.23 0.034 87);
+    font-size: clamp(2.45rem, min(8vw, 10svh), 7.2rem);
+    font-weight: 800;
+    line-height: 0.95;
+    letter-spacing: 0;
+    max-width: 100%;
+    overflow-wrap: normal;
+  }
+
+  .market-section-title {
+    font-family: var(--font-serif);
+    font-size: clamp(2rem, min(5vw, 7.5svh), 4.9rem);
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: 0;
+  }
+
+  .market-copy {
+    color: oklch(0.39 0.032 122);
+    font-size: clamp(0.98rem, 1.4vw, 1.18rem);
+    line-height: 1.68;
+  }
+
+  .market-section-green .market-copy {
+    color: rgba(255, 255, 255, 0.78);
+  }
+
+  .market-section-brown .market-copy {
+    color: oklch(0.39 0.032 122);
+  }
+
+  .market-button-primary {
+    background: var(--forest-green);
+    color: white;
+  }
+
+  .market-button-primary:hover {
+    background: var(--forest-green);
+    color: white;
+    box-shadow: 0 10px 28px color-mix(in srgb, var(--forest-green) 24%, transparent);
+  }
+
+  .market-button-brown {
+    background: var(--forest-green);
+    color: white;
+  }
+
+  .market-button-brown:hover {
+    background: var(--forest-green);
+    color: white;
+    box-shadow: 0 10px 28px color-mix(in srgb, var(--forest-green) 24%, transparent);
+  }
+
+  .market-button-outline {
+    border-color: color-mix(in srgb, var(--forest-green) 42%, white);
+    color: var(--forest-green);
+  }
+
+  .market-button-outline:hover {
+    background: color-mix(in srgb, var(--forest-green) 8%, white);
+    color: var(--forest-green);
+  }
+
+  .market-display-panel {
+    border: 1px solid rgba(255, 255, 255, 0.62);
+    background: rgba(255, 255, 255, 0.48);
+    box-shadow: 0 28px 80px rgba(58, 75, 47, 0.15);
+    backdrop-filter: blur(22px);
+  }
+
+  .market-route-line {
+    background:
+      linear-gradient(90deg, transparent, color-mix(in oklch, var(--forest-green) 38%, transparent), transparent),
+      repeating-linear-gradient(90deg, transparent 0 32px, color-mix(in srgb, var(--forest-green) 24%, transparent) 32px 34px);
   }
 }
 
 @media (min-width: 768px) {
   html.landing-snap-mode {
-    scroll-padding-top: 7rem;
+    scroll-padding-top: 6.4rem;
   }
 
   @layer components {
     .landing-snap-panel {
-      min-height: calc(100svh - 7rem);
+      min-height: calc(100svh - 6.4rem);
+    }
+  }
+}
+
+@media (max-width: 767px) {
+  html.landing-snap-mode {
+    scroll-padding-top: 7.9rem;
+    scroll-snap-type: none;
+  }
+
+  @layer components {
+    .landing-snap-panel {
+      min-height: auto;
+      padding-block: 2.25rem;
+      scroll-snap-align: none;
+      scroll-snap-stop: normal;
+    }
+
+    .market-hero-title {
+      font-size: clamp(2.35rem, 12vw, 3.3rem);
+      line-height: 0.95;
+    }
+
+    .market-section-title {
+      font-size: clamp(2.05rem, 10vw, 3rem);
+    }
+  }
+}
+
+@media (max-height: 760px) and (min-width: 768px) {
+  @layer components {
+    .landing-snap-panel {
+      padding-block: 1.25rem;
+    }
+
+    .market-display-panel {
+      box-shadow: 0 18px 54px rgba(58, 75, 47, 0.13);
     }
   }
 }
