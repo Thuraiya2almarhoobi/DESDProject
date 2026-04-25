@@ -5,6 +5,7 @@ Django==5.2.11
 django-cors-headers==4.7.0
 djangorestframework==3.16.1
 djangorestframework-simplejwt==5.5.1
+google-auth==2.41.1
 idna==3.11
 psycopg2-binary==2.9.11
 python-dotenv==1.2.1

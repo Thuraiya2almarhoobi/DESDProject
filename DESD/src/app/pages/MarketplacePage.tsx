@@ -2,7 +2,7 @@
 import { useNavigate, useSearchParams } from 'react-router';
 import { Filter, X, Plus, Minus, AlertCircle, AlertTriangle, Star } from 'lucide-react';
 import { toast } from 'sonner';
-import { Product, UserRole } from '../types';
+import { Product } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 import { fetchCategories, fetchProducts } from '../api/catalog';
@@ -63,7 +63,7 @@ export function MarketplacePage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
-  const { addToCartAndWait, getProductCartQuantity, undoLastAdd } = useCart();
+  const { addToCartAndWait, getProductCartQuantity, prepareSingleItemCheckout, undoLastAdd } = useCart();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<string[]>(fallbackCategories);
   const [searchQuery, setSearchQuery] = useState(() => searchParams.get('q') || '');
@@ -362,6 +362,62 @@ export function MarketplacePage() {
         duration: 4000,
       },
     );
+  };
+
+  const handleBuyNow = async (product: Product, quantity: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+
+    if (!user) {
+      toast.error('Please sign in to buy this item.', {
+        action: {
+          label: 'Login',
+          onClick: () => navigate('/login'),
+        },
+      });
+      return;
+    }
+
+    if (!isBuyerRole(user.role)) {
+      toast.error('This portal does not support ordering from the marketplace.', {
+        action: {
+          label: 'Dashboard',
+          onClick: () => navigate(getDashboardPathForRole(user.role)),
+        },
+      });
+      return;
+    }
+
+    const requiresAllergenReview = product.allergens.length > 0;
+    const hasReviewedAllergens =
+      typeof window !== 'undefined' &&
+      window.localStorage.getItem(`allergen-reviewed-${product.id}`) === 'true';
+
+    if (requiresAllergenReview && !hasReviewedAllergens) {
+      toast.warning('Please review allergen information on the product page before checkout.');
+      navigate(`/product/${product.id}`);
+      return;
+    }
+
+    const currentCartQuantity = getProductCartQuantity(product.id);
+    const maxCheckoutQuantity = Math.max(
+      0,
+      Math.min(MAX_ORDER_ITEM_QUANTITY, Math.floor(product.stock)),
+    );
+    if (maxCheckoutQuantity <= 0) {
+      toast.error(`${product.name} is currently unavailable.`);
+      return;
+    }
+
+    const quantityToBuy = Math.min(quantity, maxCheckoutQuantity);
+    const checkoutReady = await prepareSingleItemCheckout(product, quantityToBuy);
+    if (!checkoutReady) {
+      return;
+    }
+
+    if (currentCartQuantity > 0 && currentCartQuantity !== quantityToBuy) {
+      toast.info(`${product.name} quantity updated for checkout.`);
+    }
+    navigate('/checkout');
   };
 
   const retryLoad = () => {
@@ -899,9 +955,9 @@ export function MarketplacePage() {
                     key={product.id} 
                     product={product} 
                     handleAddToCart={handleAddToCart} 
+                    handleBuyNow={handleBuyNow}
                     currentCartQuantity={getProductCartQuantity(product.id)}
                     isBulkBuyer={isBulkBuyer}
-                    userRole={user?.role}
                   />
                 ))}
               </div>
@@ -917,18 +973,19 @@ export function MarketplacePage() {
 function ProductCard({ 
   product, 
   handleAddToCart,
+  handleBuyNow,
   currentCartQuantity,
   isBulkBuyer,
-  userRole,
 }: { 
   product: Product; 
   handleAddToCart: (product: Product, quantity: number, e: React.MouseEvent) => Promise<void>;
+  handleBuyNow: (product: Product, quantity: number, e: React.MouseEvent) => Promise<void>;
   currentCartQuantity: number;
   isBulkBuyer: boolean;
-  userRole?: UserRole;
 }) {
   const navigate = useNavigate();
   const [quantity, setQuantity] = useState(1);
+  const [activeAction, setActiveAction] = useState<'add' | 'buy' | null>(null);
 
   const isAvailable = product.availability !== 'unavailable' && product.stock > 0;
   const hasAllergens = product.allergens && product.allergens.length > 0;
@@ -1139,21 +1196,41 @@ function ProductCard({
                 </Badge>
               )}
             </div>
-            <Button
-              size="sm"
-              className="w-full focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
-              onClick={(e) => handleAddToCart(product, quantity, e)}
-              disabled={remainingStock <= 0}
-              aria-label={`Add ${quantity} ${product.unit} of ${product.name} to cart`}
-            >
-              {remainingStock <= 0
-                ? 'Max in cart'
-                : isBulkBuyer
-                  ? userRole === 'COMMUNITY'
-                    ? 'Add to Community Cart'
-                    : 'Add to Restaurant Cart'
-                  : `Add ${quantity} ${product.unit}`}
-            </Button>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full border-[var(--forest-green)] text-[var(--forest-green)] hover:bg-[color-mix(in_srgb,var(--forest-green)_8%,white)] hover:text-[var(--forest-green)] focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
+                onClick={async (e) => {
+                  setActiveAction('add');
+                  try {
+                    await handleAddToCart(product, quantity, e);
+                  } finally {
+                    setActiveAction(null);
+                  }
+                }}
+                disabled={remainingStock <= 0 || activeAction !== null}
+                aria-label={`Add ${quantity} ${product.unit} of ${product.name} to cart`}
+              >
+                {activeAction === 'add' ? 'Adding...' : remainingStock <= 0 ? 'Max in cart' : 'Add to cart'}
+              </Button>
+              <Button
+                size="sm"
+                className="w-full focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
+                onClick={async (e) => {
+                  setActiveAction('buy');
+                  try {
+                    await handleBuyNow(product, quantity, e);
+                  } finally {
+                    setActiveAction(null);
+                  }
+                }}
+                disabled={remainingStock <= 0 || activeAction !== null}
+                aria-label={`Buy ${quantity} ${product.unit} of ${product.name} now`}
+              >
+                {activeAction === 'buy' ? 'Preparing...' : 'Buy now'}
+              </Button>
+            </div>
             {isBulkBuyer && (
               <p className="text-xs text-gray-500">
                 Large-order mode. Up to {MAX_ORDER_ITEM_QUANTITY} units per product.

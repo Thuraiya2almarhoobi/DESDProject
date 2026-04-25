@@ -155,11 +155,14 @@ export function CartPage() {
                 ? 'Community Bulk Cart'
                 : user?.role === 'RESTAURANT'
                   ? 'Restaurant Order Cart'
+                  : user?.role === 'PRODUCER'
+                    ? 'Producer Shopping Cart'
                   : 'Shopping Cart'}
             </h1>
             <p className="mt-1 text-sm text-gray-600">
-              Add products, update quantities, remove items, and review producer groups before
-              checkout.
+              {user?.role === 'PRODUCER'
+                ? 'Buy from other local producers with the same account you use to manage your stall.'
+                : 'Add products, update quantities, remove items, and review producer groups before checkout.'}
             </p>
           </div>
 
@@ -539,6 +542,8 @@ export function CartPage() {
                     ? 'Proceed to Community Checkout'
                     : user?.role === 'RESTAURANT'
                       ? 'Proceed to Restaurant Checkout'
+                      : user?.role === 'PRODUCER'
+                        ? 'Proceed as Producer Buyer'
                       : 'Proceed to Checkout'}
                 </Button>
 

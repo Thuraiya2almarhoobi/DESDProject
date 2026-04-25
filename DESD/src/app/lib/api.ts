@@ -244,6 +244,22 @@ export interface ApiStory {
   created_at: string;
 }
 
+export interface ApiGeneratedContentSuggestion {
+  id: number;
+  content_type: 'recipe' | 'story';
+  products: Array<{ id: number; name: string; unit: string; price: string }>;
+  title: string;
+  description: string;
+  ingredients: string;
+  instructions: string;
+  body: string;
+  seasonal_tag: string;
+  status: 'saved' | 'used';
+  ai_disclosure: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export function setBasicAuthToken(token: string | null): void {
   if (typeof window === 'undefined') {
     return;

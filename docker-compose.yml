@@ -9,6 +9,7 @@ services:
         VITE_DELIVERY_SIMULATION_POLL_SECONDS: "${VITE_DELIVERY_SIMULATION_POLL_SECONDS:-15}"
     volumes:
       - media_data:/app/media
+      - ${HOME}/.config/gcloud/application_default_credentials.json:/app/credentials/application_default_credentials.json:ro
     ports:
       - "8000:8000"
     depends_on:
@@ -50,6 +51,11 @@ services:
       DELIVERY_SIMULATION_ENABLED: "${DELIVERY_SIMULATION_ENABLED:-true}"
       DELIVERY_SIMULATION_TOTAL_SECONDS: "${DELIVERY_SIMULATION_TOTAL_SECONDS:-120}"
       DELIVERY_SIMULATION_POLL_SECONDS: "${DELIVERY_SIMULATION_POLL_SECONDS:-15}"
+      VERTEX_AI_PROJECT_ID: "${VERTEX_AI_PROJECT_ID:-}"
+      VERTEX_AI_LOCATION: "${VERTEX_AI_LOCATION:-us-central1}"
+      VERTEX_AI_MODEL: "${VERTEX_AI_MODEL:-gemini-2.5-flash}"
+      VERTEX_AI_TIMEOUT_SECONDS: "${VERTEX_AI_TIMEOUT_SECONDS:-30}"
+      GOOGLE_APPLICATION_CREDENTIALS: "${GOOGLE_APPLICATION_CREDENTIALS:-/app/credentials/application_default_credentials.json}"
     command: >
       sh -c "
       until python manage.py migrate; do

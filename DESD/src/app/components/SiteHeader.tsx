@@ -33,7 +33,7 @@ function isMarketingPath(pathname: string): boolean {
 }
 
 function canOrder(role?: string | null): boolean {
-  return role === 'CUSTOMER' || role === 'COMMUNITY' || role === 'RESTAURANT';
+  return role === 'CUSTOMER' || role === 'PRODUCER' || role === 'COMMUNITY' || role === 'RESTAURANT';
 }
 
 export function SiteHeader({
@@ -84,13 +84,6 @@ export function SiteHeader({
     const queryFromUrl = new URLSearchParams(location.search).get('q') || '';
     setLocalSearchQuery(queryFromUrl);
   }, [location.search, onSearchQueryChange]);
-
-  useEffect(() => {
-    if (user?.role === 'PRODUCER') {
-      clearPendingCustomerPreviewExitTarget();
-      stopCustomerPreview();
-    }
-  }, [stopCustomerPreview, user?.role]);
 
   const updateSearchValue = (value: string) => {
     if (onSearchQueryChange) {
@@ -192,69 +185,71 @@ export function SiteHeader({
     <div className="sticky top-0 z-30 border-b border-[#e4e1d8] bg-[#fffefa]/95 shadow-sm backdrop-blur-sm">
       <header>
         <div className="mx-auto max-w-7xl px-4">
-          <div className="hidden h-[60px] items-center gap-4 md:flex">
-            <Link
-              to={brandLinkTarget}
-              className="flex shrink-0 items-center gap-3 text-[var(--forest-green)]"
-              onClick={(event) => handleSamePageClick(event, brandLinkTarget)}
-            >
-              <div className="flex size-9 items-center justify-center rounded-xl bg-[var(--forest-green)] shadow-sm">
-                <Sprout className="size-4 text-white" />
-              </div>
-              <span className="text-base font-semibold tracking-tight">Local Food Marketplace</span>
-            </Link>
+          <div className="hidden md:block">
+            <div className="grid min-h-16 grid-cols-[minmax(12rem,1fr)_minmax(18rem,38rem)_minmax(12rem,1fr)] items-center gap-4 py-3">
+              <Link
+                to={brandLinkTarget}
+                className="flex min-w-0 items-center gap-3 text-[var(--forest-green)]"
+                onClick={(event) => handleSamePageClick(event, brandLinkTarget)}
+              >
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[var(--forest-green)] shadow-sm">
+                  <Sprout className="size-4 text-white" />
+                </div>
+                <span className="truncate text-base font-semibold tracking-tight">Local Food Marketplace</span>
+              </Link>
 
-            <div className="h-6 w-px shrink-0 bg-[#e4e1d8]" />
+              {renderSearch ? (
+                <form onSubmit={handleSearchSubmit} className="site-search-form relative w-full justify-self-center">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--forest-green)]" />
+                  <Input
+                    value={searchValue}
+                    onChange={(event) => updateSearchValue(event.target.value)}
+                    placeholder={searchPlaceholder}
+                    className="h-11 rounded-full border-[#d8d0c0] bg-[#fffefa] pl-10 pr-10 shadow-none transition-colors focus-visible:border-[var(--forest-green)] focus-visible:ring-[var(--forest-green)]/15"
+                  />
+                  {searchValue ? (
+                    <button
+                      type="button"
+                      onClick={() => updateSearchValue('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--forest-green)] transition-colors hover:text-[var(--forest-green)]"
+                      aria-label="Clear search"
+                    >
+                      <X className="size-4" />
+                    </button>
+                  ) : null}
+                </form>
+              ) : (
+                <div />
+              )}
+
+              <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">{desktopActionButtons}</div>
+            </div>
 
             {showNavigation ? (
-              <nav aria-label="Primary" className="flex shrink-0 items-center gap-1 overflow-x-auto">
-                {navItems.map((item) => {
-                  const isActive = isSiteNavItemActive(location.pathname, item);
+              <div className="border-t border-[#e9e3d7]">
+                <nav aria-label="Primary" className="flex items-center justify-center gap-4 overflow-x-auto py-2.5">
+                  {navItems.map((item) => {
+                    const isActive = isSiteNavItemActive(location.pathname, item);
 
-                  return (
-                    <Link
-                      key={item.label}
-                      to={item.to}
-                      onClick={(event) => handleSamePageClick(event, item.to)}
-                      className={cn(
-                        'rounded-full px-3.5 py-2 text-sm font-medium transition-colors',
-                        isActive
-                          ? 'bg-[color-mix(in_srgb,var(--forest-green)_9%,white)] text-[var(--forest-green)]'
-                          : 'text-[oklch(0.38_0.03_95)] hover:bg-[color-mix(in_srgb,var(--forest-green)_6%,white)] hover:text-[var(--forest-green)]',
-                      )}
-                    >
-                      {item.label}
-                    </Link>
-                  );
-                })}
-              </nav>
+                    return (
+                      <Link
+                        key={item.label}
+                        to={item.to}
+                        onClick={(event) => handleSamePageClick(event, item.to)}
+                        className={cn(
+                          'border-b-2 px-2.5 py-1.5 text-sm font-medium transition-colors',
+                          isActive
+                            ? 'border-[var(--forest-green)] text-[var(--forest-green)]'
+                            : 'border-transparent text-[oklch(0.38_0.03_95)] hover:border-[color-mix(in_srgb,var(--forest-green)_35%,white)] hover:text-[var(--forest-green)]',
+                        )}
+                      >
+                        {item.label}
+                      </Link>
+                    );
+                  })}
+                </nav>
+              </div>
             ) : null}
-
-            {renderSearch ? (
-              <form onSubmit={handleSearchSubmit} className="site-search-form relative min-w-[220px]">
-                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--forest-green)]" />
-                <Input
-                  value={searchValue}
-                  onChange={(event) => updateSearchValue(event.target.value)}
-                  placeholder={searchPlaceholder}
-                  className="h-10 rounded-full border-[#e4e1d8] bg-[#fffefa] pl-10 pr-10 shadow-none focus-visible:border-[var(--forest-green)] focus-visible:ring-[var(--forest-green)]/15"
-                />
-                {searchValue ? (
-                  <button
-                    type="button"
-                    onClick={() => updateSearchValue('')}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--forest-green)] transition-colors hover:text-[var(--forest-green)]"
-                    aria-label="Clear search"
-                  >
-                    <X className="size-4" />
-                  </button>
-                ) : null}
-              </form>
-            ) : (
-              <div className="flex-1" />
-            )}
-
-            <div className="flex shrink-0 items-center justify-end gap-2">{desktopActionButtons}</div>
           </div>
 
           <div className="flex h-[60px] items-center justify-between gap-3 md:hidden">

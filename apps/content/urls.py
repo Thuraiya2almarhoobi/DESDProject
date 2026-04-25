@@ -4,6 +4,8 @@ from .views import (
     ContentFeedAPIView,
     FarmStoryDetailAPIView,
     FarmStoryListCreateAPIView,
+    GeneratedContentSuggestionDetailAPIView,
+    GeneratedContentSuggestionListCreateAPIView,
     ProducerOwnedProductsAPIView,
     ProductRecipesAPIView,
     RecipeDetailAPIView,
@@ -13,6 +15,12 @@ from .views import (
 
 urlpatterns = [
     path("feed/", ContentFeedAPIView.as_view(), name="content-feed"),
+    path("ai/suggestions/", GeneratedContentSuggestionListCreateAPIView.as_view(), name="content-ai-suggestions"),
+    path(
+        "ai/suggestions/<int:suggestion_id>/",
+        GeneratedContentSuggestionDetailAPIView.as_view(),
+        name="content-ai-suggestion-detail",
+    ),
     path("producer/products/", ProducerOwnedProductsAPIView.as_view(), name="content-producer-products"),
     path("recipes/", RecipeListCreateAPIView.as_view(), name="content-recipes"),
     path("recipes/<int:recipe_id>/", RecipeDetailAPIView.as_view(), name="content-recipe-detail"),

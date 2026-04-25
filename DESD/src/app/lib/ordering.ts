@@ -23,7 +23,12 @@ function normalizeRole(role?: UserRole | string | null): UserRole | null {
 
 export function isBuyerRole(role?: UserRole | string | null): boolean {
   const normalizedRole = normalizeRole(role);
-  return normalizedRole === 'CUSTOMER' || normalizedRole === 'COMMUNITY' || normalizedRole === 'RESTAURANT';
+  return (
+    normalizedRole === 'CUSTOMER' ||
+    normalizedRole === 'PRODUCER' ||
+    normalizedRole === 'COMMUNITY' ||
+    normalizedRole === 'RESTAURANT'
+  );
 }
 
 export function isBulkBuyerRole(role?: UserRole | string | null): boolean {

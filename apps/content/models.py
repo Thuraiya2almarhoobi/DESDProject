@@ -59,3 +59,39 @@ class SavedRecipe(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["user", "recipe"], name="content_unique_saved_recipe")]
+
+
+class GeneratedContentSuggestion(models.Model):
+    class ContentType(models.TextChoices):
+        RECIPE = "recipe", "Recipe"
+        STORY = "story", "Farm story"
+
+    class Status(models.TextChoices):
+        SAVED = "saved", "Saved"
+        USED = "used", "Used"
+
+    producer = models.ForeignKey(
+        "orders.Producer", on_delete=models.CASCADE, related_name="generated_content_suggestions"
+    )
+    content_type = models.CharField(max_length=20, choices=ContentType.choices)
+    products = models.ManyToManyField("orders.Product", related_name="generated_content_suggestions", blank=True)
+    prompt_context = models.JSONField(default=dict, blank=True)
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    ingredients = models.TextField(blank=True)
+    instructions = models.TextField(blank=True)
+    body = models.TextField(blank=True)
+    seasonal_tag = models.CharField(max_length=50, blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.SAVED)
+    ai_disclosure = models.CharField(
+        max_length=255,
+        default="Generated with Vertex AI for producer review before publishing.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.get_content_type_display()}: {self.title}"

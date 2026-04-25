@@ -409,7 +409,7 @@ export function ProducerOrdersPage() {
     <div className="min-h-screen bg-gradient-to-br from-[oklch(0.98_0.01_145)] to-[oklch(0.96_0.02_150)]">
       <SiteHeader />
 
-      <main className="max-w-6xl mx-auto px-4 py-8">
+      <main className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-5 lg:min-h-[calc(100svh-60px)] lg:px-6">
         <div className="mb-6">
           <Button
             variant="ghost"
@@ -421,17 +421,33 @@ export function ProducerOrdersPage() {
           </Button>
         </div>
 
-        <div className="flex items-center justify-between mb-6">
+        <div className="mb-6 flex flex-col gap-4 rounded-2xl border border-[#e4e1d8] bg-[#fffefa] p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-semibold">Orders</h1>
-            <p className="text-gray-700 mt-1 flex items-center gap-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--earth-accent)]">Producer sales</p>
+            <h1 className="mt-1 text-3xl font-semibold tracking-tight">Sales Orders</h1>
+            <p className="mt-1 flex items-center gap-2 text-sm text-gray-700">
               <TrendingUp className="size-4" />
               Live checkout orders for your producer account
             </p>
           </div>
-          <Badge variant="secondary" className="text-base px-3 py-1.5">
-            {orders.length} total orders
-          </Badge>
+          <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+            <div className="rounded-xl border border-[#eee8dc] bg-white/70 px-3 py-2">
+              <p className="text-gray-500">Pending</p>
+              <p className="text-lg font-semibold">{statusCounts.pending}</p>
+            </div>
+            <div className="rounded-xl border border-[#eee8dc] bg-white/70 px-3 py-2">
+              <p className="text-gray-500">Ready</p>
+              <p className="text-lg font-semibold">{statusCounts.ready}</p>
+            </div>
+            <div className="rounded-xl border border-[#eee8dc] bg-white/70 px-3 py-2">
+              <p className="text-gray-500">Delivered</p>
+              <p className="text-lg font-semibold">{statusCounts.delivered}</p>
+            </div>
+            <div className="rounded-xl border border-[#eee8dc] bg-white/70 px-3 py-2">
+              <p className="text-gray-500">Total</p>
+              <p className="text-lg font-semibold">{orders.length}</p>
+            </div>
+          </div>
         </div>
 
         {urgentOrders.length > 0 && (

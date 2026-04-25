@@ -1,4 +1,5 @@
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from rest_framework import status
@@ -6,6 +7,7 @@ from rest_framework.test import APIClient, APITestCase
 
 from apps.orders.models import Producer, Product
 
+from .ai_services import GeneratedSuggestion
 from .models import Recipe
 
 
@@ -23,9 +25,24 @@ class ContentApiTests(APITestCase):
         self.product = Product.objects.create(
             producer=self.producer,
             name="Carrots",
+            category="Vegetables",
+            description="Fresh carrots harvested for seasonal boxes",
             unit="kg",
             price=Decimal("2.20"),
             stock_quantity=Decimal("20.00"),
+            is_available=True,
+            allergen_info="No common allergens",
+        )
+        self.other_producer_user = User.objects.create_user(username="other_content_producer", password="pass1234")
+        self.other_producer = Producer.objects.create(
+            user=self.other_producer_user, business_name="Other Farm", postcode="BS2 1AA"
+        )
+        self.other_product = Product.objects.create(
+            producer=self.other_producer,
+            name="Potatoes",
+            unit="kg",
+            price=Decimal("1.80"),
+            stock_quantity=Decimal("12.00"),
             is_available=True,
         )
 
@@ -91,3 +108,123 @@ class ContentApiTests(APITestCase):
         self.assertEqual(producer_products_res.status_code, status.HTTP_200_OK)
         self.assertGreaterEqual(len(producer_products_res.data), 1)
         self.assertEqual(producer_products_res.data[0]["id"], self.product.id)
+
+    @patch("apps.content.views.generate_content_suggestions")
+    def test_producer_can_generate_private_recipe_suggestions(self, mock_generate):
+        mock_generate.return_value = [
+            GeneratedSuggestion(
+                title=f"Carrot Recipe {index}",
+                description="A seasonal carrot dish",
+                ingredients="Carrots\nOlive oil\nSalt",
+                instructions="Roast until tender.",
+                seasonal_tag="Autumn",
+            )
+            for index in range(1, 4)
+        ]
+
+        create_res = self.producer_client.post(
+            "/api/content/ai/suggestions/",
+            {
+                "content_type": "recipe",
+                "product_ids": [self.product.id],
+                "notes": "Make it simple for families",
+                "tone": "warm",
+                "seasonal_tag": "Autumn",
+            },
+            format="json",
+        )
+
+        self.assertEqual(create_res.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(len(create_res.data), 3)
+        self.assertEqual(create_res.data[0]["content_type"], "recipe")
+        self.assertEqual(create_res.data[0]["status"], "saved")
+        self.assertEqual(create_res.data[0]["products"][0]["id"], self.product.id)
+        mock_generate.assert_called_once()
+
+        list_res = self.producer_client.get("/api/content/ai/suggestions/")
+        self.assertEqual(list_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(list_res.data), 3)
+
+        feed_res = self.customer_client.get("/api/content/feed/")
+        self.assertEqual(feed_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(feed_res.data, [])
+
+    @patch("apps.content.views.generate_content_suggestions")
+    def test_producer_can_generate_private_farm_story_suggestions(self, mock_generate):
+        mock_generate.return_value = [
+            GeneratedSuggestion(
+                title=f"Harvest Story {index}",
+                body="This week we lifted carrots for local kitchens.",
+                seasonal_tag="Harvest",
+            )
+            for index in range(1, 4)
+        ]
+
+        create_res = self.producer_client.post(
+            "/api/content/ai/suggestions/",
+            {
+                "content_type": "story",
+                "product_ids": [self.product.id],
+                "occasion": "weekly update",
+                "storage_context": "Carrots keep well in a cool drawer.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(create_res.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(len(create_res.data), 3)
+        self.assertEqual(create_res.data[0]["content_type"], "story")
+        self.assertIn("Harvest Story", create_res.data[0]["title"])
+        self.assertIn("carrots", create_res.data[0]["body"].lower())
+
+    def test_customer_cannot_generate_or_view_ai_suggestions(self):
+        create_res = self.customer_client.post(
+            "/api/content/ai/suggestions/",
+            {"content_type": "recipe", "product_ids": [self.product.id]},
+            format="json",
+        )
+        self.assertEqual(create_res.status_code, status.HTTP_403_FORBIDDEN)
+
+        list_res = self.customer_client.get("/api/content/ai/suggestions/")
+        self.assertEqual(list_res.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_producer_cannot_generate_with_another_producers_product(self):
+        create_res = self.producer_client.post(
+            "/api/content/ai/suggestions/",
+            {"content_type": "recipe", "product_ids": [self.other_product.id]},
+            format="json",
+        )
+        self.assertEqual(create_res.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_missing_vertex_config_returns_clear_unavailable_response(self):
+        create_res = self.producer_client.post(
+            "/api/content/ai/suggestions/",
+            {"content_type": "recipe", "product_ids": [self.product.id]},
+            format="json",
+        )
+        self.assertEqual(create_res.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+        self.assertIn("Vertex AI", create_res.data["detail"])
+
+    @patch("apps.content.views.generate_content_suggestions")
+    def test_producer_can_mark_ai_suggestion_used_and_delete_it(self, mock_generate):
+        mock_generate.return_value = [
+            GeneratedSuggestion(title=f"Carrot Recipe {index}", ingredients="Carrots", instructions="Cook")
+            for index in range(1, 4)
+        ]
+        create_res = self.producer_client.post(
+            "/api/content/ai/suggestions/",
+            {"content_type": "recipe", "product_ids": [self.product.id]},
+            format="json",
+        )
+        suggestion_id = create_res.data[0]["id"]
+
+        patch_res = self.producer_client.patch(
+            f"/api/content/ai/suggestions/{suggestion_id}/",
+            {"status": "used"},
+            format="json",
+        )
+        self.assertEqual(patch_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(patch_res.data["status"], "used")
+
+        delete_res = self.producer_client.delete(f"/api/content/ai/suggestions/{suggestion_id}/")
+        self.assertEqual(delete_res.status_code, status.HTTP_204_NO_CONTENT)

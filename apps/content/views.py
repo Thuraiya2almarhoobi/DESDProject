@@ -1,4 +1,5 @@
 from django.shortcuts import get_object_or_404
+from django.db import transaction
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -6,12 +7,44 @@ from rest_framework.views import APIView
 
 from apps.orders.models import Producer, Product
 
-from .models import FarmStory, Recipe, SavedRecipe
-from .serializers import FarmStorySerializer, RecipeSerializer
+from .ai_services import VertexAIResponseError, VertexAIUnavailable, generate_content_suggestions
+from .models import FarmStory, GeneratedContentSuggestion, Recipe, SavedRecipe
+from .serializers import FarmStorySerializer, GeneratedContentSuggestionSerializer, RecipeSerializer
 
 
 def _get_request_producer(user) -> Producer | None:
     return Producer.objects.filter(user=user, is_active=True).first()
+
+
+def _product_ai_payload(product: Product) -> dict:
+    return {
+        "id": product.id,
+        "name": product.name,
+        "category": product.category,
+        "description": product.description,
+        "unit": product.unit,
+        "price": str(product.price),
+        "stock_quantity": str(product.stock_quantity),
+        "is_available": product.is_available,
+        "in_season": product.in_season,
+        "seasonal_window": product.seasonal_window_label,
+        "harvest_date": product.harvest_date.isoformat() if product.harvest_date else "",
+        "allergen_info": product.allergen_info,
+    }
+
+
+def _prompt_context(request, producer: Producer, seasonal_tag: str) -> dict:
+    return {
+        "producer": {
+            "business_name": producer.business_name,
+            "postcode": producer.postcode,
+        },
+        "notes": str(request.data.get("notes", "")).strip(),
+        "tone": str(request.data.get("tone", "")).strip(),
+        "occasion": str(request.data.get("occasion", "")).strip(),
+        "storage_context": str(request.data.get("storage_context", "")).strip(),
+        "seasonal_tag": seasonal_tag,
+    }
 
 
 class ContentFeedAPIView(APIView):
@@ -205,6 +238,137 @@ class ProducerOwnedProductsAPIView(APIView):
             for product in products
         ]
         return Response(payload)
+
+
+class GeneratedContentSuggestionListCreateAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        producer = _get_request_producer(request.user)
+        if not producer:
+            return Response(
+                {"detail": "Only producers can view AI content suggestions."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        suggestions = GeneratedContentSuggestion.objects.filter(producer=producer).prefetch_related("products")
+        return Response(GeneratedContentSuggestionSerializer(suggestions, many=True).data)
+
+    def post(self, request):
+        producer = _get_request_producer(request.user)
+        if not producer:
+            return Response(
+                {"detail": "Only producers can generate AI content suggestions."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        content_type = str(request.data.get("content_type", "")).strip()
+        if content_type not in GeneratedContentSuggestion.ContentType.values:
+            return Response(
+                {"detail": "content_type must be recipe or story."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        raw_product_ids = request.data.get("product_ids", [])
+        if not isinstance(raw_product_ids, list) or not raw_product_ids:
+            return Response(
+                {"detail": "Select at least one producer product."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        product_ids = []
+        for product_id in raw_product_ids:
+            try:
+                product_ids.append(int(product_id))
+            except (TypeError, ValueError):
+                return Response(
+                    {"detail": "product_ids must contain only product IDs."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        products = list(Product.objects.filter(id__in=product_ids, producer=producer).order_by("name"))
+        if len({product.id for product in products}) != len(set(product_ids)):
+            return Response(
+                {"detail": "One or more selected products are unavailable for this producer."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        seasonal_tag = str(request.data.get("seasonal_tag", "")).strip()
+        context = _prompt_context(request, producer, seasonal_tag)
+        product_payloads = [_product_ai_payload(product) for product in products]
+
+        try:
+            generated = generate_content_suggestions(
+                content_type=content_type,
+                products=product_payloads,
+                context=context,
+            )
+        except VertexAIUnavailable as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        except VertexAIResponseError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+
+        with transaction.atomic():
+            suggestions = []
+            for item in generated:
+                suggestion = GeneratedContentSuggestion.objects.create(
+                    producer=producer,
+                    content_type=content_type,
+                    prompt_context=context,
+                    title=item.title,
+                    description=item.description,
+                    ingredients=item.ingredients,
+                    instructions=item.instructions,
+                    body=item.body,
+                    seasonal_tag=item.seasonal_tag or seasonal_tag,
+                )
+                suggestion.products.set(products)
+                suggestions.append(suggestion)
+
+        return Response(
+            GeneratedContentSuggestionSerializer(suggestions, many=True).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class GeneratedContentSuggestionDetailAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def _get_suggestion(self, request, suggestion_id: int):
+        producer = _get_request_producer(request.user)
+        if not producer:
+            return None, Response(
+                {"detail": "Only producers can manage AI content suggestions."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        suggestion = get_object_or_404(
+            GeneratedContentSuggestion.objects.prefetch_related("products"),
+            id=suggestion_id,
+            producer=producer,
+        )
+        return suggestion, None
+
+    def patch(self, request, suggestion_id: int):
+        suggestion, error = self._get_suggestion(request, suggestion_id)
+        if error is not None:
+            return error
+
+        next_status = str(request.data.get("status", "")).strip()
+        if next_status not in GeneratedContentSuggestion.Status.values:
+            return Response(
+                {"detail": "status must be saved or used."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        suggestion.status = next_status
+        suggestion.save(update_fields=["status", "updated_at"])
+        return Response(GeneratedContentSuggestionSerializer(suggestion).data)
+
+    def delete(self, request, suggestion_id: int):
+        suggestion, error = self._get_suggestion(request, suggestion_id)
+        if error is not None:
+            return error
+        suggestion.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class ToggleSavedRecipeAPIView(APIView):

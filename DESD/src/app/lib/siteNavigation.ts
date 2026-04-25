@@ -69,12 +69,13 @@ export function getSiteNavItems(role?: UserRole | null): SiteNavItem[] {
       ];
     case 'PRODUCER':
       return [
-        { label: 'Marketplace', to: '/marketplace', matchPrefixes: ['/marketplace', '/product'] },
         { label: 'Dashboard', to: '/producer/dashboard', matchPrefixes: ['/producer/dashboard'] },
-        { label: 'Orders', to: '/producer/orders', matchPrefixes: ['/producer/orders'] },
+        { label: 'Sales', to: '/producer/orders', matchPrefixes: ['/producer/orders'] },
         { label: 'Inventory', to: '/producer/inventory', matchPrefixes: ['/producer/inventory'] },
-        { label: 'Payments', to: '/producer/payments', matchPrefixes: ['/producer/payments'] },
-        { label: 'Recipes', to: '/content/feed', matchPrefixes: ['/content/feed'] },
+        { label: 'Payouts', to: '/producer/payments', matchPrefixes: ['/producer/payments'] },
+        { label: 'Content', to: '/content/feed', matchPrefixes: ['/content/feed'] },
+        { label: 'Marketplace', to: '/marketplace', matchPrefixes: ['/marketplace', '/product', '/cart', '/checkout'] },
+        { label: 'Purchases', to: '/orders/history', matchPrefixes: ['/orders/history'] },
       ];
     case 'ADMIN':
       return [

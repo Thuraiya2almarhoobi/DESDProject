@@ -60,7 +60,7 @@ import {
   patchProducerProductInApi,
 } from '../../services/productApi';
 
-type HealthFilter = 'all' | 'low-stock' | 'out-of-stock' | 'season-ending' | 'season-starting';
+type HealthFilter = 'all' | 'low-stock' | 'out-of-stock' | 'surplus' | 'season-ending' | 'season-starting';
 type MonthOption = { value: number; label: string };
 
 interface ProductDraft {
@@ -303,6 +303,9 @@ export function ProducerInventoryPage() {
     if (params.get('create') === 'product') {
       setCreateDialogOpen(true);
     }
+    if (params.get('focus') === 'surplus') {
+      setFilterHealthStatus('surplus');
+    }
   }, [location.search]);
 
   const handleCreateDialogChange = (open: boolean) => {
@@ -317,6 +320,7 @@ export function ProducerInventoryPage() {
 
   const lowStockItems = useMemo(() => products.filter((product) => isLowStock(product)), [products]);
   const outOfStockItems = useMemo(() => products.filter((product) => product.stock === 0), [products]);
+  const surplusItems = useMemo(() => products.filter((product) => product.isSurplus), [products]);
   const seasonEndingItems = useMemo(() => products.filter((product) => isSeasonEndingSoon(product)), [products]);
   const seasonStartingItems = useMemo(() => products.filter((product) => isSeasonStartingSoon(product)), [products]);
 
@@ -327,6 +331,9 @@ export function ProducerInventoryPage() {
     if (filterHealthStatus === 'out-of-stock') {
       return outOfStockItems;
     }
+    if (filterHealthStatus === 'surplus') {
+      return surplusItems;
+    }
     if (filterHealthStatus === 'season-ending') {
       return seasonEndingItems;
     }
@@ -334,7 +341,7 @@ export function ProducerInventoryPage() {
       return seasonStartingItems;
     }
     return products;
-  }, [filterHealthStatus, lowStockItems, outOfStockItems, products, seasonEndingItems, seasonStartingItems]);
+  }, [filterHealthStatus, lowStockItems, outOfStockItems, products, seasonEndingItems, seasonStartingItems, surplusItems]);
 
   const openEditor = (product: Product) => {
     if (editingId === product.id) {
@@ -588,7 +595,7 @@ export function ProducerInventoryPage() {
     <div className="min-h-screen bg-gradient-to-br from-[oklch(0.98_0.01_145)] to-[oklch(0.96_0.02_150)]">
       <SiteHeader />
 
-      <main className="max-w-6xl mx-auto px-4 py-8">
+      <main className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-5 lg:min-h-[calc(100svh-60px)] lg:px-6">
         <div className="mb-6">
           <Button
             variant="ghost"
@@ -600,15 +607,16 @@ export function ProducerInventoryPage() {
           </Button>
         </div>
 
-        <div className="flex items-center justify-between mb-6">
+        <div className="mb-6 flex flex-col gap-4 rounded-2xl border border-[#e4e1d8] bg-[#fffefa] p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-semibold">Inventory Management</h1>
-            <p className="text-gray-700 mt-1">Manage your products, stock levels, and seasonal availability</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--earth-accent)]">Producer inventory</p>
+            <h1 className="mt-1 text-3xl font-semibold tracking-tight">Stock Management</h1>
+            <p className="mt-1 text-sm text-gray-700">Product availability, low-stock alerts, allergens, seasons, and surplus deals.</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button
               variant="outline"
-              onClick={() => setFilterHealthStatus('low-stock')}
+              onClick={() => setFilterHealthStatus('surplus')}
               className="gap-2 focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
             >
               <Tag className="size-4" />
@@ -624,7 +632,7 @@ export function ProducerInventoryPage() {
           </div>
         </div>
 
-        <div className="grid md:grid-cols-5 gap-4 mb-6">
+        <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
           <Card
             className={`cursor-pointer transition-all hover:shadow-md ${filterHealthStatus === 'all' ? 'ring-2 ring-green-600' : ''}`}
             onClick={() => setFilterHealthStatus('all')}
@@ -666,6 +674,21 @@ export function ProducerInventoryPage() {
                   <p className="text-2xl font-semibold text-red-700">{outOfStockItems.length}</p>
                 </div>
                 <XCircle className="size-8 text-red-600" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card
+            className={`cursor-pointer transition-all hover:shadow-md border-[#d8d0c0] bg-[#f5f0e8] ${filterHealthStatus === 'surplus' ? 'ring-2 ring-[var(--earth-accent)]' : ''}`}
+            onClick={() => setFilterHealthStatus('surplus')}
+          >
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-700">Surplus deals</p>
+                  <p className="text-2xl font-semibold text-[var(--earth-accent)]">{surplusItems.length}</p>
+                </div>
+                <Tag className="size-8 text-[var(--earth-accent)]" />
               </div>
             </CardContent>
           </Card>

@@ -7,18 +7,35 @@ import {
   Banknote,
   Calendar,
   Clock,
-  FileDown,
-  Loader2,
+  CreditCard,
+  FileText,
+  LineChart,
   Package,
   Plus,
+  ReceiptText,
   RefreshCw,
   ShoppingBag,
   Sparkles,
   Tag,
   TrendingDown,
   Wallet,
+  type LucideIcon,
 } from 'lucide-react';
-import { differenceInHours, format, isValid, parseISO } from 'date-fns';
+import { format, isValid, parseISO } from 'date-fns';
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
 import { apiJson } from '../../lib/api';
@@ -73,6 +90,16 @@ interface WeeklySettlementApi {
   status: string;
 }
 
+interface NotificationItem {
+  id: string;
+  title: string;
+  description: string;
+  path: string;
+  tone: 'urgent' | 'warning' | 'neutral' | 'success';
+  icon: LucideIcon;
+  action: string;
+}
+
 function toNumber(value: string): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -95,9 +122,18 @@ function isUrgentOrder(order: ProducerSubOrderApi): boolean {
   if (!isValid(deliveryDate)) {
     return false;
   }
-  const hours = differenceInHours(deliveryDate, new Date());
+  const hours = Math.ceil((deliveryDate.getTime() - Date.now()) / 3_600_000);
   return hours > 0 && hours < 24 && order.status !== 'delivered' && order.status !== 'cancelled';
 }
+
+function chartCurrencyTick(value: number): string {
+  if (value >= 1000) {
+    return `£${Math.round(value / 1000)}k`;
+  }
+  return `£${value}`;
+}
+
+const PIE_COLORS = ['#1a5c35', '#9b9184', '#7a7063', '#c35b3f'];
 
 export function ProducerDashboardPage() {
   const navigate = useNavigate();
@@ -186,6 +222,7 @@ export function ProducerDashboardPage() {
         .reduce((sum, order) => sum + toNumber(order.payout_amount), 0),
     [orders],
   );
+
   const latestSettlement = settlements[0] || null;
   const latestSettlementNet = latestSettlement ? toNumber(latestSettlement.net_amount) : 0;
   const latestSettlementWeek =
@@ -202,31 +239,68 @@ export function ProducerDashboardPage() {
     }
     return Array.from(totals.entries())
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 3);
+      .slice(0, 5);
   }, [deliveredOrders]);
 
+  const payoutTrendData = useMemo(() => {
+    const totals = new Map<string, number>();
+    for (const order of orders.filter((row) => row.status !== 'cancelled')) {
+      const parsed = parseISO(order.delivery_date);
+      const label = isValid(parsed) ? format(parsed, 'MMM') : 'Now';
+      totals.set(label, (totals.get(label) || 0) + toNumber(order.payout_amount));
+    }
+
+    if (totals.size === 0) {
+      return [{ label: 'No sales', payout: 0 }];
+    }
+
+    return Array.from(totals.entries()).map(([label, payout]) => ({ label, payout: Number(payout.toFixed(2)) }));
+  }, [orders]);
+
+  const orderStatusData = useMemo(
+    () => [
+      { label: 'Pending', count: pendingOrders.length },
+      { label: 'Confirmed', count: confirmedOrders.length },
+      { label: 'Ready', count: readyOrders.length },
+      { label: 'Delivered', count: deliveredOrders.length },
+    ],
+    [confirmedOrders.length, deliveredOrders.length, pendingOrders.length, readyOrders.length],
+  );
+
+  const inventoryHealthData = useMemo(
+    () => [
+      { label: 'Healthy', value: Math.max(0, products.length - lowStockProducts.length - outOfStockProducts.length) },
+      { label: 'Low', value: lowStockProducts.length },
+      { label: 'Surplus', value: activeSurplusDeals.length },
+      { label: 'Out', value: outOfStockProducts.length },
+    ],
+    [activeSurplusDeals.length, lowStockProducts.length, outOfStockProducts.length, products.length],
+  );
+
   const notifications = useMemo(() => {
-    const queue: Array<{
-      id: string;
-      title: string;
-      description: string;
-      path: string;
-      urgent?: boolean;
-      variant: 'default' | 'secondary' | 'destructive' | 'outline';
-      icon: typeof Clock;
-      action: string;
-    }> = [];
+    const queue: NotificationItem[] = [];
+
+    if (urgentOrders.length > 0) {
+      queue.push({
+        id: 'urgent-orders',
+        title: `${urgentOrders.length} sales order${urgentOrders.length === 1 ? '' : 's'} due in under 24h`,
+        description: 'Prioritise confirmation, preparation, and delivery updates.',
+        path: '/producer/orders',
+        tone: 'urgent',
+        icon: AlertCircle,
+        action: 'Open sales',
+      });
+    }
 
     if (pendingOrders.length > 0) {
       queue.push({
         id: 'pending-orders',
         title: `${pendingOrders.length} order${pendingOrders.length === 1 ? '' : 's'} waiting confirmation`,
-        description: urgentOrders.length > 0 ? `${urgentOrders.length} due in < 24h` : 'Review and confirm incoming orders',
+        description: 'Customers see status updates as soon as you confirm.',
         path: '/producer/orders',
-        urgent: urgentOrders.length > 0,
-        variant: urgentOrders.length > 0 ? 'destructive' : 'default',
+        tone: 'warning',
         icon: ShoppingBag,
-        action: 'View orders',
+        action: 'Review',
       });
     }
 
@@ -239,9 +313,9 @@ export function ProducerDashboardPage() {
           .map((product) => `${product.name} (${product.stock}/${getLowStockThreshold(product)})`)
           .join(', '),
         path: '/producer/inventory',
-        variant: 'default',
+        tone: 'warning',
         icon: AlertTriangle,
-        action: 'Stock management',
+        action: 'Restock',
       });
     }
 
@@ -249,11 +323,11 @@ export function ProducerDashboardPage() {
       queue.push({
         id: 'unavailable-products',
         title: `${outOfStockProducts.length} out of stock, ${unavailableProducts.length} unavailable`,
-        description: 'Adjust stock/availability so customers can buy again',
+        description: 'Adjust stock and availability so customers only see accurate listings.',
         path: '/producer/inventory',
-        variant: 'secondary',
+        tone: 'urgent',
         icon: TrendingDown,
-        action: 'Manage inventory',
+        action: 'Fix stock',
       });
     }
 
@@ -261,267 +335,332 @@ export function ProducerDashboardPage() {
       queue.push({
         id: 'season-starting',
         title: `${seasonStartingSoonProducts.length} seasonal product${seasonStartingSoonProducts.length === 1 ? '' : 's'} starting soon`,
-        description: seasonStartingSoonProducts[0]?.seasonalReminderMessage || 'Check seasonal windows before products go live',
+        description: seasonStartingSoonProducts[0]?.seasonalReminderMessage || 'Review seasonal dates.',
         path: '/producer/inventory',
-        variant: 'outline',
+        tone: 'neutral',
         icon: Calendar,
-        action: 'Review season plan',
+        action: 'Review',
       });
     }
 
-    queue.push({
-      id: 'payments',
-      title: latestSettlement
-        ? `Latest settlement ${formatCurrency(latestSettlementNet)}`
-        : `Estimated payout in pipeline ${formatCurrency(payoutInPipeline)}`,
-      description: latestSettlementWeek ? `Week: ${latestSettlementWeek}` : 'No historical settlement yet',
-      path: '/producer/payments',
-      variant: 'secondary',
-      icon: Banknote,
-      action: 'View payout',
-    });
+    if (queue.length === 0) {
+      queue.push({
+        id: 'clear',
+        title: 'No urgent actions right now',
+        description: 'Sales, inventory, and seasonal signals are currently stable.',
+        path: '/producer/orders',
+        tone: 'success',
+        icon: Clock,
+        action: 'View sales',
+      });
+    }
 
     return queue;
   }, [
     lowStockProducts,
     outOfStockProducts,
     pendingOrders,
-    payoutInPipeline,
     unavailableProducts,
-    urgentOrders.length,
-    latestSettlement,
-    latestSettlementNet,
-    latestSettlementWeek,
+    urgentOrders,
     seasonStartingSoonProducts,
   ]);
 
-  const primaryActions = [
-    { label: 'Add product', icon: Plus, path: '/producer/inventory?create=product', variant: 'default' as const },
-    { label: 'Stock management', icon: RefreshCw, path: '/producer/inventory', variant: 'outline' as const },
-    { label: 'View orders', icon: ShoppingBag, path: '/producer/orders', variant: 'outline' as const },
-    { label: 'Create surplus deal', icon: Tag, path: '/producer/inventory', variant: 'outline' as const },
-    { label: 'Content: stories & recipes', icon: Sparkles, path: '/content/feed', variant: 'outline' as const },
+  const primaryActions: Array<{ label: string; description: string; icon: LucideIcon; path: string; variant: 'default' | 'outline' }> = [
+    { label: 'Add product', description: 'Create a listing', icon: Plus, path: '/producer/inventory?create=product', variant: 'default' },
+    { label: 'Stock', description: 'Inventory health', icon: RefreshCw, path: '/producer/inventory', variant: 'outline' },
+    { label: 'Surplus', description: 'Discount excess', icon: Tag, path: '/producer/inventory?focus=surplus', variant: 'outline' },
+    { label: 'Content', description: 'Recipes and stories', icon: Sparkles, path: '/content/feed', variant: 'outline' },
+    { label: 'Buy produce', description: 'Shop as customer', icon: ShoppingBag, path: '/marketplace', variant: 'outline' },
+    { label: 'Purchases', description: 'Track orders', icon: ReceiptText, path: '/orders/history', variant: 'outline' },
   ];
 
+  const notificationToneClass: Record<NotificationItem['tone'], string> = {
+    urgent: 'border-red-200 bg-red-50 text-red-900',
+    warning: 'border-amber-200 bg-amber-50 text-amber-950',
+    neutral: 'border-[#ded5c6] bg-[#f5f0e8] text-[var(--rich-soil)]',
+    success: 'border-[color-mix(in_srgb,var(--forest-green)_25%,white)] bg-[color-mix(in_srgb,var(--forest-green)_7%,white)] text-[var(--forest-green)]',
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[oklch(0.98_0.01_145)] to-[oklch(0.96_0.02_150)]">
+    <div className="min-h-screen bg-[#fbfaf4]">
       <SiteHeader />
 
-      <main className="max-w-6xl mx-auto px-4 py-8 space-y-8">
+      <main className="mx-auto grid w-full max-w-7xl gap-6 px-4 py-5 sm:px-5 lg:min-h-[calc(100svh-60px)] lg:grid-rows-[auto_1fr] lg:px-6">
         {loading ? (
           <PageLoadingSkeleton rows={3} cards={3} />
         ) : (
           <>
-            <section>
-              <div className="flex items-center gap-2 mb-4">
-                <Clock className="size-5 text-green-700" />
-                <h2 className="text-lg font-semibold">Notifications</h2>
-                <Badge variant="secondary" className="ml-2">{notifications.length} items</Badge>
-              </div>
-              <div className="space-y-3">
-                {notifications.map((item) => {
-                  const Icon = item.icon;
-                  return (
-                    <Card key={item.id} className={`transition-shadow hover:shadow-md ${item.urgent ? 'border-red-300 bg-red-50/50' : ''}`}>
-                      <CardContent className="p-4">
-                        <div className="flex items-center justify-between gap-4">
-                          <div className="flex items-center gap-3 flex-1">
-                            <div className={`size-10 rounded-lg flex items-center justify-center ${item.urgent ? 'bg-red-100' : 'bg-green-100'}`}>
-                              <Icon className={`size-5 ${item.urgent ? 'text-red-700' : 'text-green-700'}`} />
-                            </div>
-                            <div className="flex-1">
-                              <p className="font-medium text-gray-900">{item.title}</p>
-                              <p className="text-sm text-gray-600 mt-0.5">{item.description}</p>
-                            </div>
-                          </div>
-                          <Button variant={item.variant} size="sm" onClick={() => navigate(item.path)}>
-                            {item.action}
-                            <ArrowRight className="size-4 ml-1" />
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-            </section>
-
-            <Separator />
-
-            <section>
-              <h2 className="text-lg font-semibold mb-4">Quick actions</h2>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                {primaryActions.map((action) => {
-                  const Icon = action.icon;
-                  return (
-                    <Button
-                      key={action.label}
-                      variant={action.variant}
-                      onClick={() => navigate(action.path)}
-                      className="h-auto py-4 flex-col gap-2"
-                    >
-                      <Icon className="size-5" />
-                      <span className="text-sm">{action.label}</span>
+            <section className="overflow-hidden rounded-2xl border border-[#e4e1d8] bg-[#fffdf8] shadow-sm">
+              <div className="grid gap-0 lg:grid-cols-[1.25fr_0.75fr]">
+                <div className="space-y-5 p-5 sm:p-6">
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--earth-accent)]">
+                        Producer workspace
+                      </p>
+                      <h1 className="mt-2 text-3xl font-semibold tracking-tight text-[var(--rich-soil)] sm:text-4xl">
+                        Sales, stock, stories, and customer buying in one place.
+                      </h1>
+                      <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--warm-earth)]">
+                        Manage producer operations without losing access to the customer marketplace, cart, checkout,
+                        and purchase tracking.
+                      </p>
+                    </div>
+                    <Button onClick={() => navigate('/marketplace')} className="bg-[var(--forest-green)]">
+                      <ShoppingBag className="mr-2 size-4" />
+                      Shop market
                     </Button>
-                  );
-                })}
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="rounded-xl border border-[#e4e1d8] bg-[#fbfaf4] p-4">
+                      <p className="text-sm text-[var(--warm-earth)]">Open sales</p>
+                      <p className="mt-2 text-3xl font-semibold text-[var(--rich-soil)]">{orders.length}</p>
+                    </div>
+                    <div className="rounded-xl border border-[#e4e1d8] bg-[#fbfaf4] p-4">
+                      <p className="text-sm text-[var(--warm-earth)]">Payout pipeline</p>
+                      <p className="mt-2 text-3xl font-semibold text-[var(--forest-green)]">{formatCurrency(payoutInPipeline)}</p>
+                    </div>
+                    <div className="rounded-xl border border-[#e4e1d8] bg-[#fbfaf4] p-4">
+                      <p className="text-sm text-[var(--warm-earth)]">Live products</p>
+                      <p className="mt-2 text-3xl font-semibold text-[var(--rich-soil)]">{products.length}</p>
+                    </div>
+                    <div className="rounded-xl border border-[#e4e1d8] bg-[#fbfaf4] p-4">
+                      <p className="text-sm text-[var(--warm-earth)]">Surplus deals</p>
+                      <p className="mt-2 text-3xl font-semibold text-[var(--earth-accent)]">{activeSurplusDeals.length}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <aside className="border-t border-[#e4e1d8] bg-[#f5f0e8] p-5 lg:border-l lg:border-t-0">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h2 className="font-semibold text-[var(--rich-soil)]">Notifications</h2>
+                      <p className="text-sm text-[var(--warm-earth)]">Urgent items are shown first.</p>
+                    </div>
+                    <Badge variant="secondary">{notifications.length}</Badge>
+                  </div>
+
+                  <div className="mt-4 grid gap-3">
+                    {notifications.slice(0, 4).map((item) => {
+                      const Icon = item.icon;
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => navigate(item.path)}
+                          className={`rounded-xl border p-3 text-left transition-transform hover:-translate-y-0.5 ${notificationToneClass[item.tone]}`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <Icon className="mt-0.5 size-5 shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-semibold">{item.title}</p>
+                              <p className="mt-1 text-xs opacity-80">{item.description}</p>
+                            </div>
+                            <ArrowRight className="size-4 shrink-0" />
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </aside>
               </div>
             </section>
 
-            <Separator />
+            <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+              <div className="grid gap-6">
+                <Card className="border-[#e4e1d8] bg-[#fffdf8] shadow-sm">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="flex items-center gap-2 text-lg">
+                      <LineChart className="size-5 text-[var(--forest-green)]" />
+                      Producer analytics
+                    </CardTitle>
+                    <CardDescription>Real-time view from orders, stock, and settlements.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
+                    <div className="h-64 rounded-xl border border-[#eee9df] bg-[#fbfaf4] p-3">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={payoutTrendData} margin={{ left: 4, right: 12, top: 10, bottom: 0 }}>
+                          <CartesianGrid stroke="#e4e1d8" strokeDasharray="3 3" />
+                          <XAxis dataKey="label" tickLine={false} axisLine={false} />
+                          <YAxis tickFormatter={chartCurrencyTick} tickLine={false} axisLine={false} width={42} />
+                          <Tooltip formatter={(value) => formatCurrency(Number(value))} />
+                          <Area
+                            type="monotone"
+                            dataKey="payout"
+                            stroke="#1a5c35"
+                            fill="#1a5c35"
+                            fillOpacity={0.16}
+                            strokeWidth={2}
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
 
-            <section className="grid md:grid-cols-2 gap-6">
-              <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => navigate('/producer/orders')}>
-                <CardHeader>
-                  <div className="flex items-center gap-3">
-                    <div className="size-12 bg-blue-500 rounded-lg flex items-center justify-center">
-                      <ShoppingBag className="size-6 text-white" />
-                    </div>
-                    <div>
-                      <CardTitle>Orders</CardTitle>
-                      <CardDescription>Manage incoming customer checkout orders</CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex flex-wrap gap-2">
-                    <Badge variant="outline">Pending ({pendingOrders.length})</Badge>
-                    <Badge variant="outline">Confirmed ({confirmedOrders.length})</Badge>
-                    <Badge variant="outline">Ready ({readyOrders.length})</Badge>
-                    <Badge variant="outline">Delivered ({deliveredOrders.length})</Badge>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600">Orders in pipeline</span>
-                    <span className="font-semibold">{orders.length}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600">Estimated producer payout</span>
-                    <span className="font-semibold text-green-700">{formatCurrency(payoutInPipeline)}</span>
-                  </div>
-                  {urgentOrders.length > 0 && (
-                    <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm">
-                      <AlertCircle className="size-4 text-red-600 flex-shrink-0" />
-                      <span className="text-red-800 font-medium">{urgentOrders.length} orders due in &lt; 24h</span>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+                    <div className="grid gap-4">
+                      <div className="h-32 rounded-xl border border-[#eee9df] bg-[#fbfaf4] p-3">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={orderStatusData} margin={{ left: -20, right: 5, top: 5, bottom: 0 }}>
+                            <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={11} />
+                            <YAxis allowDecimals={false} tickLine={false} axisLine={false} fontSize={11} />
+                            <Tooltip />
+                            <Bar dataKey="count" fill="#1a5c35" radius={[6, 6, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
 
-              <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => navigate('/producer/inventory')}>
-                <CardHeader>
-                  <div className="flex items-center gap-3">
-                    <div className="size-12 bg-green-500 rounded-lg flex items-center justify-center">
-                      <Package className="size-6 text-white" />
+                      <div className="h-32 rounded-xl border border-[#eee9df] bg-[#fbfaf4] p-3">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie data={inventoryHealthData} dataKey="value" nameKey="label" innerRadius={30} outerRadius={48}>
+                              {inventoryHealthData.map((entry, index) => (
+                                <Cell key={entry.label} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                              ))}
+                            </Pie>
+                            <Tooltip />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
                     </div>
-                    <div>
-                      <CardTitle>Inventory</CardTitle>
-                      <CardDescription>Stock visibility and product health</CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="p-3 rounded-lg border border-orange-200 bg-orange-50">
-                      <AlertCircle className="size-4 text-orange-600 mb-1" />
-                      <p className="text-2xl font-semibold text-orange-600">{lowStockProducts.length}</p>
-                      <p className="text-xs text-gray-600">Low stock</p>
-                    </div>
-                    <div className="p-3 rounded-lg border border-red-200 bg-red-50">
-                      <TrendingDown className="size-4 text-red-600 mb-1" />
-                      <p className="text-2xl font-semibold text-red-600">{outOfStockProducts.length}</p>
-                      <p className="text-xs text-gray-600">Out of stock</p>
-                    </div>
-                    <div className="p-3 rounded-lg border border-blue-200 bg-blue-50">
-                      <Calendar className="size-4 text-blue-600 mb-1" />
-                      <p className="text-2xl font-semibold text-blue-600">{products.length}</p>
-                      <p className="text-xs text-gray-600">Total products</p>
-                    </div>
-                  </div>
-                  <p className="text-xs text-gray-500">Products bought by customers are reflected in Orders, and product stock can be managed from Inventory.</p>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
 
-              <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => navigate('/producer/payments')}>
-                <CardHeader>
-                  <div className="flex items-center gap-3">
-                    <div className="size-12 bg-purple-500 rounded-lg flex items-center justify-center">
-                      <Wallet className="size-6 text-white" />
-                    </div>
-                    <div>
-                      <CardTitle>Payments</CardTitle>
-                      <CardDescription>Settlement and commission history</CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600">Latest settlement</span>
-                    <span className="font-semibold">{latestSettlement ? formatCurrency(latestSettlementNet) : 'N/A'}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600">Settlement week</span>
-                    <span className="text-gray-800">{latestSettlementWeek || 'No settlements yet'}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600">Open order payout pipeline</span>
-                    <span className="text-green-700 font-semibold">{formatCurrency(payoutInPipeline)}</span>
-                  </div>
-                  <Separator />
-                  <Button variant="outline" size="sm" className="w-full gap-2" onClick={(event) => {
-                    event.stopPropagation();
-                    navigate('/producer/payments');
-                  }}>
-                    <FileDown className="size-4" />
-                    Open settlement exports
-                  </Button>
-                </CardContent>
-              </Card>
+                <Card className="border-[#e4e1d8] bg-[#fffdf8] shadow-sm">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-lg">Fast actions</CardTitle>
+                    <CardDescription>Focused shortcuts for tested producer and buyer workflows.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {primaryActions.map((action) => {
+                      const Icon = action.icon;
+                      return (
+                        <Button
+                          key={action.label}
+                          variant={action.variant}
+                          onClick={() => navigate(action.path)}
+                          className="h-auto justify-start gap-3 rounded-xl border-[#ded5c6] px-4 py-4 text-left"
+                        >
+                          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[color-mix(in_srgb,var(--forest-green)_9%,white)] text-[var(--forest-green)]">
+                            <Icon className="size-4" />
+                          </span>
+                          <span>
+                            <span className="block font-semibold">{action.label}</span>
+                            <span className="block text-xs font-normal opacity-70">{action.description}</span>
+                          </span>
+                        </Button>
+                      );
+                    })}
+                  </CardContent>
+                </Card>
+              </div>
 
-              <Card className="cursor-pointer hover:shadow-lg transition-shadow border-2 border-green-200 bg-green-50/30" onClick={() => navigate('/producer/inventory')}>
-                <CardHeader>
-                  <div className="flex items-center gap-3">
-                    <div className="size-12 bg-gradient-to-br from-green-600 to-emerald-600 rounded-lg flex items-center justify-center">
-                      <Sparkles className="size-6 text-white" />
+              <div className="grid gap-6">
+                <Card className="border-[#e4e1d8] bg-[#fffdf8] shadow-sm">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="flex items-center gap-2 text-lg">
+                      <Package className="size-5 text-[var(--earth-accent)]" />
+                      Inventory health
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {[
+                      { label: 'Low stock', value: lowStockProducts.length, icon: AlertTriangle, color: 'bg-amber-500' },
+                      { label: 'Out of stock', value: outOfStockProducts.length, icon: TrendingDown, color: 'bg-red-500' },
+                      { label: 'Season starting', value: seasonStartingSoonProducts.length, icon: Calendar, color: 'bg-[var(--forest-green)]' },
+                      { label: 'Surplus deals', value: activeSurplusDeals.length, icon: Tag, color: 'bg-[var(--earth-accent)]' },
+                    ].map((row) => {
+                      const Icon = row.icon;
+                      const max = Math.max(1, products.length);
+                      return (
+                        <div key={row.label}>
+                          <div className="mb-2 flex items-center justify-between text-sm">
+                            <span className="flex items-center gap-2 text-[var(--rich-soil)]">
+                              <Icon className="size-4 text-[var(--warm-earth)]" />
+                              {row.label}
+                            </span>
+                            <span className="font-semibold">{row.value}</span>
+                          </div>
+                          <div className="h-2 overflow-hidden rounded-full bg-[#eee9df]">
+                            <div className={`h-full rounded-full ${row.color}`} style={{ width: `${Math.min(100, (row.value / max) * 100)}%` }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </CardContent>
+                </Card>
+
+                <Card className="border-[#e4e1d8] bg-[#fffdf8] shadow-sm">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="flex items-center gap-2 text-lg">
+                      <Banknote className="size-5 text-[var(--forest-green)]" />
+                      Payouts
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-[var(--warm-earth)]">Latest settlement</span>
+                      <span className="font-semibold">{latestSettlement ? formatCurrency(latestSettlementNet) : 'N/A'}</span>
                     </div>
-                    <div>
-                      <CardTitle className="flex items-center gap-2">
-                        Surplus deals
-                        <Badge className="bg-green-600">Live</Badge>
-                      </CardTitle>
-                      <CardDescription>Discount and clear inventory nearing risk</CardDescription>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-[var(--warm-earth)]">Settlement week</span>
+                      <span className="text-[var(--rich-soil)]">{latestSettlementWeek || 'No settlements yet'}</span>
                     </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-700">Active deals</span>
-                    <span className="font-semibold text-green-700">{activeSurplusDeals.length}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-700">Delivered product lines</span>
-                    <span className="font-semibold">{soldItemsSummary.reduce((sum, [, qty]) => sum + qty, 0).toFixed(2)}</span>
-                  </div>
-                  <Separator />
-                  <div className="text-xs text-gray-600 space-y-1">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-[var(--warm-earth)]">Open payout pipeline</span>
+                      <span className="font-semibold text-[var(--forest-green)]">{formatCurrency(payoutInPipeline)}</span>
+                    </div>
+                    <Separator />
+                    <Button variant="outline" className="w-full gap-2" onClick={() => navigate('/producer/payments')}>
+                      <Wallet className="size-4" />
+                      View settlement exports
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-[#e4e1d8] bg-[#fffdf8] shadow-sm">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="flex items-center gap-2 text-lg">
+                      <CreditCard className="size-5 text-[var(--earth-accent)]" />
+                      Buying as a producer
+                    </CardTitle>
+                    <CardDescription>Your producer account can now use the customer purchasing flow.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="grid gap-3 sm:grid-cols-2">
+                    <Button variant="outline" className="justify-start gap-2" onClick={() => navigate('/cart')}>
+                      <ShoppingBag className="size-4" />
+                      Cart
+                    </Button>
+                    <Button variant="outline" className="justify-start gap-2" onClick={() => navigate('/orders/history')}>
+                      <ReceiptText className="size-4" />
+                      Purchase tracking
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-[#e4e1d8] bg-[#fffdf8] shadow-sm">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="flex items-center gap-2 text-lg">
+                      <FileText className="size-5 text-[var(--forest-green)]" />
+                      Top delivered items
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
                     {soldItemsSummary.length === 0 ? (
-                      <p>No delivered sales yet. Confirm and deliver orders to populate sold-item stats.</p>
+                      <p className="text-sm text-[var(--warm-earth)]">
+                        Delivered sales will appear here after orders are completed.
+                      </p>
                     ) : (
                       soldItemsSummary.map(([name, qty]) => (
-                        <p key={name}>{name}: {qty.toFixed(2)} sold</p>
+                        <div key={name} className="flex items-center justify-between gap-3 text-sm">
+                          <span className="min-w-0 truncate text-[var(--rich-soil)]">{name}</span>
+                          <span className="font-semibold text-[var(--forest-green)]">{qty.toFixed(2)}</span>
+                        </div>
                       ))
                     )}
-                  </div>
-                  <Button className="w-full gap-2 bg-green-600 hover:bg-green-700" onClick={(event) => {
-                    event.stopPropagation();
-                    navigate('/producer/inventory');
-                  }}>
-                    <Tag className="size-4" />
-                    Manage surplus + stock
-                  </Button>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              </div>
             </section>
-
           </>
         )}
       </main>

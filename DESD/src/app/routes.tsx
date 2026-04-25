@@ -129,7 +129,7 @@ export const router = createBrowserRouter([
           {
             path: '/cart',
             element: (
-              <ProtectedRoute allowedRoles={['CUSTOMER', 'COMMUNITY', 'RESTAURANT']}>
+              <ProtectedRoute allowedRoles={['CUSTOMER', 'COMMUNITY', 'RESTAURANT', 'PRODUCER']}>
                 <CartPage />
               </ProtectedRoute>
             ),
@@ -137,7 +137,7 @@ export const router = createBrowserRouter([
           {
             path: '/checkout',
             element: (
-              <ProtectedRoute allowedRoles={['CUSTOMER', 'COMMUNITY', 'RESTAURANT']}>
+              <ProtectedRoute allowedRoles={['CUSTOMER', 'COMMUNITY', 'RESTAURANT', 'PRODUCER']}>
                 <CheckoutPage />
               </ProtectedRoute>
             ),
@@ -145,7 +145,7 @@ export const router = createBrowserRouter([
           {
             path: '/checkout/success',
             element: (
-              <ProtectedRoute allowedRoles={['CUSTOMER', 'COMMUNITY', 'RESTAURANT']}>
+              <ProtectedRoute allowedRoles={['CUSTOMER', 'COMMUNITY', 'RESTAURANT', 'PRODUCER']}>
                 <CheckoutPage />
               </ProtectedRoute>
             ),
@@ -153,7 +153,7 @@ export const router = createBrowserRouter([
           {
             path: '/checkout/cancel',
             element: (
-              <ProtectedRoute allowedRoles={['CUSTOMER', 'COMMUNITY', 'RESTAURANT']}>
+              <ProtectedRoute allowedRoles={['CUSTOMER', 'COMMUNITY', 'RESTAURANT', 'PRODUCER']}>
                 <CheckoutPage />
               </ProtectedRoute>
             ),
@@ -161,7 +161,7 @@ export const router = createBrowserRouter([
           {
             path: '/orders/history',
             element: (
-              <ProtectedRoute allowedRoles={['CUSTOMER', 'COMMUNITY', 'RESTAURANT']}>
+              <ProtectedRoute allowedRoles={['CUSTOMER', 'COMMUNITY', 'RESTAURANT', 'PRODUCER']}>
                 <OrderHistoryPage />
               </ProtectedRoute>
             ),
@@ -177,7 +177,7 @@ export const router = createBrowserRouter([
           {
             path: '/settings',
             element: (
-              <ProtectedRoute allowedRoles={['CUSTOMER', 'COMMUNITY', 'RESTAURANT']}>
+              <ProtectedRoute allowedRoles={['CUSTOMER', 'COMMUNITY', 'RESTAURANT', 'PRODUCER']}>
                 <SettingsPage />
               </ProtectedRoute>
             ),
@@ -185,7 +185,7 @@ export const router = createBrowserRouter([
           {
             path: '/map',
             element: (
-              <ProtectedRoute allowedRoles={['CUSTOMER', 'COMMUNITY', 'RESTAURANT']}>
+              <ProtectedRoute allowedRoles={['CUSTOMER', 'COMMUNITY', 'RESTAURANT', 'PRODUCER']}>
                 <MapPage />
               </ProtectedRoute>
             ),

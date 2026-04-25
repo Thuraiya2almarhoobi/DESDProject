@@ -2,7 +2,7 @@ from rest_framework import serializers
 
 from apps.orders.models import Producer, Product
 
-from .models import FarmStory, Recipe, RecipeProduct, SavedRecipe
+from .models import FarmStory, GeneratedContentSuggestion, Recipe, RecipeProduct, SavedRecipe
 
 
 class RecipeProductMiniSerializer(serializers.ModelSerializer):
@@ -87,3 +87,44 @@ class FarmStorySerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = ["created_at"]
+
+
+class GeneratedContentSuggestionSerializer(serializers.ModelSerializer):
+    products = RecipeProductMiniSerializer(many=True, read_only=True)
+    product_ids = serializers.PrimaryKeyRelatedField(
+        queryset=Product.objects.all(), source="products", many=True, write_only=True, required=False
+    )
+
+    class Meta:
+        model = GeneratedContentSuggestion
+        fields = [
+            "id",
+            "content_type",
+            "products",
+            "product_ids",
+            "prompt_context",
+            "title",
+            "description",
+            "ingredients",
+            "instructions",
+            "body",
+            "seasonal_tag",
+            "status",
+            "ai_disclosure",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "products",
+            "prompt_context",
+            "title",
+            "description",
+            "ingredients",
+            "instructions",
+            "body",
+            "seasonal_tag",
+            "ai_disclosure",
+            "created_at",
+            "updated_at",
+        ]
