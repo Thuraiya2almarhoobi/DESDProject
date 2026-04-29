@@ -762,18 +762,6 @@ export function AdminCommissionPage() {
               </div>
             </div>
           </div>
-
-          <div className={`${panelClass} p-6`}>
-            <p className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-[#6a786c]">TC-025 coverage</p>
-            <div className="mt-4 space-y-3 text-sm leading-6 text-[#4f5f53]">
-              <div className="rounded-2xl border border-[#d6ddd0] bg-white p-4">Previous two-week filters and report generation</div>
-              <div className="rounded-2xl border border-[#d6ddd0] bg-white p-4">Order-level drilldown with formula, payment status, and producer splits</div>
-              <div className="rounded-2xl border border-[#d6ddd0] bg-white p-4">CSV export, monthly summary, and year-to-date totals</div>
-              <div className="rounded-2xl border border-[#d6ddd0] bg-[#f4f7f1] p-4">
-                Audit trace remains linked to source orders, producer allocations, and recorded payment metadata.
-              </div>
-            </div>
-          </div>
         </div>
       </section>
 
@@ -818,7 +806,6 @@ export function AdminCommissionPage() {
                   <Wallet className="mt-1 size-10 rounded-2xl bg-white p-2 text-[var(--forest-green)] shadow-sm" />
                   <div className="space-y-1">
                     <p className="font-semibold text-[#182219]">Commission calculation</p>
-                    <p className="text-sm text-[#4f5f53]">{selectedDetail.calculation.formula}</p>
                     <p className="text-sm text-[#4f5f53]">Rate: {selectedDetail.calculation.commission_rate}</p>
                     <p className="text-sm text-[#4f5f53]">
                       Recorded commission: {formatAdminCurrency(selectedDetail.calculation.commission_amount)}
