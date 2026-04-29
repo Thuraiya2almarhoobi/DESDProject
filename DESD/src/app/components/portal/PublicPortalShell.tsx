@@ -8,7 +8,7 @@ import { Card, CardContent } from '../ui/card';
 import { cn } from '../ui/utils';
 
 interface PublicPortalShellProps {
-  eyebrow: string;
+  eyebrow?: string;
   title: string;
   description: string;
   accentClassName?: string;
@@ -17,6 +17,7 @@ interface PublicPortalShellProps {
   insight?: string;
   compact?: boolean;
   centered?: boolean;
+  showSupportCard?: boolean;
   children: React.ReactNode;
 }
 
@@ -30,6 +31,7 @@ export function PublicPortalShell({
   insight,
   compact = false,
   centered = false,
+  showSupportCard = true,
   children,
 }: PublicPortalShellProps) {
   const backAction = backHref ? (
@@ -69,11 +71,13 @@ export function PublicPortalShell({
           <div className="mx-auto flex w-full max-w-4xl flex-col items-center gap-4">
             <div className="flex w-full max-w-3xl justify-start">{backAction}</div>
             <section className="w-full max-w-3xl space-y-3 text-center">
-              <div className="flex justify-center">
-                <Badge className="rounded-full border border-[oklch(0.82_0.03_145)] bg-white/80 px-4 py-1 text-[0.7rem] font-semibold tracking-[0.22em] text-[oklch(0.42_0.05_145)] uppercase shadow-sm">
-                  {eyebrow}
-                </Badge>
-              </div>
+              {eyebrow ? (
+                <div className="flex justify-center">
+                  <Badge className="rounded-full border border-[oklch(0.82_0.03_145)] bg-white/80 px-4 py-1 text-[0.7rem] font-semibold tracking-[0.22em] text-[oklch(0.42_0.05_145)] uppercase shadow-sm">
+                    {eyebrow}
+                  </Badge>
+                </div>
+              ) : null}
 
               <div className={cn(compact ? 'space-y-2.5' : 'space-y-4')}>
                 <h1
@@ -112,9 +116,11 @@ export function PublicPortalShell({
             <section className={cn(compact ? 'space-y-4' : 'space-y-6')}>
               {backAction}
 
-              <Badge className="rounded-full border border-[oklch(0.82_0.03_145)] bg-white/80 px-4 py-1 text-[0.7rem] font-semibold tracking-[0.22em] text-[oklch(0.42_0.05_145)] uppercase shadow-sm">
-                {eyebrow}
-              </Badge>
+              {eyebrow ? (
+                <Badge className="rounded-full border border-[oklch(0.82_0.03_145)] bg-white/80 px-4 py-1 text-[0.7rem] font-semibold tracking-[0.22em] text-[oklch(0.42_0.05_145)] uppercase shadow-sm">
+                  {eyebrow}
+                </Badge>
+              ) : null}
 
               <div className={cn(compact ? 'space-y-3' : 'space-y-4')}>
                 <h1
@@ -130,39 +136,41 @@ export function PublicPortalShell({
                 </p>
               </div>
 
-              <Card className={`border bg-white/82 shadow-lg ${accentClassName ?? ''}`}>
-                <CardContent className={cn(compact ? 'space-y-3 p-5' : 'space-y-4 p-6')}>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div>
-                      <p className="text-xs font-semibold tracking-[0.2em] text-[oklch(0.45_0.05_145)] uppercase">
-                        Portal Experience
-                      </p>
-                      <p className="mt-2 text-sm leading-6 text-[oklch(0.34_0.03_145)]">
-                        Each stakeholder signs in through a dedicated portal while the existing platform authentication and RBAC stay unchanged.
-                      </p>
+              {showSupportCard ? (
+                <Card className={`border bg-white/82 shadow-lg ${accentClassName ?? ''}`}>
+                  <CardContent className={cn(compact ? 'space-y-3 p-5' : 'space-y-4 p-6')}>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <p className="text-xs font-semibold tracking-[0.2em] text-[oklch(0.45_0.05_145)] uppercase">
+                          Portal Experience
+                        </p>
+                        <p className="mt-2 text-sm leading-6 text-[oklch(0.34_0.03_145)]">
+                          Each stakeholder signs in through a dedicated portal while the existing platform authentication and RBAC stay unchanged.
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold tracking-[0.2em] text-[oklch(0.45_0.05_145)] uppercase">
+                          Platform Focus
+                        </p>
+                        <p className="mt-2 text-sm leading-6 text-[oklch(0.34_0.03_145)]">
+                          Shared backend, role-matched portal access, and stakeholder-specific copy and entry points.
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-xs font-semibold tracking-[0.2em] text-[oklch(0.45_0.05_145)] uppercase">
-                        Platform Focus
-                      </p>
-                      <p className="mt-2 text-sm leading-6 text-[oklch(0.34_0.03_145)]">
-                        Shared backend, role-matched portal access, and stakeholder-specific copy and entry points.
-                      </p>
-                    </div>
-                  </div>
 
-                  {insight ? (
-                    <div
-                      className={cn(
-                        'rounded-2xl border border-white/70 bg-white/75 text-sm text-[oklch(0.3_0.03_145)] shadow-sm',
-                        compact ? 'p-3 leading-5' : 'p-4 leading-6',
-                      )}
-                    >
-                      {insight}
-                    </div>
-                  ) : null}
-                </CardContent>
-              </Card>
+                    {insight ? (
+                      <div
+                        className={cn(
+                          'rounded-2xl border border-white/70 bg-white/75 text-sm text-[oklch(0.3_0.03_145)] shadow-sm',
+                          compact ? 'p-3 leading-5' : 'p-4 leading-6',
+                        )}
+                      >
+                        {insight}
+                      </div>
+                    ) : null}
+                  </CardContent>
+                </Card>
+              ) : null}
             </section>
 
             <section>

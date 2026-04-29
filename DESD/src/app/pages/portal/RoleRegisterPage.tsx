@@ -162,15 +162,14 @@ export function RoleRegisterPage({ role }: RoleRegisterPageProps) {
 
   return (
     <PublicPortalShell
-      eyebrow={`${definition.shortTitle} Registration`}
       title={definition.registerHeading ?? 'Create account'}
       description={definition.registerDescription ?? 'Complete the registration form for this stakeholder role.'}
       accentClassName={definition.accentClassName}
       backHref="/select-portal?mode=register"
       backLabel="Back to Portal"
-      insight="This form only collects fields required by the existing backend registration endpoint for this stakeholder type."
+      showSupportCard={false}
     >
-      <div className="space-y-6">
+      <div className="portal-register-form space-y-6">
         {error ? (
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>
