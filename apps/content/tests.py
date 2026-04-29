@@ -71,6 +71,7 @@ class ContentApiTests(APITestCase):
         self.assertEqual(feed_res.status_code, status.HTTP_200_OK)
         self.assertGreaterEqual(len(feed_res.data), 1)
         self.assertEqual(feed_res.data[0]["type"], "recipe")
+        self.assertEqual(feed_res.data[0]["linked_products"][0]["id"], self.product.id)
 
     def test_product_recipes_and_save_toggle(self):
         recipe = Recipe.objects.create(

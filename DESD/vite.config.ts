@@ -3,9 +3,10 @@ import path from 'path'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 
-export default defineConfig({
-  // Django serves built assets under /static/
-  base: '/static/',
+export default defineConfig(({ command }) => ({
+  // Django serves built assets under /static/. The dev server should stay at
+  // root so BrowserRouter links like /content/recipes work while testing.
+  base: command === 'serve' ? '/' : '/static/',
   envPrefix: ['VITE_', 'REACT_APP_'],
   plugins: [
     // The React and Tailwind plugins are both required for Make, even if
@@ -44,4 +45,4 @@ export default defineConfig({
 
   // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
   assetsInclude: ['**/*.svg', '**/*.csv'],
-})
+}))

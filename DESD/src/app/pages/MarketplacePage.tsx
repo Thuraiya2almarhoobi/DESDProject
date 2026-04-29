@@ -7,6 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 import { fetchCategories, fetchProducts } from '../api/catalog';
 import { isBulkBuyerRole, isBuyerRole, MAX_ORDER_ITEM_QUANTITY } from '../lib/ordering';
+import { formatCompactNumber } from '../lib/numberFormat';
 import { getDashboardPathForRole } from '../lib/roleRouting';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -692,7 +693,7 @@ export function MarketplacePage() {
                   >
                     Surplus Deals
                     <Badge className="ml-2 px-1.5 min-w-5 h-5">
-                      {products.filter(p => p.isSurplus).length}
+                      {formatCompactNumber(products.filter(p => p.isSurplus).length)}
                     </Badge>
                   </TabsTrigger>
                 </TabsList>
@@ -704,7 +705,7 @@ export function MarketplacePage() {
               <div className="flex items-center gap-4 flex-1">
                 {/* A) Product count visible with filters */}
                 <p className="text-sm text-gray-600 font-medium">
-                  {sortedProducts.length} product{sortedProducts.length !== 1 ? 's' : ''} found
+                  {formatCompactNumber(sortedProducts.length)} product{sortedProducts.length !== 1 ? 's' : ''} found
                 </p>
               </div>
               

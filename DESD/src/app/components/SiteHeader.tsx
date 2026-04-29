@@ -6,6 +6,7 @@ import { LogOut, MapPin, Menu, Search, ShoppingCart, Sprout, User, X } from 'luc
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 import { clearPendingCustomerPreviewExitTarget } from '../lib/customerPreview';
+import { formatCompactNumber } from '../lib/numberFormat';
 import { getDashboardPathForRole } from '../lib/roleRouting';
 import { getSiteNavItems, isSiteNavItemActive } from '../lib/siteNavigation';
 import { Button } from './ui/button';
@@ -18,6 +19,7 @@ interface SiteHeaderProps {
   searchQuery?: string;
   onSearchQueryChange?: (value: string) => void;
   searchPlaceholder?: string;
+  onSearchSubmit?: (query: string) => void;
   showLocationBar?: boolean;
   locationCity?: string;
 }
@@ -42,6 +44,7 @@ export function SiteHeader({
   searchQuery = '',
   onSearchQueryChange,
   searchPlaceholder = 'Search produce, farms, or categories…',
+  onSearchSubmit,
   showLocationBar = false,
   locationCity = 'Bristol',
 }: SiteHeaderProps) {
@@ -105,6 +108,11 @@ export function SiteHeader({
   const handleSearchSubmit = (event?: FormEvent<HTMLFormElement>) => {
     event?.preventDefault();
     const nextQuery = searchValue.trim();
+    if (onSearchSubmit) {
+      onSearchSubmit(nextQuery);
+      setIsMobileMenuOpen(false);
+      return;
+    }
     const nextPath = nextQuery ? `${searchTargetPath}?q=${encodeURIComponent(nextQuery)}` : searchTargetPath;
     navigate(nextPath);
     setIsMobileMenuOpen(false);
@@ -148,7 +156,7 @@ export function SiteHeader({
             Cart
             {cartItemCount > 0 ? (
               <span className="ml-1 inline-flex min-w-5 items-center justify-center rounded-full bg-[var(--forest-green)] px-1.5 py-0.5 text-[11px] font-semibold text-white">
-                {cartItemCount}
+                {formatCompactNumber(cartItemCount)}
               </span>
             ) : null}
           </Link>

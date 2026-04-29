@@ -32,7 +32,6 @@ import { AdminCommissionPage } from './pages/admin/AdminCommissionPage';
 import { AdminDashboardPage } from './pages/admin/AdminDashboardPage';
 import { AdminLoginPage } from './pages/admin/AdminLoginPage';
 import { CommunityDashboardPage } from './pages/community/CommunityDashboardPage';
-import { RoleLoginPage } from './pages/portal/RoleLoginPage';
 import { PortalSelectPage } from './pages/portal/PortalSelectPage';
 import { RoleRegisterPage } from './pages/portal/RoleRegisterPage';
 import { StakeholderPortalPage } from './pages/portal/StakeholderPortalPage';
@@ -98,11 +97,11 @@ export const router = createBrowserRouter([
           },
           {
             path: '/portal/community',
-            element: <StakeholderPortalPage role="COMMUNITY" />,
+            element: <Navigate to="/register/community" replace />,
           },
           {
             path: '/portal/restaurant',
-            element: <StakeholderPortalPage role="RESTAURANT" />,
+            element: <Navigate to="/register/restaurant" replace />,
           },
           {
             path: '/portal/admin',
@@ -198,6 +197,22 @@ export const router = createBrowserRouter([
               </ProtectedRoute>
             ),
           },
+          {
+            path: '/content/recipes',
+            element: (
+              <ProtectedRoute allowedRoles={['CUSTOMER', 'COMMUNITY', 'RESTAURANT', 'PRODUCER']}>
+                <ContentFeedPage contentView="recipes" />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: '/content/stories',
+            element: (
+              <ProtectedRoute allowedRoles={['CUSTOMER', 'COMMUNITY', 'RESTAURANT', 'PRODUCER']}>
+                <ContentFeedPage contentView="stories" />
+              </ProtectedRoute>
+            ),
+          },
         ],
       },
       // Standalone authentication routes sit outside SiteShell because they
@@ -208,19 +223,19 @@ export const router = createBrowserRouter([
       },
       {
         path: '/login/customer',
-        element: <RoleLoginPage role="CUSTOMER" />,
+        element: <Navigate to="/login" replace />,
       },
       {
         path: '/login/producer',
-        element: <RoleLoginPage role="PRODUCER" />,
+        element: <Navigate to="/login" replace />,
       },
       {
         path: '/login/community',
-        element: <RoleLoginPage role="COMMUNITY" />,
+        element: <Navigate to="/login" replace />,
       },
       {
         path: '/login/restaurant',
-        element: <RoleLoginPage role="RESTAURANT" />,
+        element: <Navigate to="/login" replace />,
       },
       {
         path: '/login/admin',
@@ -299,6 +314,14 @@ export const router = createBrowserRouter([
         element: (
           <RoleProtectedRoute requiredRole="PRODUCER">
             <ProducerDashboardPage />
+          </RoleProtectedRoute>
+        ),
+      },
+      {
+        path: '/producer/publish',
+        element: (
+          <RoleProtectedRoute requiredRole="PRODUCER">
+            <ContentFeedPage mode="publish" />
           </RoleProtectedRoute>
         ),
       },

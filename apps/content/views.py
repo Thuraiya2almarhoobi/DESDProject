@@ -51,11 +51,24 @@ class ContentFeedAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        recipes = Recipe.objects.filter(is_published=True).select_related("producer")
+        recipes = (
+            Recipe.objects.filter(is_published=True)
+            .select_related("producer")
+            .prefetch_related("recipe_products__product")
+        )
         stories = FarmStory.objects.filter(is_published=True).select_related("producer")
 
         combined = []
         for recipe in recipes:
+            linked_products = [
+                {
+                    "id": recipe_product.product.id,
+                    "name": recipe_product.product.name,
+                    "unit": recipe_product.product.unit,
+                    "price": str(recipe_product.product.price),
+                }
+                for recipe_product in recipe.recipe_products.all()
+            ]
             combined.append(
                 {
                     "type": "recipe",
@@ -64,6 +77,8 @@ class ContentFeedAPIView(APIView):
                     "description": recipe.description,
                     "producer_name": recipe.producer.business_name,
                     "seasonal_tag": recipe.seasonal_tag,
+                    "is_ai_generated": recipe.is_ai_generated,
+                    "linked_products": linked_products,
                     "created_at": recipe.created_at,
                 }
             )
@@ -76,6 +91,8 @@ class ContentFeedAPIView(APIView):
                     "description": story.body[:300],
                     "producer_name": story.producer.business_name,
                     "seasonal_tag": story.seasonal_tag,
+                    "is_ai_generated": story.is_ai_generated,
+                    "linked_products": [],
                     "created_at": story.created_at,
                 }
             )

@@ -213,6 +213,8 @@ export interface ApiFeedEntry {
   description: string;
   producer_name: string;
   seasonal_tag: string;
+  is_ai_generated: boolean;
+  linked_products?: Array<{ id: number; name: string; unit: string; price: string }>;
   created_at: string;
 }
 
@@ -226,6 +228,7 @@ export interface ApiRecipe {
   instructions: string;
   seasonal_tag: string;
   image_url: string;
+  is_ai_generated: boolean;
   is_published: boolean;
   created_at: string;
   linked_products: Array<{ id: number; name: string; unit: string; price: string }>;
@@ -240,6 +243,7 @@ export interface ApiStory {
   body: string;
   seasonal_tag: string;
   image_url: string;
+  is_ai_generated: boolean;
   is_published: boolean;
   created_at: string;
 }
