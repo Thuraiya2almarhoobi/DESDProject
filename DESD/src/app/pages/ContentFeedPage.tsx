@@ -1,6 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { ArrowLeft, BookOpenText, Leaf, Newspaper, SlidersHorizontal, Sparkles, Star, Trash2, X } from 'lucide-react';
+import {
+  ArrowLeft,
+  BookOpenText,
+  Leaf,
+  Newspaper,
+  RefreshCw,
+  SlidersHorizontal,
+  Sparkles,
+  Star,
+  Trash2,
+  X,
+} from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { ApiFeedEntry, ApiGeneratedContentSuggestion, ApiRecipe, ApiStory, apiJson } from '../lib/api';
@@ -31,6 +42,7 @@ type FeedDetail = ApiRecipe | ApiStory;
 const ALL_PRODUCERS = 'all-producers';
 const ALL_PRODUCTS = 'all-products';
 const ALL_SEASONS = 'all-seasons';
+const AI_SUGGESTION_LIMIT = 2;
 
 interface ProducerProductOption {
   id: number;
@@ -103,6 +115,36 @@ function detailKey(type: string, id: number): string {
   return `${type}:${id}`;
 }
 
+function sameProductSelection(left: number[], right: number[]): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+  const sortedLeft = [...left].sort((a, b) => a - b);
+  const sortedRight = [...right].sort((a, b) => a - b);
+  return sortedLeft.every((value, index) => value === sortedRight[index]);
+}
+
+function isSameRecipeDraft(left: RecipeDraft, right: RecipeDraft): boolean {
+  return (
+    left.title === right.title &&
+    left.description === right.description &&
+    left.ingredients === right.ingredients &&
+    left.instructions === right.instructions &&
+    left.seasonal_tag === right.seasonal_tag &&
+    left.image_url === right.image_url &&
+    sameProductSelection(left.product_ids, right.product_ids)
+  );
+}
+
+function isSameStoryDraft(left: StoryDraft, right: StoryDraft): boolean {
+  return (
+    left.title === right.title &&
+    left.body === right.body &&
+    left.seasonal_tag === right.seasonal_tag &&
+    left.image_url === right.image_url
+  );
+}
+
 interface ContentFeedPageProps {
   mode?: 'feed' | 'publish';
   contentView?: ContentView;
@@ -134,8 +176,11 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
   const [producerProducts, setProducerProducts] = useState<ProducerProductOption[]>([]);
   const [recipeDraft, setRecipeDraft] = useState<RecipeDraft>(INITIAL_RECIPE_DRAFT);
   const [storyDraft, setStoryDraft] = useState<StoryDraft>(INITIAL_STORY_DRAFT);
+  const [aiRecipeBaseline, setAiRecipeBaseline] = useState<RecipeDraft | null>(null);
+  const [aiStoryBaseline, setAiStoryBaseline] = useState<StoryDraft | null>(null);
   const [composerMode, setComposerMode] = useState<AiContentType>('recipe');
   const [aiDraft, setAiDraft] = useState<AiDraft>(INITIAL_AI_DRAFT);
+  const [lastAiDraft, setLastAiDraft] = useState<AiDraft | null>(null);
   const [aiSuggestions, setAiSuggestions] = useState<ApiGeneratedContentSuggestion[]>([]);
   const [aiPanelMode, setAiPanelMode] = useState<AiPanelMode>('generate');
   const [generatingAi, setGeneratingAi] = useState(false);
@@ -203,7 +248,7 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
       );
       setSavedRecipeIds(new Set(recipes.filter((recipe) => recipe.saved).map((recipe) => recipe.id)));
       setProducerProducts(producerProductsPayload);
-      setAiSuggestions(aiSuggestionsPayload);
+      setAiSuggestions(aiSuggestionsPayload.slice(0, AI_SUGGESTION_LIMIT));
     } catch {
       toast.error('Unable to load recipes and stories feed.');
     } finally {
@@ -238,6 +283,25 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
     setProductFilter(ALL_PRODUCTS);
     setSeasonFilter(ALL_SEASONS);
   }, [contentView]);
+
+  const recipeAiLabelLocked = Boolean(
+    aiRecipeBaseline && recipeDraft.is_ai_generated && isSameRecipeDraft(recipeDraft, aiRecipeBaseline),
+  );
+  const storyAiLabelLocked = Boolean(
+    aiStoryBaseline && storyDraft.is_ai_generated && isSameStoryDraft(storyDraft, aiStoryBaseline),
+  );
+
+  useEffect(() => {
+    if (aiRecipeBaseline && isSameRecipeDraft(recipeDraft, aiRecipeBaseline) && !recipeDraft.is_ai_generated) {
+      setRecipeDraft((previous) => ({ ...previous, is_ai_generated: true }));
+    }
+  }, [aiRecipeBaseline, recipeDraft]);
+
+  useEffect(() => {
+    if (aiStoryBaseline && isSameStoryDraft(storyDraft, aiStoryBaseline) && !storyDraft.is_ai_generated) {
+      setStoryDraft((previous) => ({ ...previous, is_ai_generated: true }));
+    }
+  }, [aiStoryBaseline, storyDraft]);
 
   const pageFeed = useMemo(() => {
     if (filter === 'all') {
@@ -393,26 +457,77 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
     }));
   };
 
-  const generateAiSuggestions = async () => {
-    if (aiDraft.product_ids.length === 0) {
+  const createRandomAiDraft = (): AiDraft | null => {
+    const candidates = producerProducts.filter((product) => product.is_available);
+    const productPool = candidates.length > 0 ? candidates : producerProducts;
+    if (productPool.length === 0) {
+      return null;
+    }
+
+    const tones = ['warm and practical', 'seasonal and concise', 'friendly and confident', 'simple and useful'];
+    const occasions = ['weekly shop', 'family meal', 'seasonal market', 'local food box'];
+    const seasons = ['Current season', 'Market week', 'Fresh harvest', 'Local produce'];
+    const selectedProduct = productPool[Math.floor(Math.random() * productPool.length)];
+
+    return {
+      content_type: Math.random() > 0.5 ? 'recipe' : 'story',
+      product_ids: [selectedProduct.id],
+      notes: '',
+      tone: tones[Math.floor(Math.random() * tones.length)],
+      occasion: occasions[Math.floor(Math.random() * occasions.length)],
+      storage_context: '',
+      seasonal_tag: seasons[Math.floor(Math.random() * seasons.length)],
+    };
+  };
+
+  const generateAiSuggestions = async (draftOverride?: AiDraft) => {
+    const draftToUse = draftOverride ?? aiDraft;
+    if (draftToUse.product_ids.length === 0) {
       toast.error('Select at least one product for the AI assistant.');
       return;
     }
 
+    setAiPanelMode('saved');
     setGeneratingAi(true);
+    setLastAiDraft(draftToUse);
     try {
       const suggestions = await apiJson<ApiGeneratedContentSuggestion[]>('/api/content/ai/suggestions/', {
         method: 'POST',
-        body: JSON.stringify(aiDraft),
+        body: JSON.stringify(draftToUse),
 	      });
-	      setAiSuggestions((previous) => [...suggestions, ...previous]);
-	      setAiPanelMode('saved');
+	      setAiSuggestions(suggestions.slice(0, AI_SUGGESTION_LIMIT));
 	      toast.success('AI suggestions saved privately.');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Unable to generate AI suggestions.');
     } finally {
       setGeneratingAi(false);
     }
+  };
+
+  const reloadAiSuggestions = () => {
+    const draftToUse = lastAiDraft ?? aiDraft;
+    if (draftToUse.product_ids.length === 0) {
+      const randomDraft = createRandomAiDraft();
+      if (!randomDraft) {
+        toast.error('Add a producer product before refreshing AI suggestions.');
+        return;
+      }
+      void generateAiSuggestions(randomDraft);
+      return;
+    }
+
+    void generateAiSuggestions(draftToUse);
+  };
+
+  const fullRefreshAiSuggestions = () => {
+    const randomDraft = createRandomAiDraft();
+    if (!randomDraft) {
+      toast.error('Add a producer product before refreshing AI suggestions.');
+      return;
+    }
+
+    setAiDraft(randomDraft);
+    void generateAiSuggestions(randomDraft);
   };
 
   const deleteAiSuggestion = async (suggestionId: number) => {
@@ -442,7 +557,7 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
   const useAiSuggestion = (suggestion: ApiGeneratedContentSuggestion) => {
     const productIds = suggestion.products.map((product) => product.id);
     if (suggestion.content_type === 'recipe') {
-      setRecipeDraft({
+      const nextRecipeDraft = {
         title: suggestion.title,
         description: suggestion.description,
         ingredients: suggestion.ingredients,
@@ -451,17 +566,23 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
         image_url: '',
         product_ids: productIds,
         is_ai_generated: true,
-      });
+      };
+      setRecipeDraft(nextRecipeDraft);
+      setAiRecipeBaseline(nextRecipeDraft);
+      setAiStoryBaseline(null);
       setComposerMode('recipe');
       toast.success('Recipe draft filled from AI suggestion.');
     } else {
-      setStoryDraft({
+      const nextStoryDraft = {
         title: suggestion.title,
         body: suggestion.body,
         seasonal_tag: suggestion.seasonal_tag,
         image_url: '',
         is_ai_generated: true,
-      });
+      };
+      setStoryDraft(nextStoryDraft);
+      setAiStoryBaseline(nextStoryDraft);
+      setAiRecipeBaseline(null);
       setComposerMode('story');
       toast.success('Farm story draft filled from AI suggestion.');
     }
@@ -490,6 +611,7 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
       });
       toast.success('Recipe published.');
       setRecipeDraft(INITIAL_RECIPE_DRAFT);
+      setAiRecipeBaseline(null);
       await loadFeed();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Unable to publish recipe.');
@@ -515,6 +637,7 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
       });
       toast.success('Farm story published.');
       setStoryDraft(INITIAL_STORY_DRAFT);
+      setAiStoryBaseline(null);
       await loadFeed();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Unable to publish story.');
@@ -790,10 +913,14 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
                     />
                     <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-[#eee8dc] bg-white/70 p-3">
                       <Checkbox
-                        checked={recipeDraft.is_ai_generated}
-                        onCheckedChange={(value) =>
-                          setRecipeDraft((previous) => ({ ...previous, is_ai_generated: value === true }))
-                        }
+                        checked={recipeAiLabelLocked ? true : recipeDraft.is_ai_generated}
+                        disabled={recipeAiLabelLocked}
+                        onCheckedChange={(value) => {
+                          if (recipeAiLabelLocked) {
+                            return;
+                          }
+                          setRecipeDraft((previous) => ({ ...previous, is_ai_generated: value === true }));
+                        }}
                         aria-label="Show AI generated label on published recipe"
                       />
                       <span>
@@ -801,7 +928,9 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
                           Show AI generated label
                         </span>
                         <span className="mt-1 block text-xs leading-5 text-gray-600">
-                          Automatically turns on when you use an AI suggestion. You can turn it off before publishing.
+                          {recipeAiLabelLocked
+                            ? 'This label stays on until you edit the AI-filled draft.'
+                            : 'Automatically turns on when you use an AI suggestion. You can turn it off before publishing.'}
                         </span>
                       </span>
                     </label>
@@ -891,10 +1020,14 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
                     />
                     <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-[#eee8dc] bg-white/70 p-3">
                       <Checkbox
-                        checked={storyDraft.is_ai_generated}
-                        onCheckedChange={(value) =>
-                          setStoryDraft((previous) => ({ ...previous, is_ai_generated: value === true }))
-                        }
+                        checked={storyAiLabelLocked ? true : storyDraft.is_ai_generated}
+                        disabled={storyAiLabelLocked}
+                        onCheckedChange={(value) => {
+                          if (storyAiLabelLocked) {
+                            return;
+                          }
+                          setStoryDraft((previous) => ({ ...previous, is_ai_generated: value === true }));
+                        }}
                         aria-label="Show AI generated label on published farm story"
                       />
                       <span>
@@ -902,7 +1035,9 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
                           Show AI generated label
                         </span>
                         <span className="mt-1 block text-xs leading-5 text-gray-600">
-                          Automatically turns on when you use an AI suggestion. You can turn it off before publishing.
+                          {storyAiLabelLocked
+                            ? 'This label stays on until you edit the AI-filled draft.'
+                            : 'Automatically turns on when you use an AI suggestion. You can turn it off before publishing.'}
                         </span>
                       </span>
                     </label>
@@ -929,7 +1064,7 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
 	                  <Tabs value={aiPanelMode} onValueChange={(value) => setAiPanelMode(value as AiPanelMode)}>
 	                    <TabsList>
 	                      <TabsTrigger value="generate">Generate</TabsTrigger>
-	                      <TabsTrigger value="saved">Saved</TabsTrigger>
+	                      <TabsTrigger value="saved">Suggestions</TabsTrigger>
 	                    </TabsList>
 	                  </Tabs>
 	                </div>
@@ -1029,16 +1164,39 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
                         </div>
                       )}
                     </div>
-	                    <Button onClick={generateAiSuggestions} disabled={generatingAi} className="w-full">
+	                    <Button onClick={() => void generateAiSuggestions()} disabled={generatingAi} className="w-full">
 	                      <Sparkles className="mr-2 size-4" />
-	                      {generatingAi ? 'Generating...' : 'Generate 3 Suggestions'}
+	                      {generatingAi ? 'Generating...' : 'Generate 2 Suggestions'}
 	                    </Button>
 	                  </div>
 	                )}
 
-	                {aiPanelMode === 'generate' && generatingAi && (
+	                {aiPanelMode === 'saved' && (
+	                  <div className="flex flex-col gap-2 rounded-xl border border-[#e4ded2] bg-[#fffefa] p-3 sm:flex-row">
+	                    <Button
+	                      variant="outline"
+	                      onClick={reloadAiSuggestions}
+	                      disabled={generatingAi}
+	                      className="flex-1 justify-center"
+	                    >
+	                      <RefreshCw className="mr-2 size-4" />
+	                      Reload suggestions
+	                    </Button>
+	                    <Button
+	                      variant="outline"
+	                      onClick={fullRefreshAiSuggestions}
+	                      disabled={generatingAi}
+	                      className="flex-1 justify-center border-[#b89573] text-[#6f4b2f] hover:bg-[#f7efe7]"
+	                    >
+	                      <Sparkles className="mr-2 size-4" />
+	                      Full refresh
+	                    </Button>
+	                  </div>
+	                )}
+
+	                {aiPanelMode === 'saved' && generatingAi && (
 	                  <div className="grid gap-3">
-                    {Array.from({ length: 3 }).map((_, index) => (
+                    {Array.from({ length: AI_SUGGESTION_LIMIT }).map((_, index) => (
                       <div key={index} className="rounded-lg border border-[#eee8dc] bg-white/75 p-4">
                         <Skeleton className="h-5 w-2/3 bg-[color-mix(in_srgb,var(--forest-green)_12%,white)]" />
                         <Skeleton className="mt-3 h-3 w-full bg-[#ece8df]" />
@@ -1050,12 +1208,12 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
 
 	                {aiPanelMode === 'saved' && !generatingAi && aiSuggestions.length === 0 && (
 	                  <div className="rounded-lg border border-dashed border-[#d8d0c0] bg-white/60 p-4 text-sm text-gray-600">
-	                    Saved AI suggestions appear here privately.
+	                    AI suggestions appear here privately.
 	                  </div>
 	                )}
 
 	                {aiPanelMode === 'saved' && !generatingAi &&
-	                  aiSuggestions.slice(0, 5).map((suggestion) => (
+	                  aiSuggestions.slice(0, AI_SUGGESTION_LIMIT).map((suggestion) => (
                     <div
                       key={suggestion.id}
                       className="rounded-lg border border-[#e4ded2] bg-white/80 p-4 shadow-sm"

@@ -268,7 +268,7 @@ class GeneratedContentSuggestionListCreateAPIView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        suggestions = GeneratedContentSuggestion.objects.filter(producer=producer).prefetch_related("products")
+        suggestions = GeneratedContentSuggestion.objects.filter(producer=producer).prefetch_related("products")[:2]
         return Response(GeneratedContentSuggestionSerializer(suggestions, many=True).data)
 
     def post(self, request):
@@ -326,8 +326,9 @@ class GeneratedContentSuggestionListCreateAPIView(APIView):
             return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
 
         with transaction.atomic():
+            GeneratedContentSuggestion.objects.filter(producer=producer).delete()
             suggestions = []
-            for item in generated:
+            for item in generated[:2]:
                 suggestion = GeneratedContentSuggestion.objects.create(
                     producer=producer,
                     content_type=content_type,
