@@ -317,7 +317,7 @@ body.landing-snap-mode {
   .market-hero-title {
     font-family: var(--font-serif);
     color: oklch(0.23 0.034 87);
-    font-size: clamp(2.45rem, min(8vw, 10svh), 7.2rem);
+    font-size: clamp(2.45rem, min(6.9vw, 9.1svh), 6.55rem);
     font-weight: 800;
     line-height: 0.95;
     letter-spacing: 0;
@@ -375,7 +375,7 @@ body.landing-snap-mode {
   }
 
   .market-button-outline:hover {
-    background: color-mix(in srgb, var(--forest-green) 8%, white);
+    background: color-mix(in srgb, var(--forest-green) 6%, white);
     color: var(--forest-green);
   }
 
@@ -390,6 +390,26 @@ body.landing-snap-mode {
     background:
       linear-gradient(90deg, transparent, color-mix(in oklch, var(--forest-green) 38%, transparent), transparent),
       repeating-linear-gradient(90deg, transparent 0 32px, color-mix(in srgb, var(--forest-green) 24%, transparent) 32px 34px);
+  }
+
+  .portal-register-form [data-slot="input"] {
+    border-color: color-mix(in srgb, var(--forest-green) 22%, white);
+    background: color-mix(in srgb, white 92%, var(--forest-green) 8%);
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--forest-green) 8%, transparent),
+      inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  }
+
+  .portal-register-form [data-slot="input"]:hover {
+    border-color: color-mix(in srgb, var(--forest-green) 34%, white);
+    background: color-mix(in srgb, white 90%, var(--forest-green) 10%);
+  }
+
+  .portal-register-form [data-slot="input"]:focus-visible {
+    border-color: color-mix(in srgb, var(--forest-green) 52%, white);
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--forest-green) 18%, transparent),
+      0 0 0 4px color-mix(in srgb, var(--forest-green) 12%, transparent);
   }
 }
 

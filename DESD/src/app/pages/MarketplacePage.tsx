@@ -62,12 +62,13 @@ function getPriceBounds(priceFilter: PriceFilter): { minPrice?: number; maxPrice
 export function MarketplacePage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const queryFromUrl = searchParams.get('q') || '';
   const { user } = useAuth();
   const { addToCartAndWait, getProductCartQuantity, prepareSingleItemCheckout, undoLastAdd } = useCart();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<string[]>(fallbackCategories);
-  const [searchQuery, setSearchQuery] = useState(() => searchParams.get('q') || '');
-  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(() => searchParams.get('q') || '');
+  const [searchQuery, setSearchQuery] = useState(() => queryFromUrl);
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(() => queryFromUrl);
   const [selectedCategories, setSelectedCategories] = useState<string[]>(['All']);
   const [showOnlyOrganic, setShowOnlyOrganic] = useState(false);
   const [priceFilter, setPriceFilter] = useState<PriceFilter>('any');
@@ -173,16 +174,12 @@ export function MarketplacePage() {
   }, [searchQuery]);
 
   useEffect(() => {
-    const nextQuery = searchParams.get('q') || '';
-    if (nextQuery !== searchQuery) {
-      setSearchQuery(nextQuery);
-      setDebouncedSearchQuery(nextQuery);
-    }
-  }, [searchParams, searchQuery]);
+    setSearchQuery((currentQuery) => (currentQuery === queryFromUrl ? currentQuery : queryFromUrl));
+    setDebouncedSearchQuery((currentQuery) => (currentQuery === queryFromUrl ? currentQuery : queryFromUrl));
+  }, [queryFromUrl]);
 
   useEffect(() => {
-    const currentQuery = searchParams.get('q') || '';
-    if (currentQuery === debouncedSearchQuery) {
+    if (queryFromUrl === debouncedSearchQuery) {
       return;
     }
 
@@ -193,7 +190,7 @@ export function MarketplacePage() {
       nextParams.delete('q');
     }
     setSearchParams(nextParams, { replace: true });
-  }, [debouncedSearchQuery, searchParams, setSearchParams]);
+  }, [debouncedSearchQuery, queryFromUrl, searchParams, setSearchParams]);
 
   // Show skeleton briefly on local filter/sort changes.
   useEffect(() => {
