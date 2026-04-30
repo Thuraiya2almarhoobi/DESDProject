@@ -2,11 +2,11 @@
 import { useNavigate, useSearchParams } from 'react-router';
 import { Filter, X, Plus, Minus, AlertCircle, AlertTriangle, Star } from 'lucide-react';
 import { toast } from 'sonner';
-import { Product } from '../types';
+import { Product, UserRole } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 import { fetchCategories, fetchProducts } from '../api/catalog';
-import { isBulkBuyerRole, isBuyerRole, MAX_ORDER_ITEM_QUANTITY } from '../lib/ordering';
+import { getQuantityCapForRole, isBulkBuyerRole, isBuyerRole } from '../lib/ordering';
 import { getDashboardPathForRole } from '../lib/roleRouting';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -17,11 +17,11 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '../c
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Skeleton } from '../components/ui/skeleton';
 import { AvailabilityBadge, OrganicBadge, SurplusBadge } from '../components/ProductBadges';
-import { ProductMeta } from '../components/ProductMeta';
 import { SurplusInfo } from '../components/SurplusInfo';
 import { Card, CardContent } from '../components/ui/card';
 import { SiteHeader } from '../components/SiteHeader';
 import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip';
 
 const fallbackCategories = ['All', 'Vegetables', 'Fruit', 'Dairy Products', 'Bakery', 'Preserves'];
 const commonAllergens = [
@@ -335,13 +335,10 @@ export function MarketplacePage() {
     }
 
     const currentCartQuantity = getProductCartQuantity(product.id);
-    const remainingStock = Math.max(
-      0,
-      Math.min(MAX_ORDER_ITEM_QUANTITY, Math.floor(product.stock)) - currentCartQuantity,
-    );
+    const remainingStock = Math.max(0, getQuantityCapForRole(user?.role, product.stock) - currentCartQuantity);
     if (remainingStock <= 0) {
       toast.error(
-        `You already have the maximum allowed quantity of ${product.name} in your cart.`,
+        `You already have the maximum available quantity of ${product.name} in your cart.`,
       );
       return;
     }
@@ -399,10 +396,7 @@ export function MarketplacePage() {
     }
 
     const currentCartQuantity = getProductCartQuantity(product.id);
-    const maxCheckoutQuantity = Math.max(
-      0,
-      Math.min(MAX_ORDER_ITEM_QUANTITY, Math.floor(product.stock)),
-    );
+    const maxCheckoutQuantity = Math.max(0, getQuantityCapForRole(user?.role, product.stock));
     if (maxCheckoutQuantity <= 0) {
       toast.error(`${product.name} is currently unavailable.`);
       return;
@@ -654,7 +648,7 @@ export function MarketplacePage() {
                   <div className="grid gap-3 rounded-2xl border border-white/80 bg-white/80 p-4 text-sm text-gray-700 shadow-sm lg:min-w-[18rem]">
                     <div className="flex items-center justify-between gap-4">
                       <span className="font-medium">Per-product cap</span>
-                      <Badge variant="secondary">100 units max</Badge>
+                      <Badge variant="secondary">Producer stock limit</Badge>
                     </div>
                     <div className="flex items-center justify-between gap-4">
                       <span className="font-medium">Checkout mode</span>
@@ -894,7 +888,7 @@ export function MarketplacePage() {
             {/* Products Grid */}
             {/* G) Show skeleton on filter change */}
             {isLoading || isFilterChanging ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 auto-rows-fr gap-6 sm:grid-cols-2 lg:grid-cols-3">
                 {Array.from({ length: 6 }).map((_, index) => (
                   <Card key={index} className="overflow-hidden">
                     <div className="aspect-video relative overflow-hidden bg-gray-100">
@@ -949,7 +943,7 @@ export function MarketplacePage() {
                 </CardContent>
               </Card>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 auto-rows-fr gap-6 sm:grid-cols-2 lg:grid-cols-3">
                 {sortedProducts.map(product => (
                   <ProductCard 
                     key={product.id} 
@@ -958,6 +952,7 @@ export function MarketplacePage() {
                     handleBuyNow={handleBuyNow}
                     currentCartQuantity={getProductCartQuantity(product.id)}
                     isBulkBuyer={isBulkBuyer}
+                    userRole={user?.role}
                   />
                 ))}
               </div>
@@ -976,32 +971,34 @@ function ProductCard({
   handleBuyNow,
   currentCartQuantity,
   isBulkBuyer,
+  userRole,
 }: { 
   product: Product; 
   handleAddToCart: (product: Product, quantity: number, e: React.MouseEvent) => Promise<void>;
   handleBuyNow: (product: Product, quantity: number, e: React.MouseEvent) => Promise<void>;
   currentCartQuantity: number;
   isBulkBuyer: boolean;
+  userRole?: UserRole | null;
 }) {
   const navigate = useNavigate();
   const [quantity, setQuantity] = useState(1);
+  const [quantityLimitMessage, setQuantityLimitMessage] = useState('');
   const [activeAction, setActiveAction] = useState<'add' | 'buy' | null>(null);
 
   const isAvailable = product.availability !== 'unavailable' && product.stock > 0;
   const hasAllergens = product.allergens && product.allergens.length > 0;
-  const remainingStock = Math.max(
-    0,
-    Math.min(MAX_ORDER_ITEM_QUANTITY, Math.floor(product.stock)) - currentCartQuantity,
-  );
+  const remainingStock = Math.max(0, getQuantityCapForRole(userRole, product.stock) - currentCartQuantity);
   const maxQuantity = Math.max(1, remainingStock);
 
   useEffect(() => {
     setQuantity((previous) => Math.max(1, Math.min(previous, maxQuantity)));
+    setQuantityLimitMessage('');
   }, [maxQuantity]);
 
   const incrementQuantity = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (quantity < maxQuantity) {
+      setQuantityLimitMessage('');
       setQuantity(q => q + 1);
     }
   };
@@ -1009,6 +1006,7 @@ function ProductCard({
   const decrementQuantity = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (quantity > 1) {
+      setQuantityLimitMessage('');
       setQuantity(q => q - 1);
     }
   };
@@ -1019,43 +1017,68 @@ function ProductCard({
     if (!Number.isFinite(next)) {
       return;
     }
+    if (isBulkBuyer && next > maxQuantity) {
+      setQuantityLimitMessage(`Only ${maxQuantity} ${product.unit} available in stock.`);
+    } else {
+      setQuantityLimitMessage('');
+    }
     setQuantity(Math.max(1, Math.min(maxQuantity, Math.floor(next))));
   };
 
   return (
     <Card 
-      className="overflow-hidden cursor-pointer hover:shadow-lg transition-shadow focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
+      className="group h-full gap-0 overflow-hidden cursor-pointer hover:shadow-lg transition-shadow focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
       onClick={() => navigate(`/product/${product.id}`)}
       tabIndex={0}
       onKeyDown={(e) => e.key === 'Enter' && navigate(`/product/${product.id}`)}
     >
       {/* E) Standardized card structure */}
-      <div className="aspect-video relative overflow-hidden bg-gray-100">
+      <div className="relative h-56 overflow-hidden bg-[linear-gradient(180deg,#f8faf8_0%,#edf3ea_100%)] sm:h-60">
         <img
           src={product.imageUrl}
           alt={product.name}
-          className="w-full h-full object-cover"
+          className="h-full w-full object-cover object-center transition-transform duration-300 group-hover:scale-[1.03]"
         />
         {/* Badges row (consistent position) */}
-        <div className="absolute top-2 right-2 flex flex-col gap-1">
+        <div className="absolute right-3 top-3 flex flex-col gap-1">
           <AvailabilityBadge availability={product.availability} />
           {product.isOrganic && <OrganicBadge />}
           {product.isSurplus && <SurplusBadge />}
         </div>
       </div>
       
-      <CardContent className="flex h-full flex-col p-4 space-y-3">
+      <CardContent className="flex flex-1 flex-col justify-between px-4 pb-3.5 pt-4">
         {/* Title */}
-        <div>
-          <h3 className="mb-1 line-clamp-2 font-semibold">{product.name}</h3>
+        <div className="space-y-2">
+          <div className="mb-1 flex items-start gap-2">
+            <h3 className="line-clamp-2 flex-1 font-semibold leading-tight">{product.name}</h3>
+            {hasAllergens && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className="mt-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-orange-300 bg-orange-50 text-orange-700 transition hover:bg-orange-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400"
+                    aria-label={`Allergy warning for ${product.name}`}
+                    onClick={(event) => event.stopPropagation()}
+                    onKeyDown={(event) => event.stopPropagation()}
+                  >
+                    <AlertTriangle className="size-3.5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-56 rounded-md bg-[oklch(0.23_0.02_145)] px-3 py-2 text-left text-[11px] leading-5 text-white">
+                  Contains: {product.allergens?.join(', ')}
+                </TooltipContent>
+              </Tooltip>
+            )}
+          </div>
           
           {/* Producer */}
-          <p className="mb-2 line-clamp-1 text-sm text-gray-600">{product.producerName}</p>
-          <p className="text-xs text-gray-500 mb-2">{product.category}</p>
+          <p className="mb-1 line-clamp-1 text-sm text-gray-600">{product.producerName}</p>
+          <p className="mb-2 line-clamp-1 text-xs text-gray-500">{product.category}</p>
           
           {/* Meta row: distance + harvested */}
           {isBulkBuyer ? (
-            <div className="space-y-2 text-xs text-gray-600">
+            <div className="space-y-1.5 text-xs text-gray-600">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="outline" className="px-2 py-0.5 text-[11px] font-medium">
                   {product.producerLocation}
@@ -1074,17 +1097,18 @@ function ProductCard({
               </p>
             </div>
           ) : (
-            <ProductMeta
-              producerName={product.producerName}
-              producerLocation={product.producerLocation}
-              harvestDate={product.harvestDate}
-              foodMiles={product.foodMiles}
-              seasonalDates={product.seasonalDates}
-              compact
-            />
+            <div className="space-y-1 text-xs text-gray-600">
+              <p className="line-clamp-1">{product.producerLocation} • Food Miles: {product.foodMiles.toFixed(2)} miles • Go Green</p>
+              <p className="line-clamp-1">
+                {new Date(product.harvestDate).toDateString() === new Date().toDateString()
+                  ? 'Harvested today'
+                  : 'Harvested this week'}
+              </p>
+              <p className="line-clamp-1 font-medium text-green-700">Available: {product.seasonalDates || 'Current season'}</p>
+            </div>
           )}
           {product.averageRating !== undefined && product.reviewCount ? (
-            <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+            <div className="mt-2 flex min-h-5 flex-wrap items-center gap-2 text-sm">
               <div className="flex items-center gap-1 text-amber-500">
                 <Star className="size-4 fill-current" />
                 <span className="font-medium text-gray-900">{product.averageRating.toFixed(1)}</span>
@@ -1097,88 +1121,92 @@ function ProductCard({
               ) : null}
             </div>
           ) : (
-            <p className="mt-3 text-sm text-gray-500">No customer ratings yet</p>
+            <p className="mt-2 min-h-5 text-sm text-gray-500">No customer ratings yet</p>
           )}
         </div>
-        
-        {/* F) Accessible allergen warning - not color-only */}
-        {hasAllergens && (
-          <Badge 
-            variant="outline" 
-            className="w-fit gap-1.5 border-orange-300 bg-orange-50 text-orange-800"
-          >
-            <AlertTriangle className="size-3" />
-            <span className="text-xs">Contains: {product.allergens?.join(', ')}</span>
-          </Badge>
-        )}
 
-        {/* Price or Surplus Info */}
-        {product.isSurplus && product.surplusDiscount && product.surplusOriginalPrice && product.surplusExpiresAt && product.surplusBestBefore ? (
-          <SurplusInfo
-            discount={product.surplusDiscount}
-            originalPrice={product.surplusOriginalPrice}
-            currentPrice={product.price}
-            expiresAt={product.surplusExpiresAt}
-            bestBefore={product.surplusBestBefore}
-            unit={product.unit}
-          />
-        ) : (
-          <div className="flex items-baseline gap-1">
-            <span className="text-lg font-semibold text-green-700">
-              £{product.price.toFixed(2)}
-            </span>
-            <span className="text-sm text-gray-500">/{product.unit}</span>
+        <div className="space-y-2.5 pt-2">
+          {!isAvailable && (
+            <Badge variant="secondary" className="text-xs">
+              Out of stock
+            </Badge>
+          )}
+
+          {/* Price + quantity row */}
+          <div className="space-y-1">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3">
+              {product.isSurplus && product.surplusDiscount && product.surplusOriginalPrice && product.surplusExpiresAt && product.surplusBestBefore ? (
+                <div className="min-w-0 flex-1">
+                  <SurplusInfo
+                    discount={product.surplusDiscount}
+                    originalPrice={product.surplusOriginalPrice}
+                    currentPrice={product.price}
+                    expiresAt={product.surplusExpiresAt}
+                    bestBefore={product.surplusBestBefore}
+                    unit={product.unit}
+                  />
+                </div>
+              ) : (
+                <div className="flex min-w-0 items-baseline gap-1">
+                  <span className="text-lg font-semibold text-green-700">
+                    £{product.price.toFixed(2)}
+                  </span>
+                  <span className="text-sm text-gray-500">/{product.unit}</span>
+                </div>
+              )}
+
+              {isAvailable && (
+                <div className="flex items-center justify-end gap-2">
+                  <div className="flex items-center rounded-md border bg-white">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 rounded-r-none focus-visible:ring-2 focus-visible:ring-green-600"
+                      onClick={decrementQuantity}
+                      disabled={quantity <= 1}
+                      aria-label="Decrease quantity"
+                    >
+                      <Minus className="size-3" />
+                    </Button>
+                    <Input
+                      type="number"
+                      min="1"
+                      max={String(maxQuantity)}
+                      step="1"
+                      value={quantity}
+                      onClick={(event) => event.stopPropagation()}
+                      onFocus={(event) => {
+                        event.stopPropagation();
+                        event.target.select();
+                      }}
+                      onChange={updateQuantity}
+                      className="h-8 w-10 rounded-none border-0 px-0 text-center text-sm font-medium shadow-none focus-visible:ring-1"
+                      aria-label="Enter quantity"
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 rounded-l-none focus-visible:ring-2 focus-visible:ring-green-600"
+                      onClick={incrementQuantity}
+                      disabled={remainingStock <= 0 || quantity >= maxQuantity}
+                      aria-label="Increase quantity"
+                    >
+                      <Plus className="size-3" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+            {isBulkBuyer && quantityLimitMessage ? (
+              <p className="text-[11px] text-orange-600">{quantityLimitMessage}</p>
+            ) : null}
           </div>
-        )}
 
-        {!isAvailable && (
-          <Badge variant="secondary" className="text-xs">
-            Out of stock
-          </Badge>
-        )}
-        
-        {/* B) Quantity stepper + CTA */}
-        {isAvailable && (
-          <div className="mt-auto space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center rounded-md border">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 rounded-r-none focus-visible:ring-2 focus-visible:ring-green-600"
-                  onClick={decrementQuantity}
-                  disabled={quantity <= 1}
-                  aria-label="Decrease quantity"
-                >
-                  <Minus className="size-3" />
-                </Button>
-                <Input
-                  type="number"
-                  min="1"
-                  max={String(maxQuantity)}
-                  step="1"
-                  value={quantity}
-                  onClick={(event) => event.stopPropagation()}
-                  onFocus={(event) => {
-                    event.stopPropagation();
-                    event.target.select();
-                  }}
-                  onChange={updateQuantity}
-                  className="h-8 w-16 rounded-none border-0 text-center text-sm font-medium shadow-none focus-visible:ring-1"
-                  aria-label="Enter quantity"
-                />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 rounded-l-none focus-visible:ring-2 focus-visible:ring-green-600"
-                  onClick={incrementQuantity}
-                  disabled={remainingStock <= 0 || quantity >= maxQuantity}
-                  aria-label="Increase quantity"
-                >
-                  <Plus className="size-3" />
-                </Button>
-              </div>
-                {isBulkBuyer && (
+          {/* B) CTA */}
+          {isAvailable && (
+            <div className="space-y-2">
+              {isBulkBuyer && (
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <Button
                     variant="outline"
                     size="sm"
@@ -1189,55 +1217,54 @@ function ProductCard({
                   >
                     +10
                   </Button>
-                )}
+                  <Badge variant="secondary" className="px-2 py-1 text-[11px]">
+                    Stock limit
+                  </Badge>
+                </div>
+              )}
+              <div className="grid gap-2 sm:grid-cols-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full border-[var(--forest-green)] text-[var(--forest-green)] hover:bg-[color-mix(in_srgb,var(--forest-green)_8%,white)] hover:text-[var(--forest-green)] focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
+                  onClick={async (e) => {
+                    setActiveAction('add');
+                    try {
+                      await handleAddToCart(product, quantity, e);
+                    } finally {
+                      setActiveAction(null);
+                    }
+                  }}
+                  disabled={remainingStock <= 0 || activeAction !== null}
+                  aria-label={`Add ${quantity} ${product.unit} of ${product.name} to cart`}
+                >
+                  {activeAction === 'add' ? 'Adding...' : remainingStock <= 0 ? 'Max in cart' : 'Add to cart'}
+                </Button>
+                <Button
+                  size="sm"
+                  className="w-full focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
+                  onClick={async (e) => {
+                    setActiveAction('buy');
+                    try {
+                      await handleBuyNow(product, quantity, e);
+                    } finally {
+                      setActiveAction(null);
+                    }
+                  }}
+                  disabled={remainingStock <= 0 || activeAction !== null}
+                  aria-label={`Buy ${quantity} ${product.unit} of ${product.name} now`}
+                >
+                  {activeAction === 'buy' ? 'Preparing...' : 'Buy now'}
+                </Button>
+              </div>
               {isBulkBuyer && (
-                <Badge variant="secondary" className="px-2 py-1 text-[11px]">
-                  Cap 100
-                </Badge>
+                <p className="text-xs text-gray-500">
+                  Large-order mode. Each product is capped by the producer&apos;s live available stock.
+                </p>
               )}
             </div>
-            <div className="grid gap-2 sm:grid-cols-2">
-              <Button
-                size="sm"
-                variant="outline"
-                className="w-full border-[var(--forest-green)] text-[var(--forest-green)] hover:bg-[color-mix(in_srgb,var(--forest-green)_8%,white)] hover:text-[var(--forest-green)] focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
-                onClick={async (e) => {
-                  setActiveAction('add');
-                  try {
-                    await handleAddToCart(product, quantity, e);
-                  } finally {
-                    setActiveAction(null);
-                  }
-                }}
-                disabled={remainingStock <= 0 || activeAction !== null}
-                aria-label={`Add ${quantity} ${product.unit} of ${product.name} to cart`}
-              >
-                {activeAction === 'add' ? 'Adding...' : remainingStock <= 0 ? 'Max in cart' : 'Add to cart'}
-              </Button>
-              <Button
-                size="sm"
-                className="w-full focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
-                onClick={async (e) => {
-                  setActiveAction('buy');
-                  try {
-                    await handleBuyNow(product, quantity, e);
-                  } finally {
-                    setActiveAction(null);
-                  }
-                }}
-                disabled={remainingStock <= 0 || activeAction !== null}
-                aria-label={`Buy ${quantity} ${product.unit} of ${product.name} now`}
-              >
-                {activeAction === 'buy' ? 'Preparing...' : 'Buy now'}
-              </Button>
-            </div>
-            {isBulkBuyer && (
-              <p className="text-xs text-gray-500">
-                Large-order mode. Up to {MAX_ORDER_ITEM_QUANTITY} units per product.
-              </p>
-            )}
-          </div>
-        )}
+          )}
+        </div>
       </CardContent>
     </Card>
   );

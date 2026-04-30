@@ -1,7 +1,15 @@
 import math
 from decimal import Decimal
 
-from apps.orders.models import CustomerProfile, Producer
+from apps.accounts.models import (
+    Address,
+    CommunityGroupProfile,
+    CustomerProfile as AccountCustomerProfile,
+    ProducerProfile,
+    RestaurantProfile,
+    User,
+)
+from apps.orders.models import CustomerProfile as OrdersCustomerProfile, Producer
 from apps.orders.services import get_or_create_cart, get_cart_groups
 
 from .models import PostcodeLocation
@@ -11,6 +19,8 @@ FALLBACK_POSTCODE_COORDINATES = {
     "BS15JG": (51.4545, -2.5879),  # customer
     "BS14DJ": (51.4510, -2.5904),  # producer sample
     "BS32AA": (51.4382, -2.6010),  # producer sample
+    "BS15LJ": (51.4566, -2.5964),  # community sample
+    "BS15UH": (51.4493, -2.5987),  # restaurant sample
     "BS81RL": (51.4583, -2.6030),
     "BS24QA": (51.4502, -2.5730),
 }
@@ -85,10 +95,43 @@ def get_producers_near_postcode(postcode: str, radius_miles: float = 20.0) -> di
     }
 
 
+def get_user_default_postcode(user) -> str:
+    if not user or not getattr(user, "is_authenticated", False):
+        return ""
+
+    role = getattr(user, "role", "")
+
+    if role == User.Role.CUSTOMER:
+        profile = AccountCustomerProfile.objects.select_related("default_address").filter(user=user).first()
+        if profile and profile.default_address and profile.default_address.postcode:
+            return profile.default_address.postcode
+    elif role == User.Role.PRODUCER:
+        profile = ProducerProfile.objects.select_related("address").filter(user=user).first()
+        if profile and profile.address and profile.address.postcode:
+            return profile.address.postcode
+    elif role == User.Role.COMMUNITY:
+        profile = CommunityGroupProfile.objects.select_related("delivery_address").filter(user=user).first()
+        if profile and profile.delivery_address and profile.delivery_address.postcode:
+            return profile.delivery_address.postcode
+    elif role == User.Role.RESTAURANT:
+        profile = RestaurantProfile.objects.select_related("delivery_address").filter(user=user).first()
+        if profile and profile.delivery_address and profile.delivery_address.postcode:
+            return profile.delivery_address.postcode
+
+    default_address = Address.objects.filter(user=user, is_default=True).first() or Address.objects.filter(user=user).first()
+    if default_address and default_address.postcode:
+        return default_address.postcode
+
+    legacy_customer_profile = OrdersCustomerProfile.objects.filter(user=user).first()
+    if legacy_customer_profile and legacy_customer_profile.postcode:
+        return legacy_customer_profile.postcode
+
+    return ""
+
+
 def get_cart_food_miles(user, postcode: str | None = None) -> dict:
     cart = get_or_create_cart(user)
-    profile = CustomerProfile.objects.filter(user=user).first()
-    customer_postcode = postcode or (profile.postcode if profile else "")
+    customer_postcode = postcode or get_user_default_postcode(user)
     customer_coords = get_postcode_coordinates(customer_postcode)
 
     if not customer_coords:

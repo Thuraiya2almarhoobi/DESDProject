@@ -4,7 +4,6 @@ import { Calendar, Clock3, PauseCircle, PlayCircle, RefreshCw, Trash2 } from 'lu
 import { toast } from 'sonner';
 
 import { apiJson } from '../../lib/api';
-import { MAX_ORDER_ITEM_QUANTITY } from '../../lib/ordering';
 import { SiteHeader } from '../../components/SiteHeader';
 import { PageLoadingSkeleton } from '../../components/LoadingSkeletons';
 import { Button } from '../../components/ui/button';
@@ -18,6 +17,7 @@ interface RecurringTemplateItem {
   product_id: number;
   product_name: string;
   producer_name: string;
+  available_stock: string;
   default_quantity: string;
 }
 
@@ -57,6 +57,7 @@ export function RestaurantRecurringOrdersPage() {
   const [savingTemplateId, setSavingTemplateId] = useState<number | null>(null);
   const [running, setRunning] = useState(false);
   const [overrideDrafts, setOverrideDrafts] = useState<Record<number, Record<number, string>>>({});
+  const [overrideWarnings, setOverrideWarnings] = useState<Record<number, Record<number, string>>>({});
 
   const loadTemplates = async () => {
     setLoading(true);
@@ -64,17 +65,22 @@ export function RestaurantRecurringOrdersPage() {
       const payload = await apiJson<RecurringTemplatePayload[]>('/api/restaurant/recurring-orders/');
       setTemplates(payload);
       const nextDrafts: Record<number, Record<number, string>> = {};
+      const nextWarnings: Record<number, Record<number, string>> = {};
       payload.forEach((template) => {
         const itemDrafts: Record<number, string> = {};
+        const itemWarnings: Record<number, string> = {};
         template.items.forEach((item) => {
           const overridden = template.next_instance_override?.items.find(
             (row) => row.product_id === item.product_id,
           );
           itemDrafts[item.product_id] = overridden?.quantity || item.default_quantity;
+          itemWarnings[item.product_id] = '';
         });
         nextDrafts[template.id] = itemDrafts;
+        nextWarnings[template.id] = itemWarnings;
       });
       setOverrideDrafts(nextDrafts);
+      setOverrideWarnings(nextWarnings);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Unable to load recurring templates.');
       setTemplates([]);
@@ -113,7 +119,17 @@ export function RestaurantRecurringOrdersPage() {
       const draft = overrideDrafts[template.id] || {};
       const items = template.items.map((item) => ({
         product_id: item.product_id,
-        quantity: draft[item.product_id] || item.default_quantity,
+        quantity: (() => {
+          const rawValue = Number(draft[item.product_id] || item.default_quantity);
+          const availableStock = Number(item.available_stock);
+          if (!Number.isFinite(rawValue)) {
+            return item.default_quantity;
+          }
+          if (!Number.isFinite(availableStock) || availableStock <= 0) {
+            return '0.01';
+          }
+          return Math.max(0.01, Math.min(rawValue, availableStock)).toFixed(2);
+        })(),
       }));
       await apiJson(`/api/restaurant/recurring-orders/${template.id}/next-instance/`, {
         method: 'PATCH',
@@ -174,10 +190,10 @@ export function RestaurantRecurringOrdersPage() {
                 Restaurant scheduling workspace
               </p>
               <p className="mt-2 text-sm text-gray-600">
-                Use this page to manage repeat kitchen orders, adjust only the next run when needed, and keep each producer quantity within the portal cap.
+                Use this page to manage repeat kitchen orders, adjust only the next run when needed, and keep each producer quantity within the live stock available from that producer.
               </p>
             </div>
-            <Badge variant="secondary">{MAX_ORDER_ITEM_QUANTITY} units max per product</Badge>
+            <Badge variant="secondary">Producer stock limit</Badge>
           </CardContent>
         </Card>
         <Card>
@@ -243,27 +259,46 @@ export function RestaurantRecurringOrdersPage() {
                       <span>{item.product_name}</span>
                       <span>{item.producer_name}</span>
                       <span>{item.default_quantity}</span>
-                      <div className="flex items-center gap-2">
-                        <Label htmlFor={`override-${template.id}-${item.product_id}`} className="sr-only">
-                          Next quantity
-                        </Label>
-                        <Input
-                          id={`override-${template.id}-${item.product_id}`}
-                          type="number"
-                          min="0.01"
-                          max={String(MAX_ORDER_ITEM_QUANTITY)}
-                          step="0.01"
-                          value={overrideDrafts[template.id]?.[item.product_id] || item.default_quantity}
-                          onChange={(event) =>
-                            setOverrideDrafts((previous) => ({
-                              ...previous,
-                              [template.id]: {
-                                ...(previous[template.id] || {}),
-                                [item.product_id]: event.target.value,
-                              },
-                            }))
-                          }
-                        />
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <Label htmlFor={`override-${template.id}-${item.product_id}`} className="sr-only">
+                            Next quantity
+                          </Label>
+                          <Input
+                            id={`override-${template.id}-${item.product_id}`}
+                            type="number"
+                            min="0.01"
+                            max={item.available_stock}
+                            step="0.01"
+                            value={overrideDrafts[template.id]?.[item.product_id] || item.default_quantity}
+                            onChange={(event) => {
+                              const next = Number(event.target.value);
+                              setOverrideWarnings((previous) => ({
+                                ...previous,
+                                [template.id]: {
+                                  ...(previous[template.id] || {}),
+                                  [item.product_id]:
+                                    Number.isFinite(next) && next > Number(item.available_stock)
+                                      ? `Above stock. Max ${item.available_stock}.`
+                                      : '',
+                                },
+                              }));
+                              setOverrideDrafts((previous) => ({
+                                ...previous,
+                                [template.id]: {
+                                  ...(previous[template.id] || {}),
+                                  [item.product_id]: event.target.value,
+                                },
+                              }));
+                            }}
+                          />
+                          <span className="text-[11px] text-gray-500">Stock {item.available_stock}</span>
+                        </div>
+                        {overrideWarnings[template.id]?.[item.product_id] ? (
+                          <p className="text-[11px] text-orange-600">
+                            {overrideWarnings[template.id][item.product_id]}
+                          </p>
+                        ) : null}
                       </div>
                     </div>
                   ))}
@@ -281,7 +316,7 @@ export function RestaurantRecurringOrdersPage() {
                 )}
 
                 <p className="text-xs text-gray-500">
-                  Override quantities stay capped at {MAX_ORDER_ITEM_QUANTITY} units per product for each generated run.
+                  Override quantities follow each producer&apos;s live available stock for the selected product.
                 </p>
 
                 <div className="flex flex-wrap gap-2">

@@ -39,6 +39,8 @@ export function RoleRegisterPage({ role }: RoleRegisterPageProps) {
   const [businessAddress, setBusinessAddress] = useState('');
   const [organisationName, setOrganisationName] = useState('');
   const [orgType, setOrgType] = useState('');
+  const [sharedDeliveryAddress, setSharedDeliveryAddress] = useState('');
+  const [sharedPostcode, setSharedPostcode] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -68,8 +70,8 @@ export function RoleRegisterPage({ role }: RoleRegisterPageProps) {
       : role === 'PRODUCER'
         ? Boolean(email && businessName && contactName && phone && businessAddress && postcode)
         : role === 'COMMUNITY'
-          ? Boolean(email && organisationName && orgType && contactName && phone)
-          : Boolean(email && businessName && contactName && phone);
+          ? Boolean(email && organisationName && orgType && contactName && phone && sharedDeliveryAddress && sharedPostcode)
+          : Boolean(email && businessName && contactName && phone && sharedDeliveryAddress && sharedPostcode);
 
   const canSubmit =
     Object.values(passwordChecks).every(Boolean) &&
@@ -132,6 +134,8 @@ export function RoleRegisterPage({ role }: RoleRegisterPageProps) {
                 org_type: orgType,
                 contact_name: contactName,
                 phone,
+                delivery_address: sharedDeliveryAddress,
+                postcode: sharedPostcode,
               })
             : await registerRestaurant({
                 email,
@@ -140,6 +144,8 @@ export function RoleRegisterPage({ role }: RoleRegisterPageProps) {
                 business_name: businessName,
                 contact_name: contactName,
                 phone,
+                delivery_address: sharedDeliveryAddress,
+                postcode: sharedPostcode,
               });
 
     if (!result.success) {
@@ -384,6 +390,24 @@ export function RoleRegisterPage({ role }: RoleRegisterPageProps) {
                   required
                 />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="community-delivery-address">Delivery Address</Label>
+                <Input
+                  id="community-delivery-address"
+                  value={sharedDeliveryAddress}
+                  onChange={(event) => setSharedDeliveryAddress(event.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="community-postcode">Postcode</Label>
+                <Input
+                  id="community-postcode"
+                  value={sharedPostcode}
+                  onChange={(event) => setSharedPostcode(event.target.value)}
+                  required
+                />
+              </div>
             </>
           ) : null}
 
@@ -413,6 +437,24 @@ export function RoleRegisterPage({ role }: RoleRegisterPageProps) {
                   id="restaurant-phone"
                   value={phone}
                   onChange={(event) => setPhone(event.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="restaurant-delivery-address">Delivery Address</Label>
+                <Input
+                  id="restaurant-delivery-address"
+                  value={sharedDeliveryAddress}
+                  onChange={(event) => setSharedDeliveryAddress(event.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="restaurant-postcode">Postcode</Label>
+                <Input
+                  id="restaurant-postcode"
+                  value={sharedPostcode}
+                  onChange={(event) => setSharedPostcode(event.target.value)}
                   required
                 />
               </div>

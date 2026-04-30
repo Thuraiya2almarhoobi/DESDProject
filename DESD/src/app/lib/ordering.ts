@@ -35,3 +35,16 @@ export function isBulkBuyerRole(role?: UserRole | string | null): boolean {
   const normalizedRole = normalizeRole(role);
   return normalizedRole === 'COMMUNITY' || normalizedRole === 'RESTAURANT';
 }
+
+export function getQuantityCapForRole(
+  role: UserRole | string | null | undefined,
+  availableStock: number,
+): number {
+  const normalizedStock = Math.max(0, Math.floor(availableStock));
+
+  if (isBulkBuyerRole(role)) {
+    return normalizedStock;
+  }
+
+  return Math.min(MAX_ORDER_ITEM_QUANTITY, normalizedStock);
+}

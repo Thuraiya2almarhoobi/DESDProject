@@ -22,7 +22,7 @@ services:
     environment:
       DJANGO_DEBUG: "${DJANGO_DEBUG:-true}"
       DJANGO_ALLOWED_HOSTS: "${DJANGO_ALLOWED_HOSTS:-127.0.0.1,localhost,0.0.0.0,.trycloudflare.com}"
-      FRONTEND_URL: "${FRONTEND_URL:-http://127.0.0.1:8000}"
+      FRONTEND_URL: "${FRONTEND_URL:-http://localhost:8000}"
       DJANGO_DB_ENGINE: "django.db.backends.postgresql"
       DJANGO_DB_HOST: "db"
       DJANGO_DB_PORT: "5432"
@@ -125,3 +125,4 @@ volumes:
   # rebuilds.
   postgres_data:
   media_data:
+

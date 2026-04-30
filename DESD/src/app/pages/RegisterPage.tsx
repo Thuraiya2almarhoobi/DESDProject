@@ -52,6 +52,8 @@ export function RegisterPage() {
   const [orgType, setOrgType] = useState('');
   const [contactName, setContactName] = useState('');
   const [sharedPhone, setSharedPhone] = useState('');
+  const [sharedDeliveryAddress, setSharedDeliveryAddress] = useState('');
+  const [sharedPostcode, setSharedPostcode] = useState('');
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [registrationComplete, setRegistrationComplete] = useState(false);
@@ -145,6 +147,8 @@ export function RegisterPage() {
         org_type: orgType,
         contact_name: contactName,
         phone: sharedPhone,
+        delivery_address: sharedDeliveryAddress,
+        postcode: sharedPostcode,
       });
     } else {
       result = await registerRestaurant({
@@ -154,6 +158,8 @@ export function RegisterPage() {
         business_name: businessName,
         contact_name: contactName,
         phone: sharedPhone,
+        delivery_address: sharedDeliveryAddress,
+        postcode: sharedPostcode,
       });
     }
 
@@ -424,6 +430,24 @@ export function RegisterPage() {
                       required
                     />
                   </div>
+                  <div className="lfm-form-group full">
+                    <label htmlFor="community-delivery-address">Delivery Address</label>
+                    <input
+                      id="community-delivery-address"
+                      value={sharedDeliveryAddress}
+                      onChange={(event) => setSharedDeliveryAddress(event.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="lfm-form-group">
+                    <label htmlFor="community-postcode">Postcode</label>
+                    <input
+                      id="community-postcode"
+                      value={sharedPostcode}
+                      onChange={(event) => setSharedPostcode(event.target.value)}
+                      required
+                    />
+                  </div>
                 </>
               )}
 
@@ -453,6 +477,24 @@ export function RegisterPage() {
                       id="restaurant-phone"
                       value={sharedPhone}
                       onChange={(event) => setSharedPhone(event.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="lfm-form-group full">
+                    <label htmlFor="restaurant-delivery-address">Delivery Address</label>
+                    <input
+                      id="restaurant-delivery-address"
+                      value={sharedDeliveryAddress}
+                      onChange={(event) => setSharedDeliveryAddress(event.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="lfm-form-group">
+                    <label htmlFor="restaurant-postcode">Postcode</label>
+                    <input
+                      id="restaurant-postcode"
+                      value={sharedPostcode}
+                      onChange={(event) => setSharedPostcode(event.target.value)}
                       required
                     />
                   </div>

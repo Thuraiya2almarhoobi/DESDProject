@@ -333,7 +333,8 @@ class LoginView(APIView):
         serializer = LoginSerializer(data=request.data, context={"request": request})
         if not serializer.is_valid():
             non_field_errors = serializer.errors.get("non_field_errors", [])
-            if any(str(error) == "Invalid credentials" for error in non_field_errors):
+            if non_field_errors:
+                detail = next((str(error).strip() for error in non_field_errors if str(error).strip()), "Login failed.")
                 failed_user, reason = _resolve_failed_login_context(
                     request.data.get("email", ""),
                     request.data.get("password", ""),
@@ -350,7 +351,7 @@ class LoginView(APIView):
                     request.data.get("email"),
                     _get_client_ip(request),
                 )
-                return Response({"detail": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
+                return Response({"detail": detail}, status=status.HTTP_401_UNAUTHORIZED)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         user = serializer.validated_data["user"]

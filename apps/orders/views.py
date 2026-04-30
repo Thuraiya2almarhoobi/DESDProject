@@ -84,8 +84,14 @@ def _parse_decimal(value: str | None) -> Decimal | None:
         return None
 
 
-def _enforce_cart_quantity_cap(quantity: Decimal) -> None:
-    if quantity > MAX_ORDER_ITEM_QUANTITY:
+def _quantity_cap_for_user_and_stock(user, stock_quantity: Decimal) -> Decimal:
+    if getattr(user, "role", None) in {User.Role.COMMUNITY, User.Role.RESTAURANT}:
+        return stock_quantity
+    return min(MAX_ORDER_ITEM_QUANTITY, stock_quantity)
+
+
+def _enforce_cart_quantity_cap(quantity: Decimal, *, user, stock_quantity: Decimal) -> None:
+    if quantity > _quantity_cap_for_user_and_stock(user, stock_quantity):
         raise ValueError(f"Maximum quantity per product is {MAX_ORDER_ITEM_QUANTITY.quantize(Decimal('1'))}.")
 
 
@@ -531,7 +537,6 @@ class CartItemAddAPIView(APIView):
 
         try:
             quantity = _parse_quantity(quantity_raw)
-            _enforce_cart_quantity_cap(quantity)
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -545,6 +550,10 @@ class CartItemAddAPIView(APIView):
                 {"detail": "Requested quantity exceeds available stock."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        try:
+            _enforce_cart_quantity_cap(quantity, user=request.user, stock_quantity=product.stock_quantity)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
         cart = get_or_create_cart(request.user)
         cart_item, created = CartItem.objects.get_or_create(
@@ -552,16 +561,15 @@ class CartItemAddAPIView(APIView):
         )
         if not created:
             new_qty = cart_item.quantity + quantity
-            if new_qty > MAX_ORDER_ITEM_QUANTITY:
-                return Response(
-                    {"detail": f"Maximum quantity per product is {MAX_ORDER_ITEM_QUANTITY.quantize(Decimal('1'))}."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
             if new_qty > product.stock_quantity:
                 return Response(
                     {"detail": "Requested quantity exceeds available stock."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+            try:
+                _enforce_cart_quantity_cap(new_qty, user=request.user, stock_quantity=product.stock_quantity)
+            except ValueError as exc:
+                return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
             cart_item.quantity = new_qty.quantize(Decimal("0.01"))
             cart_item.save(update_fields=["quantity", "updated_at"])
 
@@ -587,7 +595,6 @@ class CartItemDetailAPIView(APIView):
 
         try:
             quantity = _parse_quantity(request.data.get("quantity"))
-            _enforce_cart_quantity_cap(quantity)
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -601,6 +608,10 @@ class CartItemDetailAPIView(APIView):
                 {"detail": "Requested quantity exceeds available stock."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        try:
+            _enforce_cart_quantity_cap(quantity, user=request.user, stock_quantity=cart_item.product.stock_quantity)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
         cart_item.quantity = quantity
         cart_item.save(update_fields=["quantity", "updated_at"])

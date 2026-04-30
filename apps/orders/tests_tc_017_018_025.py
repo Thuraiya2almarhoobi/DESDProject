@@ -95,30 +95,37 @@ class CommunityBulkOrderTests(APITestCase):
         self.client = APIClient()
         self.client.force_authenticate(self.community_user)
 
-    def test_community_user_can_add_to_cart_with_100_item_cap(self):
-        within_cap = self.client.post(
+    def test_community_user_is_limited_by_available_stock(self):
+        within_stock = self.client.post(
             "/api/orders/cart/items/",
             {"product_id": self.products[0].id, "quantity": "100"},
             format="json",
         )
-        self.assertEqual(within_cap.status_code, status.HTTP_200_OK)
+        self.assertEqual(within_stock.status_code, status.HTTP_200_OK)
 
-        over_cap = self.client.patch(
-            f"/api/orders/cart/items/{within_cap.data['cart']['groups'][0]['items'][0]['cart_item_id']}/",
+        still_within_stock = self.client.patch(
+            f"/api/orders/cart/items/{within_stock.data['cart']['groups'][0]['items'][0]['cart_item_id']}/",
             {"quantity": "101"},
             format="json",
         )
-        self.assertEqual(over_cap.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("Maximum quantity per product is 100", over_cap.data["detail"])
+        self.assertEqual(still_within_stock.status_code, status.HTTP_200_OK)
+
+        over_stock = self.client.patch(
+            f"/api/orders/cart/items/{within_stock.data['cart']['groups'][0]['items'][0]['cart_item_id']}/",
+            {"quantity": "121"},
+            format="json",
+        )
+        self.assertEqual(over_stock.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("Requested quantity exceeds available stock.", over_stock.data["detail"])
 
     def test_tc017_bulk_order_with_special_instructions_and_contacts(self):
         excessive = self.client.post(
             "/api/orders/cart/items/",
-            {"product_id": self.products[0].id, "quantity": "101"},
+            {"product_id": self.products[0].id, "quantity": "121"},
             format="json",
         )
         self.assertEqual(excessive.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("Maximum quantity per product is 100", excessive.data["detail"])
+        self.assertIn("Requested quantity exceeds available stock.", excessive.data["detail"])
 
         self.client.post(
             "/api/orders/cart/items/",
@@ -269,23 +276,30 @@ class RestaurantRecurringOrderTests(APITestCase):
         self.client = APIClient()
         self.client.force_authenticate(self.restaurant_user)
 
-    def test_restaurant_user_can_add_to_cart_with_100_item_cap(self):
-        within_cap = self.client.post(
+    def test_restaurant_user_is_limited_by_available_stock(self):
+        within_stock = self.client.post(
             "/api/orders/cart/items/",
             {"product_id": self.product_a.id, "quantity": "100"},
             format="json",
         )
-        self.assertEqual(within_cap.status_code, status.HTTP_200_OK)
+        self.assertEqual(within_stock.status_code, status.HTTP_200_OK)
 
-        over_cap = self.client.post(
-            "/api/orders/cart/items/",
-            {"product_id": self.product_b.id, "quantity": "101"},
+        still_within_stock = self.client.patch(
+            f"/api/orders/cart/items/{within_stock.data['cart']['groups'][0]['items'][0]['cart_item_id']}/",
+            {"quantity": "101"},
             format="json",
         )
-        self.assertEqual(over_cap.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("Maximum quantity per product is 100", over_cap.data["detail"])
+        self.assertEqual(still_within_stock.status_code, status.HTTP_200_OK)
 
-    def test_restaurant_recurring_override_rejects_quantity_over_100(self):
+        over_stock = self.client.patch(
+            f"/api/orders/cart/items/{within_stock.data['cart']['groups'][0]['items'][0]['cart_item_id']}/",
+            {"quantity": "121"},
+            format="json",
+        )
+        self.assertEqual(over_stock.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("Requested quantity exceeds available stock.", over_stock.data["detail"])
+
+    def test_restaurant_recurring_override_rejects_quantity_over_available_stock(self):
         self.client.post(
             "/api/orders/cart/items/",
             {"product_id": self.product_a.id, "quantity": "10"},
@@ -316,7 +330,7 @@ class RestaurantRecurringOrderTests(APITestCase):
         self.assertEqual(create_res.status_code, status.HTTP_201_CREATED)
         template_id = create_res.data["template"]["id"]
 
-        over_cap = self.client.patch(
+        within_stock = self.client.patch(
             f"/api/restaurant/recurring-orders/{template_id}/next-instance/",
             {
                 "items": [
@@ -326,8 +340,20 @@ class RestaurantRecurringOrderTests(APITestCase):
             },
             format="json",
         )
-        self.assertEqual(over_cap.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("Ensure this value is less than or equal to 100.00", str(over_cap.data))
+        self.assertEqual(within_stock.status_code, status.HTTP_200_OK)
+
+        over_stock = self.client.patch(
+            f"/api/restaurant/recurring-orders/{template_id}/next-instance/",
+            {
+                "items": [
+                    {"product_id": self.product_a.id, "quantity": "121.00"},
+                    {"product_id": self.product_b.id, "quantity": "8.00"},
+                ]
+            },
+            format="json",
+        )
+        self.assertEqual(over_stock.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("Tomatoes only has 110.00 kg available.", over_stock.data["detail"])
 
     @patch("apps.payments.services.create_stripe_checkout_session_for_order")
     def test_restaurant_one_off_checkout_can_prepare_stripe_session(self, mock_checkout_session):

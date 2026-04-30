@@ -5,7 +5,7 @@ import { useCart } from '../contexts/CartContext';
 import { useAuth } from '../contexts/AuthContext';
 import { apiJson } from '../lib/api';
 import { useSafeBack } from '../lib/navigation';
-import { MAX_ORDER_ITEM_QUANTITY } from '../lib/ordering';
+import { getQuantityCapForRole } from '../lib/ordering';
 import { SiteHeader } from '../components/SiteHeader';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
@@ -36,6 +36,7 @@ export function CartPage() {
 
   const [producerFoodMiles, setProducerFoodMiles] = useState<Record<string, number>>({});
   const [productFoodMiles, setProductFoodMiles] = useState<Record<string, number>>({});
+  const [quantityWarnings, setQuantityWarnings] = useState<Record<number, string>>({});
 
   const cartByProducer = getCartByProducer();
   const selectedCartByProducer = getSelectedCartByProducer();
@@ -112,6 +113,19 @@ export function CartPage() {
     [productFoodMiles, selectedCartByProducer],
   );
 
+  const setQuantityWarning = (productId: number, message: string) => {
+    setQuantityWarnings((previous) => {
+      if (!message) {
+        const { [productId]: _, ...rest } = previous;
+        return rest;
+      }
+      return {
+        ...previous,
+        [productId]: message,
+      };
+    });
+  };
+
   const backToMarketplaceButton = (
     <Button variant="ghost" onClick={goBack}>
       <ArrowLeft className="mr-2 size-4" />
@@ -187,7 +201,7 @@ export function CartPage() {
                 <div className="grid gap-2 rounded-2xl border border-white/80 bg-white/80 p-4 text-sm text-gray-700 lg:min-w-[17rem]">
                   <div className="flex items-center justify-between gap-4">
                     <span className="font-medium">Per-product cap</span>
-                    <Badge variant="secondary">{MAX_ORDER_ITEM_QUANTITY} units</Badge>
+                  <Badge variant="secondary">Producer stock limit</Badge>
                   </div>
                   <div className="flex items-center justify-between gap-4">
                     <span className="font-medium">Producer groups</span>
@@ -304,10 +318,7 @@ export function CartPage() {
                         const isSelected = item.cartItemId
                           ? isCartItemSelected(item.cartItemId)
                           : false;
-                        const maxQuantity = Math.max(
-                          1,
-                          Math.min(MAX_ORDER_ITEM_QUANTITY, Math.floor(item.product.stock)),
-                        );
+                        const maxQuantity = Math.max(1, getQuantityCapForRole(user?.role, item.product.stock));
 
                         return (
                           <div
@@ -356,84 +367,108 @@ export function CartPage() {
 
                                 {isBulkRole && (
                                   <p className="mb-2 text-xs text-gray-500">
-                                    Bulk cap: up to {MAX_ORDER_ITEM_QUANTITY} units per product.
+                                    Quantity limit follows the producer&apos;s live available stock.
                                   </p>
                                 )}
 
-                                <div className="flex items-center gap-2">
-                                  <Button
-                                    variant="outline"
-                                    size="icon"
-                                    className="size-8"
-                                    onClick={() => updateQuantity(item.product.id, item.quantity - 1)}
-                                  >
-                                    <Minus className="size-3" />
-                                  </Button>
-                                  <Input
-                                    type="number"
-                                    min="1"
-                                    max={String(maxQuantity)}
-                                    step="1"
-                                    className="h-8 w-20 text-center"
-                                    value={item.quantity}
-                                    onFocus={(event) => event.target.select()}
-                                    onChange={(event) => {
-                                      const next = Number(event.target.value);
-                                      if (!Number.isFinite(next)) {
-                                        return;
-                                      }
-                                      updateQuantity(
-                                        item.product.id,
-                                        Math.max(1, Math.min(maxQuantity, Math.floor(next))),
-                                      );
-                                    }}
-                                  />
-                                  <Button
-                                    variant="outline"
-                                    size="icon"
-                                    className="size-8"
-                                    onClick={() => updateQuantity(item.product.id, item.quantity + 1)}
-                                    disabled={item.quantity >= maxQuantity}
-                                  >
-                                    <Plus className="size-3" />
-                                  </Button>
-                                  {isBulkRole && (
-                                    <>
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() =>
-                                          updateQuantity(item.product.id, Math.max(1, item.quantity - 10))
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-2">
+                                    <Button
+                                      variant="outline"
+                                      size="icon"
+                                      className="size-8"
+                                      onClick={() => {
+                                        setQuantityWarning(item.product.id, '');
+                                        updateQuantity(item.product.id, item.quantity - 1);
+                                      }}
+                                    >
+                                      <Minus className="size-3" />
+                                    </Button>
+                                    <Input
+                                      type="number"
+                                      min="1"
+                                      max={String(maxQuantity)}
+                                      step="1"
+                                      className="h-8 w-20 text-center"
+                                      value={item.quantity}
+                                      onFocus={(event) => event.target.select()}
+                                      onChange={(event) => {
+                                        const next = Number(event.target.value);
+                                        if (!Number.isFinite(next)) {
+                                          return;
                                         }
-                                      >
-                                        -10
-                                      </Button>
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() =>
-                                          updateQuantity(
+                                        if (isBulkRole && next > maxQuantity) {
+                                          setQuantityWarning(
                                             item.product.id,
-                                            Math.min(maxQuantity, item.quantity + 10),
-                                          )
+                                            `Only ${maxQuantity} ${item.product.unit} available in stock.`,
+                                          );
+                                        } else {
+                                          setQuantityWarning(item.product.id, '');
                                         }
-                                      >
-                                        +10
-                                      </Button>
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() =>
-                                          updateQuantity(
-                                            item.product.id,
-                                            Math.min(maxQuantity, item.quantity + 25),
-                                          )
-                                        }
-                                      >
-                                        +25
-                                      </Button>
-                                    </>
-                                  )}
+                                        updateQuantity(
+                                          item.product.id,
+                                          Math.max(1, Math.min(maxQuantity, Math.floor(next))),
+                                        );
+                                      }}
+                                    />
+                                    <Button
+                                      variant="outline"
+                                      size="icon"
+                                      className="size-8"
+                                      onClick={() => {
+                                        setQuantityWarning(item.product.id, '');
+                                        updateQuantity(item.product.id, item.quantity + 1);
+                                      }}
+                                      disabled={item.quantity >= maxQuantity}
+                                    >
+                                      <Plus className="size-3" />
+                                    </Button>
+                                    {isBulkRole && (
+                                      <>
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => {
+                                            setQuantityWarning(item.product.id, '');
+                                            updateQuantity(item.product.id, Math.max(1, item.quantity - 10));
+                                          }}
+                                        >
+                                          -10
+                                        </Button>
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => {
+                                            setQuantityWarning(item.product.id, '');
+                                            updateQuantity(
+                                              item.product.id,
+                                              Math.min(maxQuantity, item.quantity + 10),
+                                            );
+                                          }}
+                                        >
+                                          +10
+                                        </Button>
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => {
+                                            setQuantityWarning(item.product.id, '');
+                                            updateQuantity(
+                                              item.product.id,
+                                              Math.min(maxQuantity, item.quantity + 25),
+                                            );
+                                          }}
+                                        >
+                                          +25
+                                        </Button>
+                                      </>
+                                    )}
+                                  </div>
+                                  {isBulkRole && quantityWarnings[item.product.id] ? (
+                                    <p className="text-[11px] text-orange-600">
+                                      {quantityWarnings[item.product.id]}
+                                    </p>
+                                  ) : null}
                                 </div>
                               </div>
 
@@ -559,7 +594,7 @@ export function CartPage() {
                   </p>
                   {isBulkRole && (
                     <p className="mt-1">
-                      Bulk quantities are capped at {MAX_ORDER_ITEM_QUANTITY} units per product for each order basket.
+                      Bulk quantities follow the producer&apos;s current available stock for each product.
                     </p>
                   )}
                 </div>

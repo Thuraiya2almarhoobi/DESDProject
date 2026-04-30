@@ -4,7 +4,7 @@ import { ArrowLeft, CreditCard, CheckCircle, LoaderCircle, XCircle } from 'lucid
 import { useCart } from '../contexts/CartContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSafeBack } from '../lib/navigation';
-import { isBuyerRole, MAX_ORDER_ITEM_QUANTITY } from '../lib/ordering';
+import { isBuyerRole } from '../lib/ordering';
 import { SiteHeader } from '../components/SiteHeader';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
@@ -603,7 +603,7 @@ export function CheckoutPage() {
               <div className="grid gap-2 rounded-2xl border border-white/80 bg-white/80 p-4 text-sm text-gray-700 lg:min-w-[17rem]">
                 <div className="flex items-center justify-between gap-4">
                   <span className="font-medium">Per-product cap</span>
-                  <Badge variant="secondary">{MAX_ORDER_ITEM_QUANTITY} units</Badge>
+                  <Badge variant="secondary">Producer stock limit</Badge>
                 </div>
                 <div className="flex items-center justify-between gap-4">
                   <span className="font-medium">Producer groups</span>
@@ -665,7 +665,7 @@ export function CheckoutPage() {
                   <p className="text-sm text-gray-600">
                     {isMultiProducerCheckout
                       ? 'Each producer can have a different delivery date.'
-                      : 'The delivery date must respect the producer’s minimum 48-hour lead time.'}
+                      : 'The delivery date must respect the producerâ€™s minimum 48-hour lead time.'}
                   </p>
                 </CardHeader>
                 <CardContent>
@@ -880,8 +880,8 @@ export function CheckoutPage() {
                             ? 'Continue to Stripe for Restaurant Payment'
                             : 'Continue to Stripe Checkout'
                           : isRestaurantCheckout && makeRecurring
-                          ? `Create Recurring Order (£${total.toFixed(2)})`
-                          : `Pay £${total.toFixed(2)}`}
+                          ? `Create Recurring Order (Â£${total.toFixed(2)})`
+                          : `Pay Â£${total.toFixed(2)}`}
                       </Button>
                     </div>
                   </form>
@@ -918,9 +918,9 @@ export function CheckoutPage() {
                         {group.items.map((item) => (
                           <div key={item.cartItemId || item.product.id} className="flex justify-between gap-2 text-xs text-gray-700">
                             <span>
-                              {item.product.name} • {item.quantity} {item.product.unit}
+                              {item.product.name} â€¢ {item.quantity} {item.product.unit}
                             </span>
-                            <span>£{(item.product.price * item.quantity).toFixed(2)}</span>
+                            <span>Â£{(item.product.price * item.quantity).toFixed(2)}</span>
                           </div>
                         ))}
                       </div>
@@ -929,7 +929,7 @@ export function CheckoutPage() {
                           Delivery: {format(new Date(deliveryDates[group.producerId]), 'MMM d, yyyy')}
                         </p>
                       )}
-                      <p className="mt-2 text-sm font-medium">Producer Subtotal: £{group.subtotal.toFixed(2)}</p>
+                      <p className="mt-2 text-sm font-medium">Producer Subtotal: Â£{group.subtotal.toFixed(2)}</p>
                     </div>
                   ))}
                 </div>
@@ -939,11 +939,11 @@ export function CheckoutPage() {
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span>Subtotal</span>
-                    <span>£{grandTotal.toFixed(2)}</span>
+                    <span>Â£{grandTotal.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between text-gray-600">
                     <span>Network Commission (5%)</span>
-                    <span>£{commission.toFixed(2)}</span>
+                    <span>Â£{commission.toFixed(2)}</span>
                   </div>
                 </div>
 
@@ -951,7 +951,7 @@ export function CheckoutPage() {
 
                 <div className="flex justify-between text-lg font-semibold">
                   <span>Total</span>
-                  <span className="text-green-700">£{total.toFixed(2)}</span>
+                  <span className="text-green-700">Â£{total.toFixed(2)}</span>
                 </div>
 
                 {address && (

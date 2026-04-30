@@ -87,6 +87,8 @@ class AccountsRegistrationTests(APITestCase):
                     "org_type": "Charity",
                     "contact_name": "Alice Lead",
                     "phone": "07333333333",
+                    "delivery_address": "18 Park Row, Bristol",
+                    "postcode": "BS1 5LJ",
                 },
                 User.Role.COMMUNITY,
             ),
@@ -99,6 +101,8 @@ class AccountsRegistrationTests(APITestCase):
                     "business_name": "Green Bistro",
                     "contact_name": "Bob Chef",
                     "phone": "07444444444",
+                    "delivery_address": "14 Harbourside, Bristol",
+                    "postcode": "BS1 5UH",
                 },
                 User.Role.RESTAURANT,
             ),
@@ -136,6 +140,16 @@ class AccountsRegistrationTests(APITestCase):
                     self.assertIsNotNone(profile.address)
                     self.assertEqual(profile.address.postcode, payload["postcode"])
                     self.assertEqual(profile.lead_time_hours, 48)
+
+                if expected_role == User.Role.COMMUNITY:
+                    profile = CommunityGroupProfile.objects.get(user=user)
+                    self.assertIsNotNone(profile.delivery_address)
+                    self.assertEqual(profile.delivery_address.postcode, payload["postcode"])
+
+                if expected_role == User.Role.RESTAURANT:
+                    profile = RestaurantProfile.objects.get(user=user)
+                    self.assertIsNotNone(profile.delivery_address)
+                    self.assertEqual(profile.delivery_address.postcode, payload["postcode"])
 
         self.assertEqual(len(mail.outbox), len(cases))
         self.assertIn("/verify-email?token=", mail.outbox[-1].body)
@@ -287,7 +301,7 @@ class AccountsRegistrationTests(APITestCase):
 
 
 class AccountsLoginTests(APITestCase):
-    def test_wrong_password_returns_generic_invalid_credentials(self):
+    def test_wrong_password_returns_specific_message(self):
         UserModel.objects.create_user(
             email="login-user@example.com",
             password="StrongPass123!",
@@ -301,7 +315,17 @@ class AccountsLoginTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
-        self.assertEqual(response.data.get("detail"), "Invalid credentials")
+        self.assertEqual(response.data.get("detail"), "Incorrect password. Please try again.")
+
+    def test_unknown_email_returns_specific_message(self):
+        response = self.client.post(
+            reverse("auth-login"),
+            {"email": "missing-user@example.com", "password": "WrongPass123!"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.data.get("detail"), "No account found with that email address.")
 
     def test_login_succeeds_even_when_django_session_cookie_exists(self):
         UserModel.objects.create_user(

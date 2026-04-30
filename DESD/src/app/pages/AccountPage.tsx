@@ -4,6 +4,7 @@ import { ArrowLeft, Building2, Save, ShieldCheck, Store, UserRound, Users } from
 import { toast } from 'sonner';
 import { useAuth } from '../contexts/AuthContext';
 import { apiJson } from '../lib/api';
+import { getPreferredAddress } from '../lib/accountLocation';
 import { getDashboardPathForRole } from '../lib/roleRouting';
 import { useSafeBack } from '../lib/navigation';
 import { SiteHeader } from '../components/SiteHeader';
@@ -304,15 +305,14 @@ export function AccountPage() {
 
       if (nextRole === 'CUSTOMER') {
         const orderProfile = await apiJson<OrdersProfilePayload>('/api/orders/profile/');
+        const preferredAddress = getPreferredAddress(nextRole, profile, me.addresses);
         setFullName(orderProfile.full_name || asString(profile.full_name));
         setPhone(orderProfile.phone || asString(profile.phone));
         setAllergiesText(asString(profile.allergies_text));
         setPreferencesText(asString(profile.preferences_text));
-        setDeliveryAddress(orderProfile.delivery_address || '');
-        setPostcode(orderProfile.postcode || '');
-        setDefaultAddressId(
-          profile.default_address ? String(profile.default_address) : me.addresses[0] ? String(me.addresses[0].id) : 'none',
-        );
+        setDeliveryAddress(preferredAddress?.line1 || orderProfile.delivery_address || '');
+        setPostcode(preferredAddress?.postcode || orderProfile.postcode || '');
+        setDefaultAddressId(preferredAddress ? String(preferredAddress.id) : 'none');
       }
 
       if (nextRole === 'PRODUCER') {

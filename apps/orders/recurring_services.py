@@ -161,12 +161,18 @@ def set_next_instance_override(
     *,
     created_by=None,
 ) -> RecurringOrderInstanceOverride:
-    template_item_product_ids = set(
-        template.items.values_list("product_id", flat=True)
-    )
+    template_items = list(template.items.select_related("product").all())
+    template_item_product_ids = {item.product_id for item in template_items}
+    template_products = {item.product_id: item.product for item in template_items}
+
     for row in override_items:
         if row["product_id"] not in template_item_product_ids:
             raise ValueError("Override product must exist in the recurring template.")
+        product = template_products[row["product_id"]]
+        if row["quantity"] > product.stock_quantity:
+            raise ValueError(
+                f"{product.name} only has {product.stock_quantity.quantize(Decimal('0.01'))} {product.unit} available."
+            )
 
     override, _ = RecurringOrderInstanceOverride.objects.update_or_create(
         template=template,

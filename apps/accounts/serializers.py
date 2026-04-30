@@ -244,9 +244,24 @@ class CommunityRegistrationSerializer(BaseRegistrationSerializer):
     org_type = serializers.CharField(max_length=100)
     contact_name = serializers.CharField(max_length=255)
     phone = serializers.CharField(max_length=30)
+    delivery_address = serializers.CharField(max_length=255)
+    postcode = serializers.CharField(max_length=20)
 
     def create_profile(self, user, profile_data):
-        CommunityGroupProfile.objects.create(user=user, **profile_data)
+        delivery_address = profile_data.pop("delivery_address")
+        postcode = profile_data.pop("postcode")
+
+        city = _infer_city_from_address(delivery_address)
+        address = Address.objects.create(
+            user=user,
+            label="Delivery Address",
+            line1=delivery_address,
+            city=city,
+            postcode=postcode,
+            is_default=True,
+        )
+
+        CommunityGroupProfile.objects.create(user=user, delivery_address=address, **profile_data)
 
 
 class RestaurantRegistrationSerializer(BaseRegistrationSerializer):
@@ -255,9 +270,24 @@ class RestaurantRegistrationSerializer(BaseRegistrationSerializer):
     business_name = serializers.CharField(max_length=255)
     contact_name = serializers.CharField(max_length=255)
     phone = serializers.CharField(max_length=30)
+    delivery_address = serializers.CharField(max_length=255)
+    postcode = serializers.CharField(max_length=20)
 
     def create_profile(self, user, profile_data):
-        RestaurantProfile.objects.create(user=user, **profile_data)
+        delivery_address = profile_data.pop("delivery_address")
+        postcode = profile_data.pop("postcode")
+
+        city = _infer_city_from_address(delivery_address)
+        address = Address.objects.create(
+            user=user,
+            label="Delivery Address",
+            line1=delivery_address,
+            city=city,
+            postcode=postcode,
+            is_default=True,
+        )
+
+        RestaurantProfile.objects.create(user=user, delivery_address=address, **profile_data)
 
 
 class LoginSerializer(serializers.Serializer):
@@ -269,9 +299,19 @@ class LoginSerializer(serializers.Serializer):
         email = attrs.get("email")
         password = attrs.get("password")
         remember_me = attrs.get("remember_me", False)
+        normalized_email = UserModel.objects.normalize_email(email or "")
+        user_record = UserModel.objects.filter(email__iexact=normalized_email).first()
+
+        if user_record is None:
+            raise serializers.ValidationError("No account found with that email address.")
+        if not user_record.is_active:
+            raise serializers.ValidationError("This account is inactive. Please contact support.")
+
         user = authenticate(self.context.get("request"), username=email, password=password)
-        if not user or not user.is_active:
-            raise serializers.ValidationError("Invalid credentials")
+        if not user:
+            raise serializers.ValidationError("Incorrect password. Please try again.")
+        if not user.is_active:
+            raise serializers.ValidationError("This account is inactive. Please contact support.")
         attrs["user"] = user
         attrs["remember_me"] = bool(remember_me)
         return attrs

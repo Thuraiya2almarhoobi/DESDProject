@@ -76,6 +76,8 @@ export interface CommunityRegisterPayload {
   org_type: string;
   contact_name: string;
   phone: string;
+  delivery_address: string;
+  postcode: string;
 }
 
 export interface RestaurantRegisterPayload {
@@ -85,6 +87,8 @@ export interface RestaurantRegisterPayload {
   business_name: string;
   contact_name: string;
   phone: string;
+  delivery_address: string;
+  postcode: string;
 }
 
 class AuthApiError extends Error {

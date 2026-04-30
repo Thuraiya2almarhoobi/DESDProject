@@ -40,7 +40,7 @@ import {
   fetchProductReviews,
   respondToProductReview,
 } from '../api/catalog';
-import { isBulkBuyerRole, isBuyerRole, MAX_ORDER_ITEM_QUANTITY } from '../lib/ordering';
+import { getQuantityCapForRole, isBulkBuyerRole, isBuyerRole } from '../lib/ordering';
 import { getDashboardPathForRole } from '../lib/roleRouting';
 import { useSafeBack } from '../lib/navigation';
 import { ApiRecipe, apiJson } from '../lib/api';
@@ -89,6 +89,7 @@ export function ProductDetailPage() {
   const [product, setProduct] = useState<Product | null>(null);
   const [reviews, setReviews] = useState<ProductReview[]>([]);
   const [quantity, setQuantity] = useState(1);
+  const [quantityLimitMessage, setQuantityLimitMessage] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [isReviewsLoading, setIsReviewsLoading] = useState(true);
@@ -289,8 +290,8 @@ export function ProductDetailPage() {
     if (!product) {
       return 1;
     }
-    return Math.max(1, Math.min(MAX_ORDER_ITEM_QUANTITY, Math.floor(product.stock)));
-  }, [product]);
+    return Math.max(1, getQuantityCapForRole(user?.role, product.stock));
+  }, [product, user?.role]);
 
   const requiresAllergenReview = Boolean(product && product.allergens.length > 0);
   const isBulkBuyer = isBulkBuyerRole(user?.role);
@@ -323,8 +324,8 @@ export function ProductDetailPage() {
     if (!product) {
       return 0;
     }
-    return Math.max(0, Math.min(MAX_ORDER_ITEM_QUANTITY, product.stock) - cartQuantity);
-  }, [cartQuantity, product]);
+    return Math.max(0, getQuantityCapForRole(user?.role, product.stock) - cartQuantity);
+  }, [cartQuantity, product, user?.role]);
 
   const validateBuyerPurchaseAction = () => {
     if (!product || !isAvailable) {
@@ -458,7 +459,7 @@ export function ProductDetailPage() {
             Build larger producer orders here, then continue through the dedicated {user?.role === 'COMMUNITY' ? 'bulk checkout' : 'restaurant checkout'} flow.
           </p>
           <p className="mt-2 text-xs text-gray-500">
-            Maximum quantity per product: {MAX_ORDER_ITEM_QUANTITY} units.
+            Quantity cap follows the producer&apos;s current available stock for this product.
           </p>
         </div>
       )}
@@ -549,15 +550,21 @@ export function ProductDetailPage() {
 
   const incrementQuantity = () => {
     if (quantity < maxQuantity) {
+      setQuantityLimitMessage('');
       setQuantity((value) => value + 1);
     }
   };
 
   const decrementQuantity = () => {
     if (quantity > 1) {
+      setQuantityLimitMessage('');
       setQuantity((value) => value - 1);
     }
   };
+
+  useEffect(() => {
+    setQuantityLimitMessage('');
+  }, [maxQuantity]);
 
   const refreshReviewEligibility = async () => {
     if (!id) {
@@ -817,43 +824,53 @@ export function ProductDetailPage() {
             {isAvailable && (
               <div className="space-y-3">
                 <label className="text-sm font-medium">Quantity</label>
-                <div className="flex items-center gap-3">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={decrementQuantity}
-                    disabled={quantity <= 1 || isCartActionPending}
-                  >
-                    <Minus className="size-4" />
-                  </Button>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      type="number"
-                      min="1"
-                      max={String(maxQuantity)}
-                      step="1"
-                      value={quantity}
-                      onFocus={(event) => event.target.select()}
-                      onChange={(event) => {
-                        const next = Number(event.target.value);
-                        if (!Number.isFinite(next)) {
-                          return;
-                        }
-                        setQuantity(Math.max(1, Math.min(maxQuantity, Math.floor(next))));
-                      }}
-                      className="w-24 text-center"
-                      disabled={isCartActionPending}
-                    />
-                    <span className="text-sm text-gray-500">{product.unit}</span>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-3">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={decrementQuantity}
+                      disabled={quantity <= 1 || isCartActionPending}
+                    >
+                      <Minus className="size-4" />
+                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        min="1"
+                        max={String(maxQuantity)}
+                        step="1"
+                        value={quantity}
+                        onFocus={(event) => event.target.select()}
+                        onChange={(event) => {
+                          const next = Number(event.target.value);
+                          if (!Number.isFinite(next)) {
+                            return;
+                          }
+                          if (isBulkBuyer && next > maxQuantity) {
+                            setQuantityLimitMessage(`Only ${maxQuantity} ${product.unit} available in stock.`);
+                          } else {
+                            setQuantityLimitMessage('');
+                          }
+                          setQuantity(Math.max(1, Math.min(maxQuantity, Math.floor(next))));
+                        }}
+                        className="w-24 text-center"
+                        disabled={isCartActionPending}
+                      />
+                      <span className="text-sm text-gray-500">{product.unit}</span>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={incrementQuantity}
+                      disabled={quantity >= maxQuantity || isCartActionPending}
+                    >
+                      <Plus className="size-4" />
+                    </Button>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={incrementQuantity}
-                    disabled={quantity >= maxQuantity || isCartActionPending}
-                  >
-                    <Plus className="size-4" />
-                  </Button>
+                  {isBulkBuyer && quantityLimitMessage ? (
+                    <p className="text-[11px] text-orange-600">{quantityLimitMessage}</p>
+                  ) : null}
                 </div>
               </div>
             )}

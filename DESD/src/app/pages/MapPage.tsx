@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, MapPin, Route } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { apiJson } from '../lib/api';
+import { formatDisplayPostcode, getPreferredPostcode } from '../lib/accountLocation';
 import { getGoogleMapsEmbedUrl, getGoogleMapsSearchUrl } from '../lib/googleMaps';
 import { useSafeBack } from '../lib/navigation';
 import { SiteHeader } from '../components/SiteHeader';
@@ -44,7 +45,7 @@ interface CartMilesPayload {
 
 export function MapPage() {
   const goBack = useSafeBack('/marketplace');
-  const { user } = useAuth();
+  const { user, profile, addresses, loading: authLoading } = useAuth();
   const [postcode, setPostcode] = useState('');
   const [radius, setRadius] = useState('20');
   const [loading, setLoading] = useState(true);
@@ -81,14 +82,17 @@ export function MapPage() {
       : user?.role === 'RESTAURANT'
         ? 'Compare supplier distances around your kitchen postcode and track total food miles across the current restaurant order cart.'
         : 'Postcode distance and cart food-miles visual for sustainability tracking.';
+  const defaultPostcode = useMemo(
+    () => formatDisplayPostcode(getPreferredPostcode(user?.role, profile, addresses)),
+    [addresses, profile, user],
+  );
 
   const loadData = async (overridePostcode?: string, overrideRadius?: string) => {
     setLoading(true);
     setError('');
 
     try {
-      const profile = await apiJson<{ postcode: string }>('/api/orders/profile/');
-      const activePostcode = overridePostcode || postcode || profile.postcode || '';
+      const activePostcode = formatDisplayPostcode(overridePostcode || postcode || defaultPostcode || '');
       const activeRadius = overrideRadius || radius || '20';
 
       setPostcode(activePostcode);
@@ -111,9 +115,12 @@ export function MapPage() {
   };
 
   useEffect(() => {
-    void loadData();
+    if (authLoading) {
+      return;
+    }
+    void loadData(defaultPostcode, radius);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [authLoading, defaultPostcode]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[oklch(0.98_0.01_145)] to-[oklch(0.96_0.02_150)]">

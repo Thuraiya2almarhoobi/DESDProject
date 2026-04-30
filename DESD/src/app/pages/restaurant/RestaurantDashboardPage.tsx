@@ -85,7 +85,7 @@ export function RestaurantDashboardPage() {
                   Build producer orders for the kitchen, confirm one-off deliveries, and convert stable demand into recurring templates without losing the cleaner buyer-style interface.
                 </p>
               </div>
-              <Badge variant="secondary">Up to 100 units per product</Badge>
+                <Badge variant="secondary">Producer stock limit</Badge>
             </div>
           </CardHeader>
           <CardContent className="grid gap-6 lg:grid-cols-[1.45fr_1fr]">
@@ -135,7 +135,7 @@ export function RestaurantDashboardPage() {
                 </div>
                 <div className="flex items-start gap-3">
                   <PackageCheck className="mt-0.5 size-4 text-green-700" />
-                  <span>Large quantities are supported, with a clear cap of 100 units per product across the restaurant ordering flow.</span>
+                  <span>Large quantities are supported, with each product limited by the producer&apos;s live available stock.</span>
                 </div>
                 <div className="flex items-start gap-3">
                   <Sparkles className="mt-0.5 size-4 text-green-700" />

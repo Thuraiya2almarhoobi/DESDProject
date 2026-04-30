@@ -7,8 +7,10 @@ from django.utils import timezone
 
 from apps.accounts.models import (
     Address,
+    CommunityGroupProfile,
     CustomerProfile as EditableCustomerProfile,
     ProducerProfile as EditableProducerProfile,
+    RestaurantProfile,
 )
 from apps.content.models import FarmStory, Recipe, RecipeProduct
 from apps.orders.marketplace_sync import _available_orders_business_name
@@ -82,6 +84,14 @@ class Command(BaseCommand):
         producer_two_user, producer_two_created = upsert_user(
             "producer2@example.com",
             role=User.Role.PRODUCER,
+        )
+        community_user, community_created = upsert_user(
+            "community@example.com",
+            role=User.Role.COMMUNITY,
+        )
+        restaurant_user, restaurant_created = upsert_user(
+            "restaurant@example.com",
+            role=User.Role.RESTAURANT,
         )
         admin_user, admin_created = upsert_user(
             "admin@example.com",
@@ -247,6 +257,41 @@ class Command(BaseCommand):
                 "farm_origin_text": "Milk, eggs, and bakery goods prepared for local delivery.",
                 "lead_time_hours": 72,
                 "address": hillside_dairy_address,
+            },
+        )
+
+        community_address = upsert_address(
+            community_user,
+            label="Delivery Address",
+            line1="18 Park Row",
+            city="Bristol",
+            postcode="BS1 5LJ",
+        )
+        CommunityGroupProfile.objects.update_or_create(
+            user=community_user,
+            defaults={
+                "organisation_name": "Community Pantry",
+                "org_type": "Community Group",
+                "contact_name": "Nadia Organiser",
+                "phone": "07700900124",
+                "delivery_address": community_address,
+            },
+        )
+
+        restaurant_address = upsert_address(
+            restaurant_user,
+            label="Delivery Address",
+            line1="14 Harbourside",
+            city="Bristol",
+            postcode="BS1 5UH",
+        )
+        RestaurantProfile.objects.update_or_create(
+            user=restaurant_user,
+            defaults={
+                "business_name": "Harbourside Restaurant",
+                "contact_name": "Marco Chef",
+                "phone": "07700900125",
+                "delivery_address": restaurant_address,
             },
         )
 
@@ -725,14 +770,15 @@ class Command(BaseCommand):
         self.stdout.write(
             self.style.WARNING(
                 "Accounts: customer@example.com, producer@example.com, producer2@example.com, "
-                "admin@example.com, finance.admin@example.com, operations.admin@example.com, audit.admin@example.com"
+                "community@example.com, restaurant@example.com, admin@example.com, "
+                "finance.admin@example.com, operations.admin@example.com, audit.admin@example.com"
             )
         )
         self.stdout.write(self.style.WARNING(f"Password for all accounts: {password}"))
         self.stdout.write(
             "Users created/updated: "
             f"customer={customer_created}, producer={producer_created}, "
-            f"producer2={producer_two_created}, admin={admin_created}, "
+            f"producer2={producer_two_created}, community={community_created}, restaurant={restaurant_created}, admin={admin_created}, "
             f"finance_admin={finance_admin_created}, operations_admin={operations_admin_created}, "
             f"audit_admin={audit_admin_created}"
         )

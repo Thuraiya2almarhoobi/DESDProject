@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate } from 'react-router';
 import { LogOut, MapPin, Menu, Search, ShoppingCart, Sprout, User, X } from 'lucide-react';
 
 import { useAuth } from '../contexts/AuthContext';
+import { formatDisplayPostcode, getPreferredAddress, getRoleLabel } from '../lib/accountLocation';
 import { useCart } from '../contexts/CartContext';
 import { clearPendingCustomerPreviewExitTarget } from '../lib/customerPreview';
 import { getDashboardPathForRole } from '../lib/roleRouting';
@@ -47,7 +48,7 @@ export function SiteHeader({
 }: SiteHeaderProps) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, logout, stopCustomerPreview } = useAuth();
+  const { user, profile, addresses, logout, stopCustomerPreview } = useAuth();
   const { getTotalItems } = useCart();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [localSearchQuery, setLocalSearchQuery] = useState('');
@@ -71,6 +72,21 @@ export function SiteHeader({
     !user || isMarketingSurface || user.role === 'ADMIN' ? '/browse' : '/marketplace';
   const searchValue = onSearchQueryChange ? searchQuery : localSearchQuery;
   const cartItemCount = getTotalItems();
+  const preferredAddress = useMemo(
+    () => (user ? getPreferredAddress(user.role, profile, addresses) : null),
+    [addresses, profile, user],
+  );
+  const userPostcode = formatDisplayPostcode(preferredAddress?.postcode);
+  const signedInRoleLabel = getRoleLabel(user?.role);
+  const postcodeEditTarget = user
+    ? user.role === 'PRODUCER'
+      ? '/account#business-profile'
+      : user.role === 'COMMUNITY'
+        ? '/account#organisation-profile'
+        : user.role === 'RESTAURANT'
+          ? '/account#delivery-profile'
+          : '/account#delivery-profile'
+    : '/account';
 
   useEffect(() => {
     setIsMobileMenuOpen(false);
@@ -119,14 +135,7 @@ export function SiteHeader({
 
   const desktopActionButtons = !isAuthenticated ? (
     <>
-      <Button
-        asChild
-        variant="outline"
-        size="sm"
-        className="border-[var(--forest-green)] text-[var(--forest-green)] hover:bg-[color-mix(in_srgb,var(--forest-green)_8%,white)] hover:text-[var(--forest-green)]"
-      >
-        <Link to="/portal/producer">Producer portal</Link>
-      </Button>
+
       <Button asChild variant="ghost" size="sm" className="text-[var(--forest-green)] hover:bg-[color-mix(in_srgb,var(--forest-green)_6%,white)]">
         <Link to="/login">Sign in</Link>
       </Button>
@@ -136,6 +145,7 @@ export function SiteHeader({
     </>
   ) : (
     <>
+
       {isBuyer ? (
         <Button
           asChild
@@ -227,27 +237,86 @@ export function SiteHeader({
 
             {showNavigation ? (
               <div className="border-t border-[#e9e3d7]">
-                <nav aria-label="Primary" className="flex items-center justify-center gap-4 overflow-x-auto py-2.5">
-                  {navItems.map((item) => {
-                    const isActive = isSiteNavItemActive(location.pathname, item);
+                {isAuthenticated ? (
+                  <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4 py-2.5">
+                    <div className="min-w-0 truncate pl-2 text-sm text-[oklch(0.42_0.03_145)]">
+                      <span className="font-medium text-[var(--forest-green)]">{user.name}</span>
+                      <span className="px-2 text-[oklch(0.55_0.02_145)]">&middot;</span>
+                      <span>{signedInRoleLabel}</span>
+                    </div>
+                    <nav aria-label="Primary" className="flex items-center justify-center gap-4 overflow-x-auto">
+                      {navItems.map((item) => {
+                        const isActive = isSiteNavItemActive(location.pathname, item);
 
-                    return (
+                        return (
+                          <Link
+                            key={item.label}
+                            to={item.to}
+                            onClick={(event) => handleSamePageClick(event, item.to)}
+                            className={cn(
+                              'border-b-2 px-2.5 py-1.5 text-sm font-medium transition-colors',
+                              isActive
+                                ? 'border-[var(--forest-green)] text-[var(--forest-green)]'
+                                : 'border-transparent text-[oklch(0.38_0.03_95)] hover:border-[color-mix(in_srgb,var(--forest-green)_35%,white)] hover:text-[var(--forest-green)]',
+                            )}
+                          >
+                            {item.label}
+                          </Link>
+                        );
+                      })}
+                    </nav>
+                    <div className="flex justify-end">
                       <Link
-                        key={item.label}
-                        to={item.to}
-                        onClick={(event) => handleSamePageClick(event, item.to)}
-                        className={cn(
-                          'border-b-2 px-2.5 py-1.5 text-sm font-medium transition-colors',
-                          isActive
-                            ? 'border-[var(--forest-green)] text-[var(--forest-green)]'
-                            : 'border-transparent text-[oklch(0.38_0.03_95)] hover:border-[color-mix(in_srgb,var(--forest-green)_35%,white)] hover:text-[var(--forest-green)]',
-                        )}
+                        to={postcodeEditTarget}
+                        className="inline-flex items-center gap-2 rounded-full border border-[#d8d0c0] bg-[#fffefa] px-3 py-1.5 text-xs font-medium text-[oklch(0.42_0.03_145)] transition-colors hover:border-[color-mix(in_srgb,var(--forest-green)_40%,white)] hover:text-[var(--forest-green)]"
                       >
-                        {item.label}
+                        <MapPin className="size-3.5 text-[var(--forest-green)]" />
+                        <span>Delivering to</span>
+                        <span className="text-[var(--forest-green)]">{userPostcode || 'Set postcode'}</span>
                       </Link>
-                    );
-                  })}
-                </nav>
+                    </div>
+                  </div>
+                ) : (
+                  <nav aria-label="Primary" className="flex items-center justify-center gap-4 overflow-x-auto py-2.5">
+                    {navItems.map((item) => {
+                      const isActive = isSiteNavItemActive(location.pathname, item);
+
+                      return (
+                        <Link
+                          key={item.label}
+                          to={item.to}
+                          onClick={(event) => handleSamePageClick(event, item.to)}
+                          className={cn(
+                            'border-b-2 px-2.5 py-1.5 text-sm font-medium transition-colors',
+                            isActive
+                              ? 'border-[var(--forest-green)] text-[var(--forest-green)]'
+                              : 'border-transparent text-[oklch(0.38_0.03_95)] hover:border-[color-mix(in_srgb,var(--forest-green)_35%,white)] hover:text-[var(--forest-green)]',
+                          )}
+                        >
+                          {item.label}
+                        </Link>
+                      );
+                    })}
+                  </nav>
+                )}
+              </div>
+            ) : isAuthenticated ? (
+              <div className="border-t border-[#e9e3d7]">
+                <div className="flex items-center justify-between gap-4 py-2 text-sm text-[oklch(0.42_0.03_145)]">
+                  <div className="min-w-0 truncate pl-2">
+                    <span className="font-medium text-[var(--forest-green)]">{user.name}</span>
+                    <span className="px-2">&middot;</span>
+                    <span>{signedInRoleLabel}</span>
+                  </div>
+                  <Link
+                    to={postcodeEditTarget}
+                    className="inline-flex shrink-0 items-center gap-2 rounded-full border border-[#d8d0c0] bg-[#fffefa] px-3 py-1.5 text-xs font-medium text-[oklch(0.42_0.03_145)] transition-colors hover:border-[color-mix(in_srgb,var(--forest-green)_40%,white)] hover:text-[var(--forest-green)]"
+                  >
+                    <MapPin className="size-3.5 text-[var(--forest-green)]" />
+                    <span>Delivering to</span>
+                    <span className="text-[var(--forest-green)]">{userPostcode || 'Set postcode'}</span>
+                  </Link>
+                </div>
               </div>
             ) : null}
           </div>
@@ -276,6 +345,26 @@ export function SiteHeader({
               {isMobileMenuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
             </Button>
           </div>
+
+          {isAuthenticated ? (
+            <div className="border-t border-[oklch(0.9_0.02_145)] py-2 md:hidden">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[oklch(0.42_0.03_145)]">
+                <div className="min-w-0 truncate pl-12">
+                  <span className="font-medium text-[var(--forest-green)]">{user.name}</span>
+                  <span className="px-1.5">&middot;</span>
+                  <span>{signedInRoleLabel}</span>
+                </div>
+                <Link
+                  to={postcodeEditTarget}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[#d8d0c0] bg-[#fffefa] px-2.5 py-1 text-[11px] font-medium text-[oklch(0.42_0.03_145)]"
+                >
+                  <MapPin className="size-3 text-[var(--forest-green)]" />
+                  <span>Delivering to</span>
+                  <span className="text-[var(--forest-green)]">{userPostcode || 'Set postcode'}</span>
+                </Link>
+              </div>
+            </div>
+          ) : null}
 
           {isMobileMenuOpen ? (
             <div className="border-t border-[oklch(0.9_0.02_145)] py-4 md:hidden">
@@ -325,6 +414,7 @@ export function SiteHeader({
                 </div>
               ) : null}
 
+
               <div className={cn('grid gap-2', renderSearch || showNavigation ? 'mt-4' : '')}>{desktopActionButtons}</div>
             </div>
           ) : null}
@@ -337,7 +427,7 @@ export function SiteHeader({
                 <MapPin className="size-4 text-[var(--forest-green)]" />
                 <span>
                   Built for local ordering in <span className="font-semibold text-[var(--forest-green)]">{locationCity}</span>{' '}
-                  <span className="text-[oklch(0.52_0.02_145)]">·</span>{' '}
+                  <span className="text-[oklch(0.52_0.02_145)]">|</span>{' '}
                 </span>
                 <button
                   type="button"
@@ -356,3 +446,9 @@ export function SiteHeader({
     </div>
   );
 }
+
+
+
+
+
+

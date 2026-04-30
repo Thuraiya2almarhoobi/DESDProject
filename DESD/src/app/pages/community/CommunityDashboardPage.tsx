@@ -84,7 +84,7 @@ export function CommunityDashboardPage() {
                   Build one shared order across producers, keep delivery notes organised, and use the same polished buyer tools available in the customer marketplace flow.
                 </p>
               </div>
-              <Badge variant="secondary">Up to 100 units per product</Badge>
+                <Badge variant="secondary">Producer stock limit</Badge>
             </div>
           </CardHeader>
           <CardContent className="grid gap-6 lg:grid-cols-[1.45fr_1fr]">
@@ -134,7 +134,7 @@ export function CommunityDashboardPage() {
                 </div>
                 <div className="flex items-start gap-3">
                   <PackageCheck className="mt-0.5 size-4 text-green-700" />
-                  <span>Large quantities are supported, with a clear cap of 100 units per product in each order basket.</span>
+                  <span>Large quantities are supported, with each product limited by the producer&apos;s live available stock.</span>
                 </div>
                 <div className="flex items-start gap-3">
                   <Sparkles className="mt-0.5 size-4 text-green-700" />

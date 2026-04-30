@@ -733,3 +733,64 @@ class OrdersCriticalFlowTests(APITestCase):
         )
         self.assertEqual(add_response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("out of season", str(add_response.data).lower())
+
+
+class BulkBuyerQuantityCapTests(APITestCase):
+    def setUp(self):
+        self.restaurant_user = User.objects.create_user(
+            email="bulk-restaurant@example.com",
+            password="StrongPass123!",
+            role=User.Role.RESTAURANT,
+        )
+        self.community_user = User.objects.create_user(
+            email="bulk-community@example.com",
+            password="StrongPass123!",
+            role=User.Role.COMMUNITY,
+        )
+        producer_user = User.objects.create_user(
+            email="bulk-producer@example.com",
+            password="StrongPass123!",
+            role=User.Role.PRODUCER,
+        )
+        producer = Producer.objects.create(
+            user=producer_user,
+            business_name="High Stock Farm",
+            postcode="BS1 1AA",
+            lead_time_hours=48,
+        )
+        self.product = Product.objects.create(
+            producer=producer,
+            name="Bulk Potatoes",
+            category="Vegetables",
+            unit="kg",
+            price=Decimal("1.25"),
+            stock_quantity=Decimal("250.00"),
+            is_available=True,
+        )
+
+    def test_restaurant_can_add_more_than_legacy_cap_when_stock_allows(self):
+        client = APIClient()
+        client.force_authenticate(self.restaurant_user)
+
+        response = client.post(
+            "/api/orders/cart/items/",
+            {"product_id": self.product.id, "quantity": "150"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        cart_item = Cart.objects.get(customer=self.restaurant_user).items.get(product=self.product)
+        self.assertEqual(cart_item.quantity, Decimal("150.00"))
+
+    def test_community_quantity_is_still_limited_by_available_stock(self):
+        client = APIClient()
+        client.force_authenticate(self.community_user)
+
+        response = client.post(
+            "/api/orders/cart/items/",
+            {"product_id": self.product.id, "quantity": "300"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data["detail"], "Requested quantity exceeds available stock.")
