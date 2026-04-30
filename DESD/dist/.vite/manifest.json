@@ -1,11 +1,11 @@
 {
   "index.html": {
-    "file": "assets/index-DUmwm36f.js",
+    "file": "assets/index-BXRqooF-.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,
     "css": [
-      "assets/index-BV1Dkuur.css"
+      "assets/index-ZXrStjXu.css"
     ],
     "assets": [
       "assets/WhatsApp Image 2026-04-29 at 21.27.34 (8)-n3KXcqpC.jpeg",
@@ -22,7 +22,12 @@
       "assets/WhatsApp Image 2026-04-29 at 21.27.34 (4)-D609icjS.jpeg",
       "assets/WhatsApp Image 2026-04-29 at 21.27.33 (9)-Cpef4xef.jpeg",
       "assets/WhatsApp Image 2026-04-29 at 21.27.33 (15)-CZ4xd4f7.jpeg",
-      "assets/WhatsApp Image 2026-04-29 at 21.27.34 (7)-CMmq8SOb.jpeg"
+      "assets/WhatsApp Image 2026-04-29 at 21.27.34 (7)-CMmq8SOb.jpeg",
+      "assets/WhatsApp Image 2026-04-29 at 21.27.33 (17)-B5PsxZoU.jpeg",
+      "assets/greenforce-staffing-bYZn_C-RswQ-unsplash-C3vRYJwz.jpg",
+      "assets/annie-spratt-JMjNnQ2xFoY-unsplash-SFskJDIL.jpg",
+      "assets/elaine-casap-qgHGDbbSNm8-unsplash-DVpMDutA.jpg",
+      "assets/tim-mossholder-xDwEa2kaeJA-unsplash-BOgeXSY8.jpg"
     ]
   },
   "src/assets/about/WhatsApp Image 2026-04-29 at 21.27.33 (11).jpeg": {
@@ -77,6 +82,10 @@
     "file": "assets/WhatsApp Image 2026-04-29 at 21.27.33 (16)-BYVZre_k.jpeg",
     "src": "src/assets/homepage/WhatsApp Image 2026-04-29 at 21.27.33 (16).jpeg"
   },
+  "src/assets/homepage/WhatsApp Image 2026-04-29 at 21.27.33 (17).jpeg": {
+    "file": "assets/WhatsApp Image 2026-04-29 at 21.27.33 (17)-B5PsxZoU.jpeg",
+    "src": "src/assets/homepage/WhatsApp Image 2026-04-29 at 21.27.33 (17).jpeg"
+  },
   "src/assets/homepage/WhatsApp Image 2026-04-29 at 21.27.33.jpeg": {
     "file": "assets/WhatsApp Image 2026-04-29 at 21.27.33-ChFjeTvn.jpeg",
     "src": "src/assets/homepage/WhatsApp Image 2026-04-29 at 21.27.33.jpeg"
@@ -84,5 +93,21 @@
   "src/assets/homepage/WhatsApp Image 2026-04-29 at 21.27.34 (8).jpeg": {
     "file": "assets/WhatsApp Image 2026-04-29 at 21.27.34 (8)-n3KXcqpC.jpeg",
     "src": "src/assets/homepage/WhatsApp Image 2026-04-29 at 21.27.34 (8).jpeg"
+  },
+  "src/assets/producers/annie-spratt-JMjNnQ2xFoY-unsplash.jpg": {
+    "file": "assets/annie-spratt-JMjNnQ2xFoY-unsplash-SFskJDIL.jpg",
+    "src": "src/assets/producers/annie-spratt-JMjNnQ2xFoY-unsplash.jpg"
+  },
+  "src/assets/producers/elaine-casap-qgHGDbbSNm8-unsplash.jpg": {
+    "file": "assets/elaine-casap-qgHGDbbSNm8-unsplash-DVpMDutA.jpg",
+    "src": "src/assets/producers/elaine-casap-qgHGDbbSNm8-unsplash.jpg"
+  },
+  "src/assets/producers/greenforce-staffing-bYZn_C-RswQ-unsplash.jpg": {
+    "file": "assets/greenforce-staffing-bYZn_C-RswQ-unsplash-C3vRYJwz.jpg",
+    "src": "src/assets/producers/greenforce-staffing-bYZn_C-RswQ-unsplash.jpg"
+  },
+  "src/assets/producers/tim-mossholder-xDwEa2kaeJA-unsplash.jpg": {
+    "file": "assets/tim-mossholder-xDwEa2kaeJA-unsplash-BOgeXSY8.jpg",
+    "src": "src/assets/producers/tim-mossholder-xDwEa2kaeJA-unsplash.jpg"
   }
 }

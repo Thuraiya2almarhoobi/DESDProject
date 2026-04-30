@@ -10,12 +10,12 @@ import {
   ShieldCheck,
   ShoppingBasket,
   Sprout,
-  Truck,
   Users,
   UtensilsCrossed,
 } from 'lucide-react';
 import { Link } from 'react-router';
 
+import { MarketingImageCard } from '../components/MarketingImageCard';
 import { SiteHeader } from '../components/SiteHeader';
 import { Button } from '../components/ui/button';
 import farmFeatureImage from '../../assets/homepage/WhatsApp Image 2026-04-29 at 21.27.34 (8).jpeg';
@@ -28,13 +28,6 @@ const stats = [
   { number: '28+', label: 'Local producers' },
   { number: '500+', label: 'Fresh products' },
   { number: '48h', label: 'Typical delivery' },
-];
-
-const productSignals = [
-  { icon: MapPin, title: 'Food miles visible', body: 'Producer location and journey context stay present while browsing.' },
-  { icon: Sprout, title: 'Seasonal by default', body: 'Harvest windows and availability help buyers choose what makes sense now.' },
-  { icon: ShieldCheck, title: 'Compliance in context', body: 'Allergens, organic status, and product detail sit inside the product view.' },
-  { icon: Truck, title: 'Delivery made explicit', body: 'Orders can be grouped by producer and tracked through clear delivery timing.' },
 ];
 
 const featuredFarms = [
@@ -91,24 +84,42 @@ const roles = [
 
 const panelClass = 'landing-snap-panel market-section flex items-center';
 
-const heroImageStrip = [
+const homeContextCards = [
   {
-    src: localFarmsImage,
-    alt: 'Aerial view of a local orchard with neat crop rows.',
-    label: 'Local farms',
-    body: 'See the growing landscape behind each producer before you decide to order.',
-  },
-  {
-    src: freshProduceImage,
+    image: freshProduceImage,
     alt: 'Fresh fruit and vegetables displayed together in a market stall.',
-    label: 'Fresh produce',
-    body: 'Marketplace detail stays connected to the kind of food buyers actually recognise and compare.',
+    icon: ShoppingBasket,
+    label: 'Marketplace context',
+    title: 'Origin stays visible',
+    body: 'Producer, season, and route detail stay close to the products buyers are actually comparing.',
+    imagePosition: 'object-center',
   },
   {
-    src: shorterRoutesImage,
+    image: localFarmsImage,
+    alt: 'Aerial view of a local orchard with neat crop rows.',
+    icon: Sprout,
+    label: 'Local farms',
+    title: 'Producers stay connected',
+    body: 'Farm identity and supply context remain visible as browsing turns into a real order.',
+    imagePosition: 'object-center',
+  },
+  {
+    image: shorterRoutesImage,
     alt: 'A Bristol bridge and surrounding landscape representing local delivery routes.',
+    icon: Route,
     label: 'Shorter routes',
-    body: 'Journey context and delivery timing stay clear, so buyers understand how food reaches them.',
+    title: 'Delivery context is clear',
+    body: 'Food miles and timing stay readable before checkout starts, not after it.',
+    imagePosition: 'object-center',
+  },
+  {
+    image: farmFeatureImage,
+    alt: 'A local farm landscape representing buyer confidence in source and quality.',
+    icon: ShieldCheck,
+    label: 'Buyer confidence',
+    title: 'Signals stay in the product view',
+    body: 'Allergens, organic status, and seasonal availability stay visible where decisions happen.',
+    imagePosition: 'object-center',
   },
 ];
 
@@ -219,7 +230,7 @@ export function LandingPage() {
 
                   <div className="grid gap-3 sm:grid-cols-2">
                     <Link
-                      to="/register"
+                      to="/select-portal?mode=register"
                       className="group flex min-h-[7.5rem] cursor-pointer flex-col justify-center rounded-[1.35rem] border border-[color-mix(in_srgb,var(--forest-green)_22%,#e4e1d8)] bg-[color-mix(in_srgb,var(--forest-green)_5%,#fffefa)] p-[1.1rem] text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-[var(--forest-green)] hover:bg-[color-mix(in_srgb,var(--forest-green)_8%,#fffefa)] hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--forest-green)] focus-visible:ring-offset-2 sm:p-5"
                     >
                       <span className="text-[0.84rem] font-medium text-[oklch(0.42_0.032_118)]">New to the marketplace?</span>
@@ -248,7 +259,7 @@ export function LandingPage() {
                   <p className="flex flex-wrap items-center gap-x-2 gap-y-1 pt-1 text-[0.9rem] text-[oklch(0.42_0.032_118)]">
                     <span className="font-medium">Interested in selling?</span>
                     <Link
-                      to="/producers"
+                      to="/register/producer"
                       className="group inline-flex items-center gap-1.5 font-semibold text-[var(--forest-green)] transition-colors hover:text-[oklch(0.28_0.06_140)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--forest-green)] focus-visible:ring-offset-2"
                     >
                       <span>Join us as a producer</span>
@@ -258,12 +269,14 @@ export function LandingPage() {
                 </div>
               </div>
 
-              <div className="market-display-panel relative w-full min-w-0 max-w-[calc(100vw-2rem)] overflow-hidden rounded-[2rem] p-4 sm:max-w-full sm:p-6 xl:p-7">
-                <div className="absolute inset-x-6 top-1/2 h-px market-route-line" />
+              <div className="relative w-full min-w-0 max-w-[calc(100vw-2rem)] overflow-hidden rounded-[1.85rem] border border-[#e4e1d8] bg-[linear-gradient(180deg,#fffdfa_0%,#f4f5ee_100%)] p-4 shadow-[0_24px_56px_rgba(18,28,20,0.12)] sm:max-w-full sm:p-5 xl:p-6">
                 <div className="relative grid gap-4 xl:gap-5">
                   <div className="grid min-w-0 grid-cols-3 gap-3">
                     {stats.map((stat) => (
-                      <div key={stat.label} className="min-w-0 border-l border-[oklch(0.78_0.04_80)] pl-3 sm:pl-4">
+                      <div
+                        key={stat.label}
+                        className="min-w-0 rounded-[1rem] border border-[color-mix(in_srgb,var(--forest-green)_10%,#e4e1d8)] bg-white/78 p-3 shadow-[0_10px_24px_rgba(18,28,20,0.04)] sm:p-4"
+                      >
                         <p className="text-2xl font-bold text-[var(--forest-green)] sm:text-4xl">{stat.number}</p>
                         <p className="mt-1 text-[0.62rem] font-semibold uppercase tracking-[0.08em] text-[oklch(0.42_0.035_110)] sm:text-xs sm:tracking-[0.12em]">
                           {stat.label}
@@ -376,13 +389,13 @@ export function LandingPage() {
                   </div>
 
                   <div className="hidden gap-3 sm:grid sm:grid-cols-2">
-                    <div className="rounded-[1rem] bg-white/68 p-3.5 xl:p-4">
+                    <div className="rounded-[1.05rem] border border-[color-mix(in_srgb,var(--forest-green)_10%,#e4e1d8)] bg-white/78 p-3.5 shadow-[0_10px_24px_rgba(18,28,20,0.05)] xl:p-4">
                       <p className="text-sm font-semibold text-[var(--forest-green)]">Seasonal signal</p>
                       <p className="mt-2 text-sm leading-6 text-[oklch(0.4_0.035_110)]">
                         Product pages show harvest dates, availability windows, and source detail together.
                       </p>
                     </div>
-                    <div className="rounded-[1rem] bg-[#f4f2eb] p-3.5 xl:p-4">
+                    <div className="rounded-[1.05rem] border border-[color-mix(in_srgb,var(--forest-green)_10%,#e4e1d8)] bg-[#f4f2eb] p-3.5 shadow-[0_10px_24px_rgba(18,28,20,0.05)] xl:p-4">
                       <p className="text-sm font-semibold text-[var(--forest-green)]">Buyer confidence</p>
                       <p className="mt-2 text-sm leading-6 text-[oklch(0.4_0.035_78)]">
                         Allergens and organic status appear inline before checkout.
@@ -392,65 +405,43 @@ export function LandingPage() {
                 </div>
               </div>
             </div>
-
-            <div className="mt-6 grid gap-3 lg:grid-cols-3">
-              {heroImageStrip.map((imageCard) => (
-                <figure
-                  key={imageCard.label}
-                  className="overflow-hidden rounded-[1.4rem] border border-[#e4e1d8] bg-[#fffefa]/82 shadow-sm"
-                >
-                  <img
-                    src={imageCard.src}
-                    alt={imageCard.alt}
-                    className="h-36 w-full object-cover"
-                  />
-                  <figcaption className="space-y-2 p-4">
-                    <p className="text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-[var(--forest-green)]">
-                      {imageCard.label}
-                    </p>
-                    <p className="text-sm leading-6 text-[oklch(0.39_0.032_122)]">{imageCard.body}</p>
-                  </figcaption>
-                </figure>
-              ))}
-            </div>
           </div>
         </section>
 
-        <section aria-labelledby="home-signals" className={`${panelClass} market-section-white`}>
-          <div className="mx-auto grid w-full max-w-7xl gap-6 px-4 lg:grid-cols-[0.9fr_1.1fr] lg:items-center xl:gap-10">
-            <div className="space-y-5">
-              <h2 id="home-signals" className="market-section-title max-w-3xl text-[oklch(0.23_0.034_87)]">
+        <section aria-labelledby="home-context" className="market-section market-section-white">
+          <div className="mx-auto max-w-7xl px-4 py-16 sm:py-20">
+            <div className="max-w-3xl space-y-5">
+              <h2 id="home-context" className="market-section-title max-w-3xl text-[oklch(0.23_0.034_87)]">
                 The detail is not buried at the end.
               </h2>
-              <p className="market-copy max-w-xl">
+              <p className="market-copy max-w-2xl">
                 Every step of the marketplace keeps the important context in view: who produced it, when it is
                 available, what is inside it, and how it gets to the buyer.
               </p>
             </div>
 
-            <div className="grid gap-x-8 gap-y-7 md:grid-cols-2">
-              {productSignals.map((signal) => {
-                const Icon = signal.icon;
-
-                return (
-                  <div key={signal.title} className="grid grid-cols-[2.75rem_1fr] gap-4 border-t border-[oklch(0.84_0.035_100)] pt-5">
-                    <div className="flex size-11 items-center justify-center rounded-[0.8rem] bg-[color-mix(in_srgb,var(--forest-green)_7%,white)]">
-                      <Icon className="size-5 text-[var(--forest-green)]" />
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-semibold text-[oklch(0.24_0.035_92)]">{signal.title}</h3>
-                      <p className="mt-2 text-sm leading-6 text-[oklch(0.42_0.032_118)]">{signal.body}</p>
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="mt-10 grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+              {homeContextCards.map((card) => (
+                <MarketingImageCard
+                  key={card.title}
+                  image={card.image}
+                  alt={card.alt}
+                  icon={card.icon}
+                  label={card.label}
+                  title={card.title}
+                  body={card.body}
+                  imagePosition={card.imagePosition}
+                  minHeightClassName="min-h-[18.25rem]"
+                  bodyClassName="max-w-sm"
+                />
+              ))}
             </div>
           </div>
         </section>
 
-        <section aria-labelledby="home-roles" className={`${panelClass} market-section-green`}>
-          <div className="mx-auto w-full max-w-7xl px-4">
-            <div className="grid gap-10 lg:grid-cols-[0.85fr_1.15fr] lg:items-end">
+        <section aria-labelledby="home-roles" className="market-section market-section-green">
+          <div className="mx-auto w-full max-w-7xl px-4 py-16 sm:py-20">
+            <div className="grid gap-10 lg:grid-cols-[0.85fr_1.15fr] lg:items-start">
               <div className="space-y-5">
                 <h2 id="home-roles" className="market-section-title max-w-3xl">
                   Different jobs, one consistent flow.
@@ -461,7 +452,7 @@ export function LandingPage() {
                 </p>
               </div>
 
-              <div className="grid gap-1 overflow-hidden rounded-[1.75rem] border border-white/15 bg-white/10 p-1 md:grid-cols-2">
+              <div className="grid gap-5 md:grid-cols-2">
                 {roles.map((role, index) => {
                   const Icon = role.icon;
 
@@ -469,7 +460,7 @@ export function LandingPage() {
                     <Link
                       key={role.title}
                       to={role.href}
-                      className="group min-h-[clamp(9.5rem,22svh,13rem)] bg-white/[0.08] p-5 transition-colors hover:bg-white/[0.16]"
+                      className="group min-h-[clamp(10rem,24svh,13.25rem)] overflow-hidden rounded-[1.35rem] border border-white/15 bg-white/[0.08] p-5 shadow-[0_16px_34px_rgba(9,22,13,0.16)] transition-all hover:-translate-y-0.5 hover:bg-white/[0.14] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--forest-green)]"
                     >
                       <div className="flex h-full flex-col">
                         <div className="flex items-start justify-between gap-4">
@@ -493,31 +484,45 @@ export function LandingPage() {
           </div>
         </section>
 
-        <section aria-labelledby="home-cta" className={`${panelClass} market-section-brown`}>
-          <div className="mx-auto grid w-full max-w-7xl gap-6 px-4 lg:grid-cols-[1fr_0.8fr] lg:items-center xl:gap-8">
+        <section aria-labelledby="home-cta" className="market-section market-section-brown">
+          <div className="mx-auto grid w-full max-w-7xl gap-8 px-4 py-16 sm:py-20 lg:grid-cols-[0.96fr_1.04fr] lg:items-start xl:gap-10">
             <div className="space-y-5">
               <h2 id="home-cta" className="market-section-title max-w-4xl">
-                Inspect the market before you commit to it.
+                Start with public browsing, then choose the role you need.
               </h2>
               <p className="market-copy max-w-2xl">
-                Public browsing is read-only by design. You can inspect products and producers freely, then sign in when
-                you are ready to place a real order.
+                Browse products, compare producers, and see availability before creating an account.
+              </p>
+              <div className="flex flex-wrap gap-3">
+                <Button asChild size="lg" className="market-button-primary min-h-11 px-7">
+                  <Link to="/browse">
+                    Browse marketplace
+                    <ArrowRight className="size-4" />
+                  </Link>
+                </Button>
+                <Button asChild size="lg" variant="outline" className="market-button-outline min-h-11 bg-white/45 px-7">
+                  <Link to="/select-portal?mode=register">Create account</Link>
+                </Button>
+              </div>
+              <p className="flex flex-wrap items-center gap-x-2 gap-y-1 pt-1 text-[0.9rem] text-[oklch(0.42_0.032_118)]">
+                <span className="font-medium">Selling food locally?</span>
+                <Link
+                  to="/register/producer"
+                  className="group inline-flex items-center gap-1.5 font-semibold text-[var(--forest-green)] transition-colors hover:text-[oklch(0.28_0.06_140)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--forest-green)] focus-visible:ring-offset-2"
+                >
+                  <span>Join us as a producer</span>
+                  <ArrowRight className="size-[1.02rem] shrink-0 transition-transform group-hover:translate-x-1" />
+                </Link>
               </p>
             </div>
 
-            <div className="space-y-5 border-l border-[#e4e1d8] pl-6">
+            <div className="space-y-5 rounded-[1.55rem] border border-[#e4e1d8] bg-white/72 p-5 shadow-[0_18px_42px_rgba(18,28,20,0.08)] sm:p-6">
               {['Browse products and producers', 'Compare food miles and seasonal detail', 'Create an account only at checkout'].map((item) => (
                 <div key={item} className="flex items-center gap-3 text-lg font-semibold">
                   <CheckCircle2 className="size-5 shrink-0 text-[var(--forest-green)]" />
                   <span>{item}</span>
                 </div>
               ))}
-              <Button asChild size="lg" className="market-button-primary mt-3 min-h-11 px-7">
-                <Link to="/browse">
-                  Open public browse
-                  <ArrowRight className="size-4" />
-                </Link>
-              </Button>
             </div>
           </div>
         </section>
