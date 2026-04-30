@@ -2,7 +2,7 @@ import { Navigate } from 'react-router';
 
 import { useAuth } from '../contexts/AuthContext';
 import { getAccessToken } from '../lib/tokenStorage';
-import { getPortalPathForRole } from '../lib/portalConfig';
+import { getDashboardPathForRole } from '../lib/roleRouting';
 import { UserRole } from '../types';
 
 interface RoleProtectedRouteProps {
@@ -15,9 +15,7 @@ export function RoleProtectedRoute({ children, requiredRole }: RoleProtectedRout
   const accessToken = getAccessToken();
   const unauthenticatedRedirect = requiredRole === 'ADMIN'
     ? '/admin/login'
-    : requiredRole === 'PRODUCER'
-      ? '/login'
-      : getPortalPathForRole(requiredRole);
+    : '/login';
 
   if (!accessToken) {
     return <Navigate to={unauthenticatedRedirect} replace />;
@@ -32,7 +30,7 @@ export function RoleProtectedRoute({ children, requiredRole }: RoleProtectedRout
   }
 
   if (user.role !== requiredRole) {
-    return <Navigate to={getPortalPathForRole(user.role)} replace />;
+    return <Navigate to={getDashboardPathForRole(user.role)} replace />;
   }
 
   return <>{children}</>;

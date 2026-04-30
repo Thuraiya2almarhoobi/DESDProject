@@ -71,6 +71,7 @@ class ContentApiTests(APITestCase):
         self.assertEqual(feed_res.status_code, status.HTTP_200_OK)
         self.assertGreaterEqual(len(feed_res.data), 1)
         self.assertEqual(feed_res.data[0]["type"], "recipe")
+        self.assertEqual(feed_res.data[0]["linked_products"][0]["id"], self.product.id)
 
     def test_product_recipes_and_save_toggle(self):
         recipe = Recipe.objects.create(
@@ -135,15 +136,33 @@ class ContentApiTests(APITestCase):
         )
 
         self.assertEqual(create_res.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(len(create_res.data), 3)
+        self.assertEqual(len(create_res.data), 2)
         self.assertEqual(create_res.data[0]["content_type"], "recipe")
         self.assertEqual(create_res.data[0]["status"], "saved")
         self.assertEqual(create_res.data[0]["products"][0]["id"], self.product.id)
-        mock_generate.assert_called_once()
+        self.assertEqual(mock_generate.call_count, 1)
 
         list_res = self.producer_client.get("/api/content/ai/suggestions/")
         self.assertEqual(list_res.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(list_res.data), 3)
+        self.assertEqual(len(list_res.data), 2)
+
+        replace_res = self.producer_client.post(
+            "/api/content/ai/suggestions/",
+            {
+                "content_type": "recipe",
+                "product_ids": [self.product.id],
+                "notes": "Replace previous drafts",
+                "tone": "clear",
+            },
+            format="json",
+        )
+        self.assertEqual(replace_res.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(len(replace_res.data), 2)
+
+        replaced_list_res = self.producer_client.get("/api/content/ai/suggestions/")
+        self.assertEqual(replaced_list_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(replaced_list_res.data), 2)
+        self.assertEqual(mock_generate.call_count, 2)
 
         feed_res = self.customer_client.get("/api/content/feed/")
         self.assertEqual(feed_res.status_code, status.HTTP_200_OK)
@@ -172,7 +191,7 @@ class ContentApiTests(APITestCase):
         )
 
         self.assertEqual(create_res.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(len(create_res.data), 3)
+        self.assertEqual(len(create_res.data), 2)
         self.assertEqual(create_res.data[0]["content_type"], "story")
         self.assertIn("Harvest Story", create_res.data[0]["title"])
         self.assertIn("carrots", create_res.data[0]["body"].lower())

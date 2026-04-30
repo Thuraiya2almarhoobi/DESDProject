@@ -37,7 +37,8 @@ export function getSiteNavItems(role?: UserRole | null): SiteNavItem[] {
         },
         { label: 'Orders', to: '/orders/history', matchPrefixes: ['/orders/history'] },
         { label: 'Near Me', to: '/map', matchPrefixes: ['/map'] },
-        { label: 'Recipes', to: '/content/feed', matchPrefixes: ['/content/feed'] },
+        { label: 'Recipes', to: '/content/recipes', matchPrefixes: ['/content/recipes'] },
+        { label: 'Farm Stories', to: '/content/stories', matchPrefixes: ['/content/stories'] },
       ];
     case 'COMMUNITY':
       return [
@@ -48,7 +49,8 @@ export function getSiteNavItems(role?: UserRole | null): SiteNavItem[] {
         },
         { label: 'Orders', to: '/orders/history', matchPrefixes: ['/orders/history'] },
         { label: 'Near Me', to: '/map', matchPrefixes: ['/map'] },
-        { label: 'Recipes', to: '/content/feed', matchPrefixes: ['/content/feed'] },
+        { label: 'Recipes', to: '/content/recipes', matchPrefixes: ['/content/recipes'] },
+        { label: 'Farm Stories', to: '/content/stories', matchPrefixes: ['/content/stories'] },
         { label: 'Dashboard', to: '/community/dashboard', matchPrefixes: ['/community/dashboard'] },
       ];
     case 'RESTAURANT':
@@ -60,7 +62,8 @@ export function getSiteNavItems(role?: UserRole | null): SiteNavItem[] {
         },
         { label: 'Orders', to: '/orders/history', matchPrefixes: ['/orders/history'] },
         { label: 'Near Me', to: '/map', matchPrefixes: ['/map'] },
-        { label: 'Recipes', to: '/content/feed', matchPrefixes: ['/content/feed'] },
+        { label: 'Recipes', to: '/content/recipes', matchPrefixes: ['/content/recipes'] },
+        { label: 'Farm Stories', to: '/content/stories', matchPrefixes: ['/content/stories'] },
         {
           label: 'Dashboard',
           to: '/restaurant/dashboard',
@@ -73,7 +76,9 @@ export function getSiteNavItems(role?: UserRole | null): SiteNavItem[] {
         { label: 'Sales', to: '/producer/orders', matchPrefixes: ['/producer/orders'] },
         { label: 'Inventory', to: '/producer/inventory', matchPrefixes: ['/producer/inventory'] },
         { label: 'Payouts', to: '/producer/payments', matchPrefixes: ['/producer/payments'] },
-        { label: 'Content', to: '/content/feed', matchPrefixes: ['/content/feed'] },
+        { label: 'Publish', to: '/producer/publish', matchPrefixes: ['/producer/publish'] },
+        { label: 'Recipes', to: '/content/recipes', matchPrefixes: ['/content/recipes'] },
+        { label: 'Farm Stories', to: '/content/stories', matchPrefixes: ['/content/stories'] },
         { label: 'Marketplace', to: '/marketplace', matchPrefixes: ['/marketplace', '/product', '/cart', '/checkout'] },
         { label: 'Purchases', to: '/orders/history', matchPrefixes: ['/orders/history'] },
       ];

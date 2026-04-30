@@ -31,6 +31,7 @@ class RecipeSerializer(serializers.ModelSerializer):
             "instructions",
             "seasonal_tag",
             "image_url",
+            "is_ai_generated",
             "is_published",
             "created_at",
             "linked_products",
@@ -83,6 +84,7 @@ class FarmStorySerializer(serializers.ModelSerializer):
             "body",
             "seasonal_tag",
             "image_url",
+            "is_ai_generated",
             "is_published",
             "created_at",
         ]

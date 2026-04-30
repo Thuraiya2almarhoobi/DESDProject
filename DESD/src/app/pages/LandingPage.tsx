@@ -34,30 +34,30 @@ const roles = [
   {
     icon: ShoppingBasket,
     title: 'Customer',
-    description: 'Browse local products, compare origin detail, and order only when ready.',
-    cta: 'Browse public market',
-    href: '/browse',
+    description: 'Create a customer account for checkout, saved delivery details, and personal order tracking.',
+    cta: 'Register as customer',
+    href: '/register/customer',
   },
   {
     icon: Building2,
     title: 'Producer',
-    description: 'Manage stock, orders, payment visibility, and product storytelling in one place.',
+    description: 'Review the selling flow, then register your farm or supply business from the producer page.',
     cta: 'Producer information',
     href: '/producers',
   },
   {
     icon: Users,
     title: 'Community',
-    description: 'Coordinate multi-producer buying for groups that need cleaner local food access.',
-    cta: 'Community portal',
-    href: '/portal/community',
+    description: 'Register a school, charity, or community group for coordinated bulk local food orders.',
+    cta: 'Register community group',
+    href: '/register/community',
   },
   {
     icon: UtensilsCrossed,
     title: 'Restaurant',
-    description: 'Plan repeatable demand for local ingredients without losing supply context.',
-    cta: 'Restaurant access',
-    href: '/portal/restaurant',
+    description: 'Register a restaurant account for supplier baskets, recurring demand, and kitchen orders.',
+    cta: 'Register restaurant',
+    href: '/register/restaurant',
   },
 ];
 
@@ -218,8 +218,8 @@ export function LandingPage() {
                   Different jobs, one consistent flow.
                 </h2>
                 <p className="market-copy max-w-xl">
-                  Customers, producers, community buyers, and restaurants use role-specific tools without splitting the
-                  marketplace into disconnected experiences.
+                  Choose the role you are registering for. Everyone signs in through one shared account screen, while
+                  registration collects only the details needed for that role.
                 </p>
               </div>
 

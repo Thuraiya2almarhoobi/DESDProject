@@ -23,13 +23,9 @@ import { Label } from '../components/ui/label';
 import { Card, CardContent } from '../components/ui/card';
 import { Textarea } from '../components/ui/textarea';
 import { AvailabilityBadge, OrganicBadge } from '../components/ProductBadges';
-import { ProductMeta } from '../components/ProductMeta';
-import { AllergenBlock } from '../components/AllergenBlock';
 import { FarmLocationMap } from '../components/FarmLocationMap';
 import { Input } from '../components/ui/input';
-import { Separator } from '../components/ui/separator';
 import { Skeleton } from '../components/ui/skeleton';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../components/ui/accordion';
 import { SiteHeader } from '../components/SiteHeader';
 import { toast } from 'sonner';
 import { Product, ProductReview, ReviewEligibility } from '../types';
@@ -40,7 +36,7 @@ import {
   fetchProductReviews,
   respondToProductReview,
 } from '../api/catalog';
-import { getQuantityCapForRole, isBulkBuyerRole, isBuyerRole } from '../lib/ordering';
+import { isBulkBuyerRole, isBuyerRole, MAX_ORDER_ITEM_QUANTITY } from '../lib/ordering';
 import { getDashboardPathForRole } from '../lib/roleRouting';
 import { useSafeBack } from '../lib/navigation';
 import { ApiRecipe, apiJson } from '../lib/api';
@@ -73,6 +69,13 @@ function ReviewStars({ rating, iconClassName = 'size-4' }: { rating: number; ico
   );
 }
 
+function formatUnit(unit: string, quantity: number): string {
+  if (unit === 'litre') {
+    return quantity === 1 ? 'litre' : 'litres';
+  }
+  return unit;
+}
+
 export function ProductDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -89,7 +92,6 @@ export function ProductDetailPage() {
   const [product, setProduct] = useState<Product | null>(null);
   const [reviews, setReviews] = useState<ProductReview[]>([]);
   const [quantity, setQuantity] = useState(1);
-  const [quantityLimitMessage, setQuantityLimitMessage] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [isReviewsLoading, setIsReviewsLoading] = useState(true);
@@ -102,6 +104,7 @@ export function ProductDetailPage() {
   const [reviewComment, setReviewComment] = useState('');
   const [reviewIsAnonymous, setReviewIsAnonymous] = useState(false);
   const [reviewFormError, setReviewFormError] = useState('');
+  const [allergenConfirmationError, setAllergenConfirmationError] = useState('');
   const [pendingReviewNotice, setPendingReviewNotice] = useState('');
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [producerReplyDrafts, setProducerReplyDrafts] = useState<Record<string, string>>({});
@@ -250,21 +253,12 @@ export function ProductDetailPage() {
   useEffect(() => {
     if (!product) {
       setHasReviewedAllergens(false);
+      setAllergenConfirmationError('');
       return;
     }
 
-    if (product.allergens.length === 0) {
-      setHasReviewedAllergens(true);
-      return;
-    }
-
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    setHasReviewedAllergens(
-      window.localStorage.getItem(`allergen-reviewed-${product.id}`) === 'true'
-    );
+    setHasReviewedAllergens(product.allergens.length === 0);
+    setAllergenConfirmationError('');
   }, [product]);
 
   useEffect(() => {
@@ -290,8 +284,8 @@ export function ProductDetailPage() {
     if (!product) {
       return 1;
     }
-    return Math.max(1, getQuantityCapForRole(user?.role, product.stock));
-  }, [product, user?.role]);
+    return Math.max(1, Math.min(MAX_ORDER_ITEM_QUANTITY, Math.floor(product.stock)));
+  }, [product]);
 
   const requiresAllergenReview = Boolean(product && product.allergens.length > 0);
   const isBulkBuyer = isBulkBuyerRole(user?.role);
@@ -320,19 +314,20 @@ export function ProductDetailPage() {
     return getProductCartQuantity(product.id);
   }, [getProductCartQuantity, product]);
   const isCartActionPending = activeCartAction !== null;
+  const isBlockedByAllergenReview = requiresAllergenReview && !hasReviewedAllergens;
   const remainingAddToCartQuantity = useMemo(() => {
     if (!product) {
       return 0;
     }
-    return Math.max(0, getQuantityCapForRole(user?.role, product.stock) - cartQuantity);
-  }, [cartQuantity, product, user?.role]);
+    return Math.max(0, Math.min(MAX_ORDER_ITEM_QUANTITY, product.stock) - cartQuantity);
+  }, [cartQuantity, product]);
 
   const validateBuyerPurchaseAction = () => {
     if (!product || !isAvailable) {
       return false;
     }
     if (requiresAllergenReview && !hasReviewedAllergens) {
-      toast.warning('Please review and acknowledge allergen information before adding to cart.');
+      setAllergenConfirmationError('Please confirm you have reviewed the allergen information before checkout.');
       return false;
     }
 
@@ -353,11 +348,6 @@ export function ProductDetailPage() {
           onClick: () => navigate(getDashboardPathForRole(user.role)),
         },
       });
-      return false;
-    }
-
-    if (requiresAllergenReview && !hasReviewedAllergens) {
-      toast.warning('Please acknowledge allergen information before adding this item to cart.');
       return false;
     }
 
@@ -433,25 +423,16 @@ export function ProductDetailPage() {
   );
 
   const cartActionPanel = isAvailable ? (
-    <div className="space-y-4 rounded-2xl border border-[oklch(0.88_0.03_145)] bg-white/85 p-5 shadow-sm">
-      <div className="flex flex-wrap items-center gap-2">
-        <Badge variant="secondary" className="bg-[oklch(0.96_0.05_150)] text-[oklch(0.34_0.05_145)]">
-          Ready for checkout
-        </Badge>
-        {isBulkBuyer && (
-          <Badge variant="outline">
-            {user?.role === 'COMMUNITY' ? 'Community bulk ordering' : 'Restaurant order planning'}
-          </Badge>
-        )}
-        {isInCart && (
-          <Badge variant="outline">
-            In cart: {cartQuantity} {product?.unit}
-          </Badge>
-        )}
-      </div>
+    <div className="space-y-3">
+      {(isBulkBuyer || isInCart) && (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--muted-foreground)]">
+          {isBulkBuyer && <span>{user?.role === 'COMMUNITY' ? 'Community bulk ordering' : 'Restaurant order planning'}</span>}
+          {isInCart && <span>In cart: {cartQuantity} {product?.unit}</span>}
+        </div>
+      )}
 
       {isBulkBuyer && (
-        <div className="rounded-xl border border-[oklch(0.86_0.04_145)] bg-[oklch(0.985_0.01_145)] p-4 text-sm text-gray-700">
+        <div className="rounded-2xl border border-[#e4e1d8] bg-[#fffdf8] p-3 text-sm text-gray-700">
           <p className="font-medium text-gray-900">
             {user?.role === 'COMMUNITY' ? 'Community ordering workspace' : 'Restaurant ordering workspace'}
           </p>
@@ -459,13 +440,18 @@ export function ProductDetailPage() {
             Build larger producer orders here, then continue through the dedicated {user?.role === 'COMMUNITY' ? 'bulk checkout' : 'restaurant checkout'} flow.
           </p>
           <p className="mt-2 text-xs text-gray-500">
-            Quantity cap follows the producer&apos;s current available stock for this product.
+            Maximum quantity per product: {MAX_ORDER_ITEM_QUANTITY} units.
           </p>
         </div>
       )}
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <Button size="lg" onClick={() => void handleBuyNow()} disabled={isCartActionPending}>
+        <Button
+          size="lg"
+          onClick={() => void handleBuyNow()}
+          disabled={isCartActionPending || isBlockedByAllergenReview}
+          className="h-10"
+        >
           <CreditCard className="size-5" />
           {activeCartAction === 'buy'
             ? 'Preparing Checkout...'
@@ -479,7 +465,8 @@ export function ProductDetailPage() {
           size="lg"
           variant="outline"
           onClick={() => void handleAddToCart()}
-          disabled={isCartActionPending || remainingAddToCartQuantity <= 0}
+          disabled={isCartActionPending || isBlockedByAllergenReview || remainingAddToCartQuantity <= 0}
+          className="h-10"
         >
           <ShoppingCart className="size-5" />
           {activeCartAction === 'add'
@@ -543,28 +530,24 @@ export function ProductDetailPage() {
     }
 
     setHasReviewedAllergens(checked);
-    if (typeof window !== 'undefined' && requiresAllergenReview) {
-      window.localStorage.setItem(`allergen-reviewed-${product.id}`, checked ? 'true' : 'false');
+    if (checked) {
+      setAllergenConfirmationError('');
+    } else if (requiresAllergenReview) {
+      setAllergenConfirmationError('Please confirm you have reviewed the allergen information before checkout.');
     }
   };
 
   const incrementQuantity = () => {
     if (quantity < maxQuantity) {
-      setQuantityLimitMessage('');
       setQuantity((value) => value + 1);
     }
   };
 
   const decrementQuantity = () => {
     if (quantity > 1) {
-      setQuantityLimitMessage('');
       setQuantity((value) => value - 1);
     }
   };
-
-  useEffect(() => {
-    setQuantityLimitMessage('');
-  }, [maxQuantity]);
 
   const refreshReviewEligibility = async () => {
     if (!id) {
@@ -739,183 +722,256 @@ export function ProductDetailPage() {
     );
   }
 
+  const displayedAverageRating = averageRating ?? product.averageRating ?? null;
+  const displayedReviewCount = reviews.length || product.reviewCount || 0;
+  const displayedVerifiedReviewCount =
+    reviews.filter((review) => review.verifiedPurchase).length || product.verifiedReviewCount || 0;
+  const firstReview = reviews[0];
+  const recipeCount = linkedRecipes.length || product.recipeIdeas?.length || 0;
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[oklch(0.98_0.01_145)] to-[oklch(0.96_0.02_150)]">
+    <div className="min-h-screen bg-[#f3fbf1]">
       <SiteHeader />
 
-      <main className="max-w-5xl mx-auto px-4 py-8">
+      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-5 lg:px-6">
         <div className="mb-6">{backToMarketplaceButton}</div>
-        <div className="grid md:grid-cols-2 gap-8">
-          <div className="space-y-4">
-            <div className="aspect-square rounded-lg overflow-hidden bg-gray-100">
-              <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
-            </div>
-          </div>
 
-          <div className="space-y-6">
-            <div>
-              <div className="flex flex-wrap gap-2 mb-3">
-                <AvailabilityBadge availability={product.availability} />
-                {product.isOrganic && <OrganicBadge />}
-              </div>
-              <h1 className="text-3xl font-semibold mb-2">{product.name}</h1>
-              <p className="text-gray-600">{product.description}</p>
-              {averageRating !== null ? (
-                <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-                  <ReviewStars rating={Math.round(averageRating)} />
-                  <span className="font-semibold text-gray-900">{averageRating.toFixed(1)}</span>
-                  <span className="text-gray-500">
-                    from {reviews.length} review{reviews.length === 1 ? '' : 's'}
-                  </span>
+        <section>
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
+            <div className="grid gap-5 sm:grid-cols-[18rem_minmax(0,1fr)] xl:grid-cols-[20rem_minmax(0,1fr)] lg:h-[28.5rem] xl:h-[29rem]">
+              <div className="space-y-4">
+                <div className="relative h-36 overflow-hidden rounded-3xl bg-[#f2efe5] sm:h-[24rem] lg:h-[24rem] xl:h-[24.5rem]">
+                  <img src={product.imageUrl} alt={product.name} className="h-full w-full object-cover" />
+                  <div className="absolute left-3 top-3 flex flex-wrap gap-2">
+                    <AvailabilityBadge availability={product.availability} />
+                    {product.isOrganic && <OrganicBadge />}
+                  </div>
                 </div>
-              ) : product.averageRating !== undefined && product.reviewCount ? (
-                <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-                  <ReviewStars rating={Math.round(product.averageRating)} />
-                  <span className="font-semibold text-gray-900">{product.averageRating.toFixed(1)}</span>
-                  <span className="text-gray-500">
-                    from {product.reviewCount} review{product.reviewCount === 1 ? '' : 's'}
-                  </span>
+                <div className="grid grid-cols-3 gap-2 text-xs">
+                  <div>
+                    <span
+                      className="block text-[var(--muted-foreground)]"
+                      title="Estimated distance from farm to customer area"
+                    >
+                      Food miles
+                    </span>
+                    <span className="mt-1 block font-semibold text-[var(--rich-soil)]">{product.foodMiles.toFixed(2)} miles</span>
+                  </div>
+                  <div>
+                    <span className="block text-[var(--muted-foreground)]">Farm</span>
+                    <a href="#farm-location" className="mt-1 block truncate font-semibold text-[var(--forest-green)] hover:underline">
+                      {product.producerLocation}
+                    </a>
+                  </div>
+                  <div>
+                    <span className="block text-[var(--muted-foreground)]">Recipes</span>
+                    <a href="#recipes" className="mt-1 block truncate font-semibold text-[var(--forest-green)] hover:underline">
+                      {recipeCount ? `${recipeCount} idea${recipeCount === 1 ? '' : 's'}` : 'Coming soon'}
+                    </a>
+                  </div>
                 </div>
-              ) : null}
-            </div>
-
-            <ProductMeta
-              producerName={product.producerName}
-              producerLocation={product.producerLocation}
-              harvestDate={product.harvestDate}
-              foodMiles={product.foodMiles}
-            />
-
-            <Separator />
-
-            <div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-4xl font-semibold text-green-700">£{product.price.toFixed(2)}</span>
-                <span className="text-xl text-gray-500">per {product.unit}</span>
               </div>
-              {product.stock > 0 && product.stock < 10 && (
-                <p className="text-sm text-orange-600 mt-2">Only {product.stock} {product.unit} remaining</p>
-              )}
-            </div>
 
-            <AllergenBlock allergens={product.allergens} />
-            <div className="rounded-lg border border-orange-200 bg-orange-50 px-4 py-3">
-              <div className="flex items-start gap-3">
-                <Checkbox
-                  id="allergen-review-confirmation"
-                  checked={hasReviewedAllergens}
-                  onCheckedChange={(checked) => handleAllergenReviewToggle(checked === true)}
-                  className="mt-0.5"
-                  aria-label="Confirm allergen information has been reviewed"
-                />
-                <div className="space-y-1">
-                  <Label htmlFor="allergen-review-confirmation" className="font-medium">
-                    I have reviewed this product&apos;s allergen information
-                  </Label>
-                  <p className="text-xs text-gray-600">
-                    {requiresAllergenReview
-                      ? 'Required before adding this item to cart.'
-                      : 'No allergens are listed for this product.'}
+              <div className="flex min-w-0 flex-col gap-3 lg:h-full">
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="outline">{product.category}</Badge>
+                    <Badge variant="secondary">{product.seasonalDates || 'Year-round'}</Badge>
+                    <Badge variant="outline">{product.isOrganic ? product.organicCertification || 'Organic Certified' : 'Non-organic'}</Badge>
+                  </div>
+                  <div>
+                    <h1 className="text-3xl font-semibold tracking-tight text-[var(--rich-soil)] sm:text-4xl">{product.name}</h1>
+                    <p className="mt-2 text-lg text-[var(--warm-earth)]">{product.producerName}</p>
+                    <p className="mt-3 hidden max-w-2xl text-sm leading-6 text-[var(--warm-earth)] sm:block">{product.description}</p>
+                  </div>
+
+                  <a
+                    href="#reviews"
+                    className="inline-flex flex-wrap items-center gap-2 rounded-full border border-[#d6cab8] bg-[#fbfaf4] px-4 py-2 text-sm transition hover:border-[var(--forest-green)]"
+                  >
+                    {displayedAverageRating !== null ? (
+                      <>
+                        <ReviewStars rating={Math.round(displayedAverageRating)} />
+                        <span className="font-semibold text-[var(--rich-soil)]">{displayedAverageRating.toFixed(1)}</span>
+                        <span className="text-[var(--warm-earth)]">
+                          {displayedReviewCount} review{displayedReviewCount === 1 ? '' : 's'}
+                        </span>
+                        {displayedVerifiedReviewCount > 0 && (
+                          <span className="text-[var(--earth-accent)]">{displayedVerifiedReviewCount} verified</span>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <ReviewStars rating={0} />
+                        <span className="font-semibold text-[var(--rich-soil)]">No customer ratings yet</span>
+                      </>
+                    )}
+                  </a>
+
+                  {firstReview && (
+                    <div className="max-w-2xl border-l-2 border-[#d6cab8] pl-4">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <ReviewStars rating={firstReview.rating} iconClassName="size-3.5" />
+                        <span className="text-sm font-medium text-[var(--rich-soil)]">{firstReview.title || 'Recent review'}</span>
+                        {firstReview.verifiedPurchase && <Badge variant="secondary">Verified</Badge>}
+                      </div>
+                      <p className="mt-2 max-h-10 overflow-hidden text-sm text-[var(--warm-earth)]">
+                        {firstReview.comment || `${firstReview.reviewerName} rated this product ${firstReview.rating} stars.`}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="hidden max-w-2xl rounded-3xl bg-[#f5fbef] px-4 py-3 text-sm leading-6 text-[var(--warm-earth)] sm:block">
+                  <p className="font-semibold text-[var(--rich-soil)]">Order with context</p>
+                  <p className="mt-1">
+                    This product is available to order today, with fulfilment estimated at {producerDeliveryLeadTime} hours from {product.producerLocation}.
                   </p>
                 </div>
+
+                <div className="hidden max-w-2xl gap-3 border-t border-[#e4e1d8] pt-4 text-sm sm:grid sm:grid-cols-3">
+                  <div>
+                    <p className="text-[var(--muted-foreground)]">Season</p>
+                    <p className="font-medium text-[var(--rich-soil)]">{product.seasonalDates || 'Year-round'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[var(--muted-foreground)]">Lead time</p>
+                    <p className="font-medium text-[var(--rich-soil)]">{producerDeliveryLeadTime} hours</p>
+                  </div>
+                  <div>
+                    <p className="text-[var(--muted-foreground)]">Stock</p>
+                    <p className="font-medium text-[var(--rich-soil)]">
+                      {product.stock} {formatUnit(product.unit, product.stock)}
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
 
-            {isAvailable && (
-              <div className="space-y-3">
-                <label className="text-sm font-medium">Quantity</label>
-                <div className="space-y-1">
-                  <div className="flex items-center gap-3">
+            <aside className="rounded-3xl border border-[#dfe8d9] bg-white p-5 shadow-sm">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--earth-accent)]">Order</p>
+                  <div className="mt-1 flex items-baseline gap-2">
+                    <span className="text-3xl font-semibold text-[var(--forest-green)]">£{product.price.toFixed(2)}</span>
+                    <span className="text-lg text-[var(--warm-earth)]">per {product.unit}</span>
+                  </div>
+                  {product.stock > 0 && product.stock < 10 && (
+                    <p className="mt-2 text-sm text-orange-700">Only {product.stock} {product.unit} remaining</p>
+                  )}
+                </div>
+                <Badge variant={isAvailable ? 'secondary' : 'outline'}>
+                  {isAvailable ? 'Available to order' : 'Unavailable'}
+                </Badge>
+              </div>
+
+              <div className="mt-2 grid gap-1 border-t border-[#dfe8d9] pt-2.5 text-sm">
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-[var(--muted-foreground)]">Order status</span>
+                  <span className="font-semibold text-[var(--rich-soil)]">
+                    {isAvailable ? 'Available to order' : 'Unavailable'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-[var(--muted-foreground)]">Estimated fulfilment</span>
+                  <span className="font-semibold text-[var(--rich-soil)]">{producerDeliveryLeadTime} hours</span>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-[var(--muted-foreground)]">Stock</span>
+                  <span className="font-semibold text-[var(--rich-soil)]">
+                    {product.stock} {formatUnit(product.unit, product.stock)}
+                  </span>
+                </div>
+              </div>
+
+              {isAvailable && (
+                <div className="mt-4 flex items-center justify-between gap-5">
+                  <label className="shrink-0 text-sm font-medium text-[var(--rich-soil)]">Quantity</label>
+                  <div className="inline-flex items-center overflow-hidden rounded-2xl border border-[#d6cab8] bg-[#fffdf8]">
                     <Button
-                      variant="outline"
+                      variant="ghost"
                       size="icon"
                       onClick={decrementQuantity}
                       disabled={quantity <= 1 || isCartActionPending}
+                      aria-label="Decrease quantity"
+                      className="rounded-none"
                     >
                       <Minus className="size-4" />
                     </Button>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        type="number"
-                        min="1"
-                        max={String(maxQuantity)}
-                        step="1"
-                        value={quantity}
-                        onFocus={(event) => event.target.select()}
-                        onChange={(event) => {
-                          const next = Number(event.target.value);
-                          if (!Number.isFinite(next)) {
-                            return;
-                          }
-                          if (isBulkBuyer && next > maxQuantity) {
-                            setQuantityLimitMessage(`Only ${maxQuantity} ${product.unit} available in stock.`);
-                          } else {
-                            setQuantityLimitMessage('');
-                          }
-                          setQuantity(Math.max(1, Math.min(maxQuantity, Math.floor(next))));
-                        }}
-                        className="w-24 text-center"
-                        disabled={isCartActionPending}
-                      />
-                      <span className="text-sm text-gray-500">{product.unit}</span>
-                    </div>
+                    <Input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      aria-label={`Quantity in ${formatUnit(product.unit, quantity)}`}
+                      value={quantity}
+                      onFocus={(event) => event.target.select()}
+                      onChange={(event) => {
+                        const next = Number(event.target.value.replace(/\D/g, ''));
+                        if (!Number.isFinite(next)) {
+                          return;
+                        }
+                        setQuantity(Math.max(1, Math.min(maxQuantity, Math.floor(next || 1))));
+                      }}
+                      className="h-10 w-16 rounded-none border-0 bg-transparent text-center shadow-none focus-visible:ring-0"
+                      disabled={isCartActionPending}
+                    />
+                    <span className="border-l border-r border-[#d6cab8] px-5 text-sm text-[var(--warm-earth)]">
+                      {formatUnit(product.unit, quantity)}
+                    </span>
                     <Button
-                      variant="outline"
+                      variant="ghost"
                       size="icon"
                       onClick={incrementQuantity}
                       disabled={quantity >= maxQuantity || isCartActionPending}
+                      aria-label="Increase quantity"
+                      className="rounded-none"
                     >
                       <Plus className="size-4" />
                     </Button>
                   </div>
-                  {isBulkBuyer && quantityLimitMessage ? (
-                    <p className="text-[11px] text-orange-600">{quantityLimitMessage}</p>
-                  ) : null}
                 </div>
-              </div>
-            )}
+              )}
 
-            {cartActionPanel}
-
-            <Separator />
-
-            <Card>
-              <CardContent className="p-4 space-y-4">
-                <h4 className="font-semibold">From {product.producerName}</h4>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <p className="text-gray-500">Category</p>
-                    <p className="font-medium">{product.category}</p>
+              {requiresAllergenReview && (
+                <div className="mt-2.5 space-y-2 border-t border-[#dfe8d9] pt-2.5">
+                  <div className="rounded-2xl border border-orange-200 bg-orange-50/80 px-3 py-2 text-sm text-orange-900">
+                    <p className="font-semibold">Allergen warning</p>
+                    <p className="mt-1">Contains: <strong>{product.allergens.join(', ')}</strong></p>
                   </div>
-                  <div>
-                    <p className="text-gray-500">Season</p>
-                    <p className="font-medium">{product.seasonalDates || 'Year-round'}</p>
-                    {product.seasonalDates && product.seasonalDates !== 'Year-round' && (
-                      <p className="mt-1 text-xs text-emerald-700">
-                        Buying in season supports local crop cycles and reduces reliance on long-distance storage.
-                      </p>
-                    )}
+                  <div className="rounded-2xl border border-orange-200 bg-orange-50/80 px-3 py-2">
+                    <div className="flex items-start gap-3">
+                      <Checkbox
+                        id="allergen-review-confirmation"
+                        checked={hasReviewedAllergens}
+                        onCheckedChange={(checked) => handleAllergenReviewToggle(checked === true)}
+                        className="mt-0.5"
+                        aria-label="Confirm allergen information has been reviewed"
+                      />
+                      <div className="space-y-1">
+                        <Label htmlFor="allergen-review-confirmation" className="font-medium">
+                          I have reviewed this product&apos;s allergen information
+                        </Label>
+                        <p className="text-xs text-gray-600">Required before checkout.</p>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-gray-500">Certification</p>
-                    <p className="font-medium">
-                      {product.isOrganic
-                        ? product.organicCertification || 'Organic Certified'
-                        : 'Non-organic'}
+                  {allergenConfirmationError && (
+                    <p className="text-sm font-medium text-red-700">
+                      {allergenConfirmationError}
                     </p>
-                  </div>
-                  <div>
-                    <p className="text-gray-500">Delivery lead time</p>
-                    <p className="font-medium">{producerDeliveryLeadTime} hours minimum</p>
-                  </div>
+                  )}
                 </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
+              )}
 
-        <section className="mt-8">
-          <Card>
+              <div className={requiresAllergenReview ? 'mt-2.5' : 'mt-5 border-t border-[#dfe8d9] pt-4'}>
+                {cartActionPanel}
+              </div>
+            </aside>
+          </div>
+        </section>
+
+        <section id="reviews" className="mt-8 lg:mt-10">
+          <Card className="border-[#e4e1d8] bg-[#fffdf8] shadow-sm">
             <CardContent className="p-6 space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div className="space-y-1">
@@ -1174,16 +1230,140 @@ export function ProductDetailPage() {
           </Card>
         </section>
 
-        <div className="mt-8">
-          <Accordion type="single" collapsible className="space-y-2">
-            <AccordionItem value="location" className="border rounded-lg px-4">
-              <AccordionTrigger className="hover:no-underline">
-                <div className="flex items-center gap-2">
-                  <MapPin className="size-5 text-green-600" />
-                  <span className="font-medium">Farm Location</span>
+        <section className="mt-5 grid gap-6 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+          <Card id="recipes" className="border-[#e4e1d8] bg-[#fffdf8] shadow-sm">
+            <CardContent className="space-y-5 p-5 sm:p-6">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <ChefHat className="size-5 text-[var(--forest-green)]" />
+                    <h3 className="text-xl font-semibold text-[var(--rich-soil)]">Recipe Suggestions</h3>
+                  </div>
+                  <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+                    Linked ideas and storage notes for cooking with this product.
+                  </p>
                 </div>
-              </AccordionTrigger>
-              <AccordionContent className="pb-4">
+                <Badge variant="outline" className="border-[#d6cab8] bg-[#fbfaf4] text-[var(--rich-soil)]">
+                  {recipeCount} {recipeCount === 1 ? 'idea' : 'ideas'}
+                </Badge>
+              </div>
+
+              {linkedRecipesLoading ? (
+                <div className="space-y-3">
+                  <Skeleton className="h-20 w-full" />
+                  <Skeleton className="h-20 w-full" />
+                </div>
+              ) : linkedRecipes.length > 0 ? (
+                <div className="space-y-3">
+                  {linkedRecipes.map((recipe) => {
+                    const isExpanded = expandedRecipeIds.includes(recipe.id);
+                    return (
+                      <div key={recipe.id} className="rounded-2xl border border-[#e4e1d8] bg-[#fbfaf4] p-4">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+	                            <div className="flex flex-wrap items-center gap-2">
+	                              <p className="font-medium text-[var(--rich-soil)]">{recipe.title}</p>
+	                              {recipe.is_ai_generated && (
+	                                <Badge variant="outline" className="border-[#d6cab8] bg-white text-[var(--earth-accent)]">
+	                                  AI generated
+	                                </Badge>
+	                              )}
+	                            </div>
+                            <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+                              {recipe.description || `By ${recipe.producer_name}`}
+                            </p>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => toggleLinkedRecipe(recipe.id)}
+                          >
+                            {isExpanded ? 'Hide Recipe' : 'View Full Recipe'}
+                          </Button>
+                        </div>
+
+                        {isExpanded && (
+                          <div className="mt-4 space-y-3">
+                            {recipe.image_url && (
+                              <img
+                                src={recipe.image_url}
+                                alt={recipe.title}
+                                className="h-44 w-full rounded-xl object-cover"
+                              />
+                            )}
+                            <div>
+                              <p className="text-sm font-medium text-[var(--rich-soil)]">Ingredients</p>
+                              <p className="mt-1 whitespace-pre-line text-sm text-[var(--muted-foreground)]">
+                                {recipe.ingredients}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-[var(--rich-soil)]">Instructions</p>
+                              <p className="mt-1 whitespace-pre-line text-sm text-[var(--muted-foreground)]">
+                                {recipe.instructions}
+                              </p>
+                            </div>
+                            {recipe.linked_products.length > 0 && (
+                              <div>
+                                <p className="text-xs text-[var(--muted-foreground)]">Linked products</p>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  {recipe.linked_products.map((linkedProduct) => (
+                                    <Button
+                                      key={linkedProduct.id}
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => navigate(`/product/${linkedProduct.id}`)}
+                                    >
+                                      {linkedProduct.name}
+                                    </Button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : product.recipeIdeas && product.recipeIdeas.length > 0 ? (
+                <div className="space-y-2">
+                  {product.recipeIdeas.map((recipe) => (
+                    <div
+                      key={recipe}
+                      className="rounded-2xl border border-[#e4e1d8] bg-[#fbfaf4] px-4 py-3 text-sm text-[var(--muted-foreground)]"
+                    >
+                      {recipe}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="rounded-2xl border border-dashed border-[#d6cab8] bg-[#fbfaf4] px-4 py-6 text-sm text-[var(--muted-foreground)]">
+                  Recipe suggestions coming soon.
+                </p>
+              )}
+
+              {product.storageTips && (
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                  <p className="text-sm font-medium text-emerald-900">Storage Guidance</p>
+                  <p className="mt-1 text-sm text-emerald-800">{product.storageTips}</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <div className="grid gap-6">
+            <Card id="farm-location" className="border-[#e4e1d8] bg-[#fffdf8] shadow-sm">
+              <CardContent className="space-y-4 p-5 sm:p-6">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <MapPin className="size-5 text-[var(--forest-green)]" />
+                    <h3 className="text-xl font-semibold text-[var(--rich-soil)]">Farm Location</h3>
+                  </div>
+                  <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+                    Origin and distance are kept visible for local buying decisions.
+                  </p>
+                </div>
                 <FarmLocationMap
                   producerName={product.producerName}
                   location={product.producerLocation}
@@ -1191,129 +1371,30 @@ export function ProductDetailPage() {
                   coordinates={product.producerCoordinates}
                   foodMiles={product.foodMiles}
                 />
-              </AccordionContent>
-            </AccordionItem>
+              </CardContent>
+            </Card>
 
-            <AccordionItem value="recipes" className="border rounded-lg px-4">
-              <AccordionTrigger className="hover:no-underline">
-                <div className="flex items-center gap-2">
-                  <ChefHat className="size-5 text-green-600" />
-                  <span className="font-medium">Recipe Suggestions</span>
-                </div>
-              </AccordionTrigger>
-              <AccordionContent className="pb-4">
-                {linkedRecipesLoading ? (
-                  <div className="space-y-3">
-                    <Skeleton className="h-20 w-full" />
-                    <Skeleton className="h-20 w-full" />
+            <Card id="producer" className="border-[#e4e1d8] bg-[#fffdf8] shadow-sm">
+              <CardContent className="space-y-4 p-5 sm:p-6">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Sprout className="size-5 text-[var(--forest-green)]" />
+                    <h3 className="text-xl font-semibold text-[var(--rich-soil)]">About {product.producerName}</h3>
                   </div>
-                ) : linkedRecipes.length > 0 ? (
-                  <div className="space-y-3">
-                    {linkedRecipes.map((recipe) => {
-                      const isExpanded = expandedRecipeIds.includes(recipe.id);
-                      return (
-                        <div key={recipe.id} className="rounded-lg border bg-gray-50 p-4">
-                          <div className="flex flex-wrap items-start justify-between gap-3">
-                            <div>
-                              <p className="font-medium text-gray-900">{recipe.title}</p>
-                              <p className="mt-1 text-sm text-gray-600">
-                                {recipe.description || `By ${recipe.producer_name}`}
-                              </p>
-                            </div>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => toggleLinkedRecipe(recipe.id)}
-                            >
-                              {isExpanded ? 'Hide Recipe' : 'View Full Recipe'}
-                            </Button>
-                          </div>
-
-                          {isExpanded && (
-                            <div className="mt-4 space-y-3">
-                              {recipe.image_url && (
-                                <img
-                                  src={recipe.image_url}
-                                  alt={recipe.title}
-                                  className="h-44 w-full rounded-md object-cover"
-                                />
-                              )}
-                              <div>
-                                <p className="text-sm font-medium text-gray-900">Ingredients</p>
-                                <p className="mt-1 whitespace-pre-line text-sm text-gray-700">
-                                  {recipe.ingredients}
-                                </p>
-                              </div>
-                              <div>
-                                <p className="text-sm font-medium text-gray-900">Instructions</p>
-                                <p className="mt-1 whitespace-pre-line text-sm text-gray-700">
-                                  {recipe.instructions}
-                                </p>
-                              </div>
-                              {recipe.linked_products.length > 0 && (
-                                <div>
-                                  <p className="text-xs text-gray-500">Linked products</p>
-                                  <div className="mt-2 flex flex-wrap gap-2">
-                                    {recipe.linked_products.map((linkedProduct) => (
-                                      <Button
-                                        key={linkedProduct.id}
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => navigate(`/product/${linkedProduct.id}`)}
-                                      >
-                                        {linkedProduct.name}
-                                      </Button>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : product.recipeIdeas && product.recipeIdeas.length > 0 ? (
-                  <div className="space-y-2">
-                    {product.recipeIdeas.map((recipe) => (
-                      <div key={recipe} className="rounded-md border bg-gray-50 px-3 py-2 text-sm text-gray-700">
-                        {recipe}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-600">Recipe suggestions coming soon.</p>
-                )}
-
-                {product.storageTips && (
-                  <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
-                    <p className="text-sm font-medium text-emerald-900">Storage Guidance</p>
-                    <p className="mt-1 text-sm text-emerald-800">{product.storageTips}</p>
-                  </div>
-                )}
-              </AccordionContent>
-            </AccordionItem>
-
-            <AccordionItem value="producer" className="border rounded-lg px-4">
-              <AccordionTrigger className="hover:no-underline">
-                <div className="flex items-center gap-2">
-                  <Sprout className="size-5 text-green-600" />
-                  <span className="font-medium">About {product.producerName}</span>
-                </div>
-              </AccordionTrigger>
-              <AccordionContent className="pb-4">
-                <div className="space-y-3">
-                  <p className="text-sm text-gray-600">
+                  <p className="mt-3 text-sm leading-7 text-[var(--muted-foreground)]">
                     {product.producerDescription || 'Producer description coming soon.'}
                   </p>
-                  <div className="pt-2 border-t">
-                    <Badge variant="secondary">Lead time: {producerDeliveryLeadTime} hours</Badge>
-                  </div>
                 </div>
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
-        </div>
+                <div className="flex flex-wrap gap-2 border-t border-[#e4e1d8] pt-4">
+                  <Badge variant="secondary">Lead time: {producerDeliveryLeadTime} hours</Badge>
+                  <Badge variant="outline" className="border-[#d6cab8]">
+                    {product.producerLocation}
+                  </Badge>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </section>
       </main>
     </div>
   );
