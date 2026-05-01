@@ -369,7 +369,7 @@ export function ProducerDashboardPage() {
     { label: 'Add product', description: 'Create a listing', icon: Plus, path: '/producer/inventory?create=product', variant: 'default' },
     { label: 'Stock', description: 'Inventory health', icon: RefreshCw, path: '/producer/inventory', variant: 'outline' },
     { label: 'Surplus', description: 'Discount excess', icon: Tag, path: '/producer/inventory?focus=surplus', variant: 'outline' },
-    { label: 'Publish', description: 'Recipes and stories', icon: Sparkles, path: '/producer/publish', variant: 'outline' },
+    { label: 'AI Recipes', description: 'Generate recipes and stories', icon: Sparkles, path: '/producer/publish', variant: 'outline' },
     { label: 'Buy produce', description: 'Shop as customer', icon: ShoppingBag, path: '/marketplace', variant: 'outline' },
     { label: 'Purchases', description: 'Track orders', icon: ReceiptText, path: '/orders/history', variant: 'outline' },
   ];

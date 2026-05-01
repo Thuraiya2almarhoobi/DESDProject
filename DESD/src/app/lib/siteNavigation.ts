@@ -76,7 +76,7 @@ export function getSiteNavItems(role?: UserRole | null): SiteNavItem[] {
         { label: 'Sales', to: '/producer/orders', matchPrefixes: ['/producer/orders'] },
         { label: 'Inventory', to: '/producer/inventory', matchPrefixes: ['/producer/inventory'] },
         { label: 'Payouts', to: '/producer/payments', matchPrefixes: ['/producer/payments'] },
-        { label: 'Publish', to: '/producer/publish', matchPrefixes: ['/producer/publish'] },
+        { label: 'AI Recipes', to: '/producer/publish', matchPrefixes: ['/producer/publish'] },
         { label: 'Recipes', to: '/content/recipes', matchPrefixes: ['/content/recipes'] },
         { label: 'Farm Stories', to: '/content/stories', matchPrefixes: ['/content/stories'] },
         { label: 'Marketplace', to: '/marketplace', matchPrefixes: ['/marketplace', '/product', '/cart', '/checkout'] },
