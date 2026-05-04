@@ -1,3 +1,18 @@
+/**
+ * DESD Marketplace documentation.
+ *
+ * File role:
+ *   Implements the PortalSelectPage browser route and coordinates the UI state for that screen.
+ *
+ * Frontend context:
+ *   Route-level React page layer: one component per main browser page or role-specific workspace.
+ *
+ * Implementation notes:
+ *   Keep comments focused on state ownership, role-specific routing, API calls,
+ *   and non-obvious UI decisions. Styling-only class names are left uncommented
+ *   unless they communicate an important layout or accessibility choice.
+ */
+
 import { ArrowRight, CheckCircle2 } from 'lucide-react';
 import { Link, Navigate, useLocation } from 'react-router';
 
@@ -22,6 +37,14 @@ const roleCopy = {
   },
 } as const;
 
+/**
+ * PortalSelectPage boundary.
+ *
+ * This exported unit supports the file role: Implements the PortalSelectPage browser route and coordinates the UI state for that screen.
+ * It belongs to: Route-level React page layer: one component per main browser page or role-specific workspace.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 export function PortalSelectPage() {
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
@@ -52,6 +75,14 @@ export function PortalSelectPage() {
         <section className="mt-10 grid w-full gap-5 md:grid-cols-3">
           {selectableRoles.map((role) => {
             const portal = getPortalDefinition(role);
+/**
+ * Icon boundary.
+ *
+ * This exported unit supports the file role: Implements the PortalSelectPage browser route and coordinates the UI state for that screen.
+ * It belongs to: Route-level React page layer: one component per main browser page or role-specific workspace.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
             const Icon = portal.icon;
             const targetPath = getRegisterPathForRole(role);
             const copy = roleCopy[role];

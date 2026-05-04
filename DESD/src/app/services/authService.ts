@@ -1,3 +1,18 @@
+/**
+ * DESD Marketplace documentation.
+ *
+ * File role:
+ *   Frontend source file for authService.
+ *
+ * Frontend context:
+ *   Frontend source module for the React/Vite application.
+ *
+ * Implementation notes:
+ *   Keep comments focused on state ownership, role-specific routing, API calls,
+ *   and non-obvious UI decisions. Styling-only class names are left uncommented
+ *   unless they communicate an important layout or accessibility choice.
+ */
+
 import {
   clearAuthStorage,
   getAccessToken,
@@ -91,6 +106,14 @@ export interface RestaurantRegisterPayload {
   postcode: string;
 }
 
+/**
+ * AuthApiError boundary.
+ *
+ * This exported unit supports the file role: Frontend source file for authService.
+ * It belongs to: Frontend source module for the React/Vite application.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 class AuthApiError extends Error {
   status: number;
   response: { data: unknown };

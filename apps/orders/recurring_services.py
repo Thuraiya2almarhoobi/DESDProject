@@ -1,3 +1,20 @@
+"""
+DESD Marketplace documentation.
+
+File role:
+    Implements scheduling rules for restaurant/community recurring orders without placing that logic in views.
+
+Domain context:
+    Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+
+Implementation notes:
+    This header is intentionally descriptive so future sprint contributors can
+    understand why the file exists before reading individual classes/functions.
+    Inline comments below are reserved for business rules, permission checks,
+    external-service calls, or data transformations that are not obvious from
+    the code itself.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -32,6 +49,13 @@ from .services import (
 
 @dataclass
 class GeneratedRecurringOrderResult:
+    """
+    Documents the `GeneratedRecurringOrderResult` boundary for this module.
+
+    The class belongs to the file role described above: Implements scheduling rules for restaurant/community recurring orders without placing that logic in views.
+    It keeps related behavior grouped so the ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     template_id: int
     scheduled_order_date: date
     order_id: int | None
@@ -39,12 +63,26 @@ class GeneratedRecurringOrderResult:
 
 
 def _frequency_days(frequency: str) -> int:
+    """
+    Helper for the file role: Implements scheduling rules for restaurant/community recurring orders without placing that logic in views.
+
+    `_frequency_days` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
     if frequency == RecurringOrderTemplate.Frequency.FORTNIGHTLY:
         return 14
     return 7
 
 
 def advance_template_schedule(template: RecurringOrderTemplate, scheduled_order_date: date) -> None:
+    """
+    Helper for the file role: Implements scheduling rules for restaurant/community recurring orders without placing that logic in views.
+
+    `advance_template_schedule` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
     template.next_order_date = scheduled_order_date + timedelta(
         days=_frequency_days(template.frequency)
     )
@@ -53,6 +91,13 @@ def advance_template_schedule(template: RecurringOrderTemplate, scheduled_order_
 
 
 def _next_weekday(base_date: date, weekday: int) -> date:
+    """
+    Helper for the file role: Implements scheduling rules for restaurant/community recurring orders without placing that logic in views.
+
+    `_next_weekday` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
     delta = (weekday - base_date.weekday()) % 7
     if delta == 0:
         delta = 7
@@ -60,6 +105,13 @@ def _next_weekday(base_date: date, weekday: int) -> date:
 
 
 def _delivery_offset_days(order_day: int, delivery_day: int) -> int:
+    """
+    Helper for the file role: Implements scheduling rules for restaurant/community recurring orders without placing that logic in views.
+
+    `_delivery_offset_days` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
     offset = (delivery_day - order_day) % 7
     return offset or 7
 
@@ -407,6 +459,13 @@ def generate_due_recurring_orders(
 
 
 def build_template_alerts(template: RecurringOrderTemplate) -> list[dict]:
+    """
+    Helper for the file role: Implements scheduling rules for restaurant/community recurring orders without placing that logic in views.
+
+    `build_template_alerts` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
     alerts = []
     for item in template.items.select_related("product").all():
         if not item.product.is_orderable() or item.product.stock_quantity < item.default_quantity:

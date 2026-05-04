@@ -1,9 +1,33 @@
+"""
+DESD Marketplace documentation.
+
+File role:
+    Defines persistent database models, relationships, and domain methods for this app.
+
+Domain context:
+    Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
+
+Implementation notes:
+    This header is intentionally descriptive so future sprint contributors can
+    understand why the file exists before reading individual classes/functions.
+    Inline comments below are reserved for business rules, permission checks,
+    external-service calls, or data transformations that are not obvious from
+    the code itself.
+"""
+
 from django.db import models
 
 from apps.orders.models import ProducerSubOrder
 
 
 class DeliveryJob(models.Model):
+    """
+    Documents the `DeliveryJob` boundary for this module.
+
+    The class belongs to the file role described above: Defines persistent database models, relationships, and domain methods for this app.
+    It keeps related behavior grouped so the delivery domain: delivery jobs, tracking snapshots, stuart/simulation integration, and delivery api endpoints.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     class Provider(models.TextChoices):
         STUART = "stuart", "Stuart"
 
@@ -61,6 +85,13 @@ class DeliveryJob(models.Model):
 
 
 class DeliveryEvent(models.Model):
+    """
+    Documents the `DeliveryEvent` boundary for this module.
+
+    The class belongs to the file role described above: Defines persistent database models, relationships, and domain methods for this app.
+    It keeps related behavior grouped so the delivery domain: delivery jobs, tracking snapshots, stuart/simulation integration, and delivery api endpoints.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     delivery_job = models.ForeignKey(
         DeliveryJob,
         on_delete=models.CASCADE,

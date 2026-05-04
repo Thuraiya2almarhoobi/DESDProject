@@ -1,3 +1,18 @@
+/**
+ * DESD Marketplace documentation.
+ *
+ * File role:
+ *   Implements the LandingPage browser route and coordinates the UI state for that screen.
+ *
+ * Frontend context:
+ *   Route-level React page layer: one component per main browser page or role-specific workspace.
+ *
+ * Implementation notes:
+ *   Keep comments focused on state ownership, role-specific routing, API calls,
+ *   and non-obvious UI decisions. Styling-only class names are left uncommented
+ *   unless they communicate an important layout or accessibility choice.
+ */
+
 import { useEffect, useState } from 'react';
 import {
   ArrowRight,
@@ -123,6 +138,14 @@ const homeContextCards = [
   },
 ];
 
+/**
+ * LandingPage boundary.
+ *
+ * This exported unit supports the file role: Implements the LandingPage browser route and coordinates the UI state for that screen.
+ * It belongs to: Route-level React page layer: one component per main browser page or role-specific workspace.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 export function LandingPage() {
   const [activeFarmIndex, setActiveFarmIndex] = useState(0);
   const [carouselDirection, setCarouselDirection] = useState(1);
@@ -230,19 +253,6 @@ export function LandingPage() {
 
                   <div className="grid gap-3 sm:grid-cols-2">
                     <Link
-                      to="/select-portal?mode=register"
-                      className="group flex min-h-[7.5rem] cursor-pointer flex-col justify-center rounded-[1.35rem] border border-[color-mix(in_srgb,var(--forest-green)_22%,#e4e1d8)] bg-[color-mix(in_srgb,var(--forest-green)_5%,#fffefa)] p-[1.1rem] text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-[var(--forest-green)] hover:bg-[color-mix(in_srgb,var(--forest-green)_8%,#fffefa)] hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--forest-green)] focus-visible:ring-offset-2 sm:p-5"
-                    >
-                      <span className="text-[0.84rem] font-medium text-[oklch(0.42_0.032_118)]">New to the marketplace?</span>
-                      <div className="mt-2.5 flex items-center justify-between gap-4">
-                        <span className="max-w-[15rem] text-[1.06rem] font-semibold leading-tight text-[oklch(0.23_0.034_87)] sm:text-[1.1rem]">
-                          Create account
-                        </span>
-                        <ArrowRight className="size-[1.15rem] shrink-0 text-[var(--forest-green)] transition-transform group-hover:translate-x-1" />
-                      </div>
-                    </Link>
-
-                    <Link
                       to="/login"
                       className="group flex min-h-[7.5rem] cursor-pointer flex-col justify-center rounded-[1.35rem] border border-[#e4e1d8] bg-white/55 p-[1.1rem] text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-[var(--forest-green)] hover:bg-[#fffefa] hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--forest-green)] focus-visible:ring-offset-2 sm:p-5"
                     >
@@ -250,6 +260,19 @@ export function LandingPage() {
                       <div className="mt-2.5 flex items-center justify-between gap-4">
                         <span className="max-w-[15rem] text-[1.05rem] font-semibold leading-tight text-[var(--forest-green)] sm:text-[1.08rem]">
                           Sign in
+                        </span>
+                        <ArrowRight className="size-[1.15rem] shrink-0 text-[var(--forest-green)] transition-transform group-hover:translate-x-1" />
+                      </div>
+                    </Link>
+
+                    <Link
+                      to="/select-portal?mode=register"
+                      className="group flex min-h-[7.5rem] cursor-pointer flex-col justify-center rounded-[1.35rem] border border-[color-mix(in_srgb,var(--forest-green)_22%,#e4e1d8)] bg-[color-mix(in_srgb,var(--forest-green)_5%,#fffefa)] p-[1.1rem] text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-[var(--forest-green)] hover:bg-[color-mix(in_srgb,var(--forest-green)_8%,#fffefa)] hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--forest-green)] focus-visible:ring-offset-2 sm:p-5"
+                    >
+                      <span className="text-[0.84rem] font-medium text-[oklch(0.42_0.032_118)]">New to the marketplace?</span>
+                      <div className="mt-2.5 flex items-center justify-between gap-4">
+                        <span className="max-w-[15rem] text-[1.06rem] font-semibold leading-tight text-[oklch(0.23_0.034_87)] sm:text-[1.1rem]">
+                          Sign up
                         </span>
                         <ArrowRight className="size-[1.15rem] shrink-0 text-[var(--forest-green)] transition-transform group-hover:translate-x-1" />
                       </div>
@@ -454,6 +477,14 @@ export function LandingPage() {
 
               <div className="grid gap-5 md:grid-cols-2">
                 {roles.map((role, index) => {
+/**
+ * Icon boundary.
+ *
+ * This exported unit supports the file role: Implements the LandingPage browser route and coordinates the UI state for that screen.
+ * It belongs to: Route-level React page layer: one component per main browser page or role-specific workspace.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
                   const Icon = role.icon;
 
                   return (

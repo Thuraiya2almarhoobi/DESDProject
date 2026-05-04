@@ -1,3 +1,20 @@
+"""
+DESD Marketplace documentation.
+
+File role:
+    Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+Domain context:
+    Catalog domain: public product browsing, producer/product data serialization, reviews, and marketplace-facing catalog APIs.
+
+Implementation notes:
+    This header is intentionally descriptive so future sprint contributors can
+    understand why the file exists before reading individual classes/functions.
+    Inline comments below are reserved for business rules, permission checks,
+    external-service calls, or data transformations that are not obvious from
+    the code itself.
+"""
+
 from decimal import Decimal, InvalidOperation
 
 from django.db.models import Q
@@ -20,6 +37,13 @@ FALSE_VALUES = {"0", "false", "no", "off"}
 
 
 def _parse_boolean(value: str | None) -> bool | None:
+    """
+    Helper for the file role: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+    `_parse_boolean` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Catalog domain: public product browsing, producer/product data serialization, reviews, and marketplace-facing catalog APIs.
+    """
     if value is None:
         return None
     normalized = value.strip().lower()
@@ -31,6 +55,13 @@ def _parse_boolean(value: str | None) -> bool | None:
 
 
 def _parse_decimal(value: str | None) -> Decimal | None:
+    """
+    Helper for the file role: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+    `_parse_decimal` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Catalog domain: public product browsing, producer/product data serialization, reviews, and marketplace-facing catalog APIs.
+    """
     if value is None:
         return None
     try:
@@ -40,6 +71,13 @@ def _parse_decimal(value: str | None) -> Decimal | None:
 
 
 def _filter_queryset_by_effective_availability(queryset, allowed_availabilities: set[str], require_stock: bool = False):
+    """
+    Helper for the file role: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+    `_filter_queryset_by_effective_availability` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Catalog domain: public product browsing, producer/product data serialization, reviews, and marketplace-facing catalog APIs.
+    """
     matching_ids = []
     for product in queryset:
         if require_stock and product.stock <= 0:
@@ -50,11 +88,25 @@ def _filter_queryset_by_effective_availability(queryset, allowed_availabilities:
 
 
 class CategoryListAPIView(generics.ListAPIView):
+    """
+    Documents the `CategoryListAPIView` boundary for this module.
+
+    The class belongs to the file role described above: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+    It keeps related behavior grouped so the catalog domain: public product browsing, producer/product data serialization, reviews, and marketplace-facing catalog apis.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
 
 
 class ProductViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Documents the `ProductViewSet` boundary for this module.
+
+    The class belongs to the file role described above: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+    It keeps related behavior grouped so the catalog domain: public product browsing, producer/product data serialization, reviews, and marketplace-facing catalog apis.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     serializer_class = ProductSerializer
     queryset = Product.objects.select_related("category", "producer")
 

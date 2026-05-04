@@ -1,3 +1,18 @@
+/**
+ * DESD Marketplace documentation.
+ *
+ * File role:
+ *   Provides the reusable input-otp component used by pages or layout shells.
+ *
+ * Frontend context:
+ *   Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ *
+ * Implementation notes:
+ *   Keep comments focused on state ownership, role-specific routing, API calls,
+ *   and non-obvious UI decisions. Styling-only class names are left uncommented
+ *   unless they communicate an important layout or accessibility choice.
+ */
+
 "use client";
 
 import * as React from "react";
@@ -6,6 +21,14 @@ import { MinusIcon } from "lucide-react";
 
 import { cn } from "./utils";
 
+/**
+ * InputOTP boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable input-otp component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function InputOTP({
   className,
   containerClassName,
@@ -26,6 +49,14 @@ function InputOTP({
   );
 }
 
+/**
+ * InputOTPGroup boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable input-otp component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function InputOTPGroup({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -36,6 +67,14 @@ function InputOTPGroup({ className, ...props }: React.ComponentProps<"div">) {
   );
 }
 
+/**
+ * InputOTPSlot boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable input-otp component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function InputOTPSlot({
   index,
   className,
@@ -66,6 +105,14 @@ function InputOTPSlot({
   );
 }
 
+/**
+ * InputOTPSeparator boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable input-otp component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function InputOTPSeparator({ ...props }: React.ComponentProps<"div">) {
   return (
     <div data-slot="input-otp-separator" role="separator" {...props}>

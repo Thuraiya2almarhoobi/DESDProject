@@ -1,4 +1,21 @@
-﻿from dataclasses import dataclass
+"""
+DESD Marketplace documentation.
+
+File role:
+    Holds domain/service logic that should stay outside thin HTTP view classes.
+
+Domain context:
+    Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+
+Implementation notes:
+    This header is intentionally descriptive so future sprint contributors can
+    understand why the file exists before reading individual classes/functions.
+    Inline comments below are reserved for business rules, permission checks,
+    external-service calls, or data transformations that are not obvious from
+    the code itself.
+"""
+
+from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal, ROUND_CEILING
 import logging
@@ -22,28 +39,64 @@ from .models import (
 )
 
 MONEY_Q = Decimal("0.01")
+# TC-025 depends on this exact 5% network commission. Keep this rate aligned
+# with `apps.payments.services.COMMISSION_RATE` so checkout records, Stripe
+# payment metadata, settlement exports, and admin reports all agree.
 COMMISSION_RATE = Decimal("0.05")
+# Buyer quantity is also validated against live product stock. This value is
+# the extra bulk-order safety cap requested for community/restaurant ordering.
 MAX_ORDER_ITEM_QUANTITY = Decimal("100.00")
 logger = logging.getLogger("apps.orders")
 
 
 def money(value: Decimal) -> Decimal:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `money` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
     return value.quantize(MONEY_Q)
 
 
 def get_or_create_cart(user) -> Cart:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `get_or_create_cart` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
     cart, _ = Cart.objects.get_or_create(customer=user)
     return cart
 
 
 @dataclass
 class CartProducerGroup:
+    """
+    Documents the `CartProducerGroup` boundary for this module.
+
+    The class belongs to the file role described above: Holds domain/service logic that should stay outside thin HTTP view classes.
+    It keeps related behavior grouped so the ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     producer: Producer
     items: list[CartItem]
     subtotal: Decimal
 
 
 def get_cart_groups(cart: Cart, selected_cart_item_ids: list[int] | None = None) -> list[CartProducerGroup]:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `get_cart_groups` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
+    # The checkout UI, cart UI, and producer delivery-date rules all operate
+    # by producer, so the grouping is centralised here instead of repeated in
+    # several API views.
     grouped: dict[int, CartProducerGroup] = {}
     item_queryset = cart.items.select_related("product__producer")
     if selected_cart_item_ids is not None:
@@ -59,6 +112,16 @@ def get_cart_groups(cart: Cart, selected_cart_item_ids: list[int] | None = None)
 
 
 def build_cart_payload(cart: Cart) -> dict:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `build_cart_payload` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
+    # The frontend displays these values directly, but the calculation stays on
+    # the backend so price, stock, and commission totals cannot be manipulated
+    # from the browser.
     groups = get_cart_groups(cart)
     subtotal = money(sum((g.subtotal for g in groups), Decimal("0.00")))
     commission_amount = money(subtotal * COMMISSION_RATE)
@@ -104,6 +167,13 @@ def build_cart_payload(cart: Cart) -> dict:
 
 
 def validate_delivery_date(producer: Producer, selected_date: date) -> None:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `validate_delivery_date` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
     min_hours = max(48, producer.lead_time_hours)
     min_days = (min_hours + 23) // 24
     earliest = timezone.localdate() + timedelta(days=min_days)
@@ -114,6 +184,13 @@ def validate_delivery_date(producer: Producer, selected_date: date) -> None:
 
 
 def _resolve_delivery_dates(groups: list[CartProducerGroup], payload: dict) -> dict[int, date]:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_resolve_delivery_dates` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
     delivery_date = payload.get("delivery_date")
     producer_delivery_dates = payload.get("producer_delivery_dates") or {}
     resolved: dict[int, date] = {}
@@ -135,6 +212,13 @@ def _resolve_delivery_dates(groups: list[CartProducerGroup], payload: dict) -> d
 
 
 def _selected_cart_item_ids(cart: Cart, payload: dict) -> list[int] | None:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_selected_cart_item_ids` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
     selected_cart_item_ids = payload.get("selected_cart_item_ids")
     if selected_cart_item_ids is None:
         return None
@@ -149,6 +233,7 @@ def _selected_cart_item_ids(cart: Cart, payload: dict) -> list[int] | None:
 def _prepare_checkout_state(
     user, payload: dict
 ) -> tuple[Cart, list[int] | None, list[CartProducerGroup], str, dict[int, date]]:
+    """Validate the cart immediately before an order/Stripe reservation is created."""
     cart = get_or_create_cart(user)
     unique_selected_ids = _selected_cart_item_ids(cart, payload)
     groups = get_cart_groups(cart, unique_selected_ids)
@@ -160,6 +245,9 @@ def _prepare_checkout_state(
 
     special_instructions = (payload.get("special_instructions") or "").strip()
 
+    # Stock is checked at the last possible point before order creation. This
+    # protects restaurant/community bulk buyers from ordering stale quantities
+    # after another buyer has already consumed the available stock.
     for group in groups:
         for item in group.items:
             if not item.product.is_orderable() or item.product.stock_quantity < item.quantity:
@@ -180,6 +268,8 @@ def _create_order_record(
     payment_reference: str,
     payment_status: str,
 ) -> Order:
+    # Store a financial snapshot on the order itself. Admin reports then remain
+    # auditable even if a future sprint changes the global commission rate.
     subtotal = money(sum((group.subtotal for group in groups), Decimal("0.00")))
     commission_amount = money(subtotal * COMMISSION_RATE)
     payout_total = money(subtotal - commission_amount)
@@ -204,6 +294,9 @@ def _create_order_record(
 def _create_order_structure(
     order: Order, groups: list[CartProducerGroup], delivery_dates: dict[int, date], special_instructions: str
 ) -> None:
+    # A single customer checkout can contain multiple producers. Sub-orders keep
+    # each supplier's delivery date, commission share, payout, and item list
+    # independent while preserving one buyer-facing order number.
     for group in groups:
         producer_commission = money(group.subtotal * COMMISSION_RATE)
         payout_amount = money(group.subtotal - producer_commission)
@@ -233,6 +326,16 @@ def _create_order_structure(
 
 
 def _producer_portal_stock_units(quantity: Decimal) -> int:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_producer_portal_stock_units` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
+    # Marketplace stock can be decimal for units such as kg/litre, while the
+    # producer portal inventory mirror is integer-based. Decimal quantities are
+    # rounded up so the producer dashboard never overstates remaining stock.
     whole_units = quantity.to_integral_value()
     if quantity == whole_units:
         return int(whole_units)
@@ -240,6 +343,15 @@ def _producer_portal_stock_units(quantity: Decimal) -> int:
 
 
 def _matching_producer_portal_product(order_item: OrderItem):
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_matching_producer_portal_product` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
+    # The producer portal keeps its own product model. We match by producer user,
+    # product name, and unit so stock changes remain visible in both dashboards.
     producer_user = getattr(getattr(order_item.product, "producer", None), "user", None)
     if producer_user is None:
         return None
@@ -271,9 +383,19 @@ def _matching_producer_portal_product(order_item: OrderItem):
 
 
 def _adjust_order_product_stock(order_item: OrderItem, quantity_delta: Decimal) -> None:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_adjust_order_product_stock` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
     if order_item.product is None:
         return
 
+    # The orders product table is the buyer-facing stock source. Every reserve
+    # or release is followed by a catalog sync so marketplace cards reflect the
+    # same available quantity.
     next_stock = money(order_item.product.stock_quantity + quantity_delta)
     if next_stock < Decimal("0.00"):
         raise ValueError(f"Product '{order_item.product_name}' no longer has enough stock.")
@@ -285,6 +407,16 @@ def _adjust_order_product_stock(order_item: OrderItem, quantity_delta: Decimal) 
 
 
 def _adjust_producer_portal_stock(order_item: OrderItem, quantity_delta: Decimal) -> None:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_adjust_producer_portal_stock` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
+    # This mirrors the buyer-side stock adjustment in the producer workspace.
+    # Missing mirror rows are tolerated because older demo products may only
+    # exist in the marketplace/orders catalog.
     producer_product = _matching_producer_portal_product(order_item)
     if producer_product is None:
         return
@@ -305,18 +437,47 @@ def _adjust_producer_portal_stock(order_item: OrderItem, quantity_delta: Decimal
 
 
 def reserve_stock_for_order(order: Order) -> None:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `reserve_stock_for_order` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
+    # Stripe checkout reserves stock before redirecting away from the site. If
+    # Stripe fails/cancels later, `release_stock_reservation_for_order` reverses
+    # the same deltas.
     for order_item in order.items.select_related("product__producer__user").all():
         _adjust_order_product_stock(order_item, -order_item.quantity)
         _adjust_producer_portal_stock(order_item, -order_item.quantity)
 
 
 def release_stock_reservation_for_order(order: Order) -> None:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `release_stock_reservation_for_order` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
+    # The release path is intentionally symmetrical with reservation so failed
+    # payments return quantities to both buyer and producer inventory surfaces.
     for order_item in order.items.select_related("product__producer__user").all():
         _adjust_order_product_stock(order_item, order_item.quantity)
         _adjust_producer_portal_stock(order_item, order_item.quantity)
 
 
 def clear_checked_out_cart_items(order: Order, selected_cart_item_ids: list[int] | None) -> None:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `clear_checked_out_cart_items` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
+    # `selected_cart_item_ids=None` means a full-cart checkout. A list means the
+    # buyer checked out only selected producer sections/items and the remaining
+    # cart should be left intact.
     cart = Cart.objects.filter(customer=order.customer).first()
     if cart is None:
         return
@@ -327,6 +488,15 @@ def clear_checked_out_cart_items(order: Order, selected_cart_item_ids: list[int]
 
 
 def create_order_notifications(order: Order) -> None:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `create_order_notifications` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
+    # Notifications are created only after a successful mock payment or Stripe
+    # success webhook, which prevents producers receiving orders that later fail.
     special_instructions = order.special_instructions.strip()
     for sub_order in order.sub_orders.select_related("producer").all():
         ProducerNotification.objects.get_or_create(
@@ -364,6 +534,16 @@ def create_order_notifications(order: Order) -> None:
 
 @transaction.atomic
 def checkout_cart_with_stripe_reservation(user, payload: dict) -> Order:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `checkout_cart_with_stripe_reservation` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
+    # Stripe orders enter as pending reservations: stock is held, payment is
+    # tracked, and cart cleanup/notifications wait for the webhook or success
+    # confirmation endpoint.
     _, unique_selected_ids, groups, special_instructions, delivery_dates = _prepare_checkout_state(user, payload)
     order = _create_order_record(
         user,
@@ -406,6 +586,16 @@ def checkout_cart_with_stripe_reservation(user, payload: dict) -> Order:
 
 @transaction.atomic
 def checkout_cart(user, payload: dict) -> Order:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `checkout_cart` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
+    # The non-Stripe test-card path is used by older flows/tests. It completes
+    # immediately, so stock, notifications, transaction, profile, and cart
+    # cleanup happen in this one atomic transaction.
     _, unique_selected_ids, groups, special_instructions, delivery_dates = _prepare_checkout_state(user, payload)
     order = _create_order_record(
         user,
@@ -450,6 +640,16 @@ def checkout_cart(user, payload: dict) -> Order:
 
 @transaction.atomic
 def reorder_order_to_cart(user, order: Order) -> dict:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `reorder_order_to_cart` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
+    # Reorder is intentionally conservative: unavailable or out-of-season items
+    # are reported back instead of silently re-adding products the buyer can no
+    # longer purchase.
     cart = get_or_create_cart(user)
     unavailable: list[dict] = []
     added: list[dict] = []
@@ -489,5 +689,3 @@ def reorder_order_to_cart(user, order: Order) -> dict:
         "unavailable_items": unavailable,
         "cart": build_cart_payload(cart),
     }
-
-

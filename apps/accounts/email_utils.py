@@ -1,3 +1,20 @@
+"""
+DESD Marketplace documentation.
+
+File role:
+    Centralizes transactional email sending so registration and password-reset messages behave consistently.
+
+Domain context:
+    Accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+
+Implementation notes:
+    This header is intentionally descriptive so future sprint contributors can
+    understand why the file exists before reading individual classes/functions.
+    Inline comments below are reserved for business rules, permission checks,
+    external-service calls, or data transformations that are not obvious from
+    the code itself.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -20,6 +37,13 @@ logger = logging.getLogger("apps.accounts.email")
 
 @dataclass(frozen=True)
 class AccountEmailDeliveryResult:
+    """
+    Documents the `AccountEmailDeliveryResult` boundary for this module.
+
+    The class belongs to the file role described above: Centralizes transactional email sending so registration and password-reset messages behave consistently.
+    It keeps related behavior grouped so the accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     sent: bool
     skipped: bool
     reason: str = ""
@@ -44,6 +68,13 @@ DEFAULT_SUPPRESSED_LOCAL_PARTS = {
 
 
 def _csv_setting(name: str, defaults: set[str]) -> set[str]:
+    """
+    Helper for the file role: Centralizes transactional email sending so registration and password-reset messages behave consistently.
+
+    `_csv_setting` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    """
     configured = getattr(settings, name, None)
     if configured is None:
         return defaults
@@ -53,6 +84,13 @@ def _csv_setting(name: str, defaults: set[str]) -> set[str]:
 
 
 def _is_suppressed_email(email: str) -> tuple[bool, str]:
+    """
+    Helper for the file role: Centralizes transactional email sending so registration and password-reset messages behave consistently.
+
+    `_is_suppressed_email` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    """
     try:
         validate_email(email)
     except ValidationError:
@@ -70,6 +108,13 @@ def _is_suppressed_email(email: str) -> tuple[bool, str]:
 
 
 def _send_account_email(*, subject: str, message: str, recipient: str) -> AccountEmailDeliveryResult:
+    """
+    Helper for the file role: Centralizes transactional email sending so registration and password-reset messages behave consistently.
+
+    `_send_account_email` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    """
     suppressed, reason = _is_suppressed_email(recipient)
     if suppressed:
         logger.info("Skipping account email to %s because %s.", recipient, reason)
@@ -91,6 +136,13 @@ def _send_account_email(*, subject: str, message: str, recipient: str) -> Accoun
 
 
 def send_email_verification_message(user):
+    """
+    Helper for the file role: Centralizes transactional email sending so registration and password-reset messages behave consistently.
+
+    `send_email_verification_message` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    """
     token = generate_email_verification_token(user)
     verification_link = build_frontend_link("/verify-email", token)
     result = _send_account_email(
@@ -109,6 +161,13 @@ def send_email_verification_message(user):
 
 
 def send_password_reset_message(user):
+    """
+    Helper for the file role: Centralizes transactional email sending so registration and password-reset messages behave consistently.
+
+    `send_password_reset_message` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    """
     token = generate_password_reset_token(user)
     reset_link = build_frontend_link("/reset-password", token)
     return _send_account_email(

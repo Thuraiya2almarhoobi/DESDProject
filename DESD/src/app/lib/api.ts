@@ -1,3 +1,18 @@
+/**
+ * DESD Marketplace documentation.
+ *
+ * File role:
+ *   Contains reusable helper functions for api concerns across the frontend.
+ *
+ * Frontend context:
+ *   Frontend utility layer: route helpers, token storage, API clients, formatting, maps, and domain helpers.
+ *
+ * Implementation notes:
+ *   Keep comments focused on state ownership, role-specific routing, API calls,
+ *   and non-obvious UI decisions. Styling-only class names are left uncommented
+ *   unless they communicate an important layout or accessibility choice.
+ */
+
 import { Product } from '../types';
 import { resolveApiOriginBase } from './apiBase';
 import { clearAuthStorage, getAccessToken, getRefreshToken, setAuthTokens } from './tokenStorage';
@@ -11,6 +26,14 @@ import { clearAuthStorage, getAccessToken, getRefreshToken, setAuthTokens } from
  * - token refresh on 401 responses
  * - shared response/error parsing
  * - TypeScript payload shapes reused across pages
+ */
+/**
+ * AUTH_STORAGE_KEY boundary.
+ *
+ * This exported unit supports the file role: Contains reusable helper functions for api concerns across the frontend.
+ * It belongs to: Frontend utility layer: route helpers, token storage, API clients, formatting, maps, and domain helpers.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
  */
 const AUTH_STORAGE_KEY = 'desd_basic_auth_token';
 const API_BASE = resolveApiOriginBase(import.meta.env.VITE_API_BASE, '');
@@ -447,6 +470,14 @@ export async function uploadImageFile(
   });
 }
 
+/**
+ * PRODUCT_IMAGE_LIBRARY boundary.
+ *
+ * This exported unit supports the file role: Contains reusable helper functions for api concerns across the frontend.
+ * It belongs to: Frontend utility layer: route helpers, token storage, API clients, formatting, maps, and domain helpers.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 const PRODUCT_IMAGE_LIBRARY = [
   'https://images.unsplash.com/photo-1542838132-92c53300491e?w=900',
   'https://images.unsplash.com/photo-1518843875459-f738682238a6?w=900',

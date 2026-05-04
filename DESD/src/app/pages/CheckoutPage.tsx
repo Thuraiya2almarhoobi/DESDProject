@@ -1,3 +1,18 @@
+/**
+ * DESD Marketplace documentation.
+ *
+ * File role:
+ *   Implements the CheckoutPage browser route and coordinates the UI state for that screen.
+ *
+ * Frontend context:
+ *   Route-level React page layer: one component per main browser page or role-specific workspace.
+ *
+ * Implementation notes:
+ *   Keep comments focused on state ownership, role-specific routing, API calls,
+ *   and non-obvious UI decisions. Styling-only class names are left uncommented
+ *   unless they communicate an important layout or accessibility choice.
+ */
+
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { ArrowLeft, CreditCard, CheckCircle, LoaderCircle, XCircle } from 'lucide-react';
@@ -18,6 +33,14 @@ import { ApiOrderDetail, apiJson } from '../lib/api';
 
 type CheckoutStep = 'address' | 'delivery' | 'payment' | 'confirm';
 
+/**
+ * PENDING_STRIPE_CHECKOUT_STORAGE_KEY boundary.
+ *
+ * This exported unit supports the file role: Implements the CheckoutPage browser route and coordinates the UI state for that screen.
+ * It belongs to: Route-level React page layer: one component per main browser page or role-specific workspace.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 const PENDING_STRIPE_CHECKOUT_STORAGE_KEY = 'desd_pending_stripe_checkout';
 const LEGACY_PENDING_STRIPE_ORDER_STORAGE_KEY = 'desd_pending_stripe_order_id';
 
@@ -31,6 +54,8 @@ function readPendingStripeCheckout(): PendingStripeCheckoutState | null {
     return null;
   }
 
+  // Session storage bridges the redirect to Stripe and back. It is intentionally
+  // per-tab, not localStorage, so stale checkout ids do not survive a new visit.
   const raw = window.sessionStorage.getItem(PENDING_STRIPE_CHECKOUT_STORAGE_KEY);
   if (raw) {
     try {
@@ -90,6 +115,14 @@ function dateOrDefault(value: string | undefined, leadHours: number): string {
   return minDeliveryDate(leadHours);
 }
 
+/**
+ * CheckoutPage boundary.
+ *
+ * This exported unit supports the file role: Implements the CheckoutPage browser route and coordinates the UI state for that screen.
+ * It belongs to: Route-level React page layer: one component per main browser page or role-specific workspace.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 export function CheckoutPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -203,6 +236,9 @@ export function CheckoutPage() {
     const query = new URLSearchParams(location.search);
 
     const handleStripeReturn = async () => {
+      // The success/cancel pages are not separate routes in behavior; they are
+      // return states of checkout that reconcile Stripe, stock, cart, and order
+      // data before showing the final confirmation/error message.
       setStep('payment');
       setPaymentProcessing(true);
       setPaymentError('');
@@ -323,6 +359,8 @@ export function CheckoutPage() {
     try {
       const fullAddress = [address, city].filter(Boolean).join(', ');
 
+      // Selected cart item ids are included so buyers can checkout one producer
+      // group/item without losing the rest of their cart.
       const payload: Record<string, unknown> = {
         delivery_address: fullAddress,
         customer_postcode: postcode,
@@ -334,6 +372,9 @@ export function CheckoutPage() {
         payload.special_instructions = specialInstructions.trim();
       }
 
+      // Single-producer checkout accepts one delivery date. Multi-producer
+      // checkout sends a producer-id keyed map so each supplier can satisfy
+      // their own lead-time requirement.
       if (cartByProducer.length === 1) {
         payload.delivery_date = deliveryDates[cartByProducer[0].producerId];
       } else {
@@ -344,6 +385,9 @@ export function CheckoutPage() {
         payload.producer_delivery_dates = producerDates;
       }
 
+      // Role-specific endpoints keep the shared checkout UI thin while allowing
+      // restaurant recurring templates and community bulk orders to retain their
+      // own backend business rules.
       if (isRestaurantCheckout && makeRecurring) {
         payload.frequency = recurringFrequency;
         payload.order_day = orderDay;
@@ -411,6 +455,14 @@ export function CheckoutPage() {
     }
   };
 
+/**
+ * StepIndicator boundary.
+ *
+ * This exported unit supports the file role: Implements the CheckoutPage browser route and coordinates the UI state for that screen.
+ * It belongs to: Route-level React page layer: one component per main browser page or role-specific workspace.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
   const StepIndicator = () => (
     <div className="flex items-center justify-center mb-8">
       <div className="flex items-center gap-2">

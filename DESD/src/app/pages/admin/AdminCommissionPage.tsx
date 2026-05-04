@@ -1,3 +1,18 @@
+/**
+ * DESD Marketplace documentation.
+ *
+ * File role:
+ *   Implements the AdminCommissionPage browser route and coordinates the UI state for that screen.
+ *
+ * Frontend context:
+ *   Route-level React page layer: one component per main browser page or role-specific workspace.
+ *
+ * Implementation notes:
+ *   Keep comments focused on state ownership, role-specific routing, API calls,
+ *   and non-obvious UI decisions. Styling-only class names are left uncommented
+ *   unless they communicate an important layout or accessibility choice.
+ */
+
 import { Calendar, Download, FileSpreadsheet, Wallet } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, XAxis, YAxis } from 'recharts';
@@ -132,6 +147,14 @@ function formatCurrencyValue(value: unknown): string {
   return formatAdminCurrency(String(value ?? 0));
 }
 
+/**
+ * AdminCommissionPage boundary.
+ *
+ * This exported unit supports the file role: Implements the AdminCommissionPage browser route and coordinates the UI state for that screen.
+ * It belongs to: Route-level React page layer: one component per main browser page or role-specific workspace.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 export function AdminCommissionPage() {
   const [dateFrom, setDateFrom] = useState(defaultRange.dateFrom);
   const [dateTo, setDateTo] = useState(defaultRange.dateTo);
@@ -512,7 +535,7 @@ export function AdminCommissionPage() {
                 <AreaChart data={monthlyChartData} margin={{ left: 4, right: 8, top: 12, bottom: 0 }}>
                   <CartesianGrid vertical={false} stroke="#dde5d7" />
                   <XAxis axisLine={false} dataKey="label" tickLine={false} tickMargin={10} />
-                  <YAxis axisLine={false} tickLine={false} tickFormatter={(value) => `£${value}`} width={72} />
+                  <YAxis axisLine={false} tickLine={false} tickFormatter={(value) => `Â£${value}`} width={72} />
                   <ChartTooltip
                     content={
                       <ChartTooltipContent
@@ -554,7 +577,7 @@ export function AdminCommissionPage() {
               <ChartContainer config={producerChartConfig} className="h-[280px] w-full min-w-0 aspect-auto">
                 <BarChart data={producerPayoutData} layout="vertical" margin={{ left: 8, right: 8, top: 12, bottom: 0 }}>
                   <CartesianGrid horizontal={false} stroke="#e3e8de" />
-                  <XAxis axisLine={false} tickLine={false} type="number" tickFormatter={(value) => `£${value}`} />
+                  <XAxis axisLine={false} tickLine={false} type="number" tickFormatter={(value) => `Â£${value}`} />
                   <YAxis axisLine={false} dataKey="producer" tickLine={false} type="category" width={100} />
                   <ChartTooltip
                     content={
@@ -855,8 +878,3 @@ export function AdminCommissionPage() {
     </div>
   );
 }
-
-
-
-
-

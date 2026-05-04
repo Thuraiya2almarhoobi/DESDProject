@@ -1,3 +1,20 @@
+"""
+DESD Marketplace documentation.
+
+File role:
+    Defines persistent database models, relationships, and domain methods for this app.
+
+Domain context:
+    Producer portal domain: producer inventory, dashboard summaries, order management, and producer-facing APIs.
+
+Implementation notes:
+    This header is intentionally descriptive so future sprint contributors can
+    understand why the file exists before reading individual classes/functions.
+    Inline comments below are reserved for business rules, permission checks,
+    external-service calls, or data transformations that are not obvious from
+    the code itself.
+"""
+
 from __future__ import annotations
 
 from decimal import Decimal
@@ -16,12 +33,26 @@ from bristol_marketplace.seasonality import (
 
 
 class ProductAvailability(models.TextChoices):
+    """
+    Documents the `ProductAvailability` boundary for this module.
+
+    The class belongs to the file role described above: Defines persistent database models, relationships, and domain methods for this app.
+    It keeps related behavior grouped so the producer portal domain: producer inventory, dashboard summaries, order management, and producer-facing apis.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     IN_SEASON = "in_season", "In Season"
     YEAR_ROUND = "year_round", "Year-round"
     UNAVAILABLE = "unavailable", "Unavailable"
 
 
 class OrderStatus(models.TextChoices):
+    """
+    Documents the `OrderStatus` boundary for this module.
+
+    The class belongs to the file role described above: Defines persistent database models, relationships, and domain methods for this app.
+    It keeps related behavior grouped so the producer portal domain: producer inventory, dashboard summaries, order management, and producer-facing apis.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     PENDING = "pending", "Pending"
     CONFIRMED = "confirmed", "Confirmed"
     PREPARING = "preparing", "Preparing"
@@ -31,6 +62,13 @@ class OrderStatus(models.TextChoices):
 
 
 class ProducerProduct(models.Model):
+    """
+    Documents the `ProducerProduct` boundary for this module.
+
+    The class belongs to the file role described above: Defines persistent database models, relationships, and domain methods for this app.
+    It keeps related behavior grouped so the producer portal domain: producer inventory, dashboard summaries, order management, and producer-facing apis.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     producer = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -157,6 +195,13 @@ class ProducerProduct(models.Model):
 
 
 class ProducerOrder(models.Model):
+    """
+    Documents the `ProducerOrder` boundary for this module.
+
+    The class belongs to the file role described above: Defines persistent database models, relationships, and domain methods for this app.
+    It keeps related behavior grouped so the producer portal domain: producer inventory, dashboard summaries, order management, and producer-facing apis.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     order_number = models.CharField(max_length=32, unique=True)
     producer = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -198,6 +243,13 @@ class ProducerOrder(models.Model):
 
 
 class ProducerOrderItem(models.Model):
+    """
+    Documents the `ProducerOrderItem` boundary for this module.
+
+    The class belongs to the file role described above: Defines persistent database models, relationships, and domain methods for this app.
+    It keeps related behavior grouped so the producer portal domain: producer inventory, dashboard summaries, order management, and producer-facing apis.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     order = models.ForeignKey(ProducerOrder, on_delete=models.CASCADE, related_name="items")
     product = models.ForeignKey(
         ProducerProduct,

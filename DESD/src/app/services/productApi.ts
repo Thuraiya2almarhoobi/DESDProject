@@ -1,3 +1,18 @@
+/**
+ * DESD Marketplace documentation.
+ *
+ * File role:
+ *   Frontend source file for productApi.
+ *
+ * Frontend context:
+ *   Frontend source module for the React/Vite application.
+ *
+ * Implementation notes:
+ *   Keep comments focused on state ownership, role-specific routing, API calls,
+ *   and non-obvious UI decisions. Styling-only class names are left uncommented
+ *   unless they communicate an important layout or accessibility choice.
+ */
+
 import { Product, AvailabilityType } from '../types';
 import { resolveApiPathBase } from '../lib/apiBase';
 
@@ -249,4 +264,3 @@ export async function patchProducerProductInApi(
   const product = await parseResponse<BackendProduct>(res);
   return backendProductToFrontend(product);
 }
-

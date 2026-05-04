@@ -1,3 +1,18 @@
+/**
+ * DESD Marketplace documentation.
+ *
+ * File role:
+ *   Provides the reusable dropdown-menu component used by pages or layout shells.
+ *
+ * Frontend context:
+ *   Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ *
+ * Implementation notes:
+ *   Keep comments focused on state ownership, role-specific routing, API calls,
+ *   and non-obvious UI decisions. Styling-only class names are left uncommented
+ *   unless they communicate an important layout or accessibility choice.
+ */
+
 "use client";
 
 import * as React from "react";
@@ -6,12 +21,28 @@ import { CheckIcon, ChevronRightIcon, CircleIcon } from "lucide-react";
 
 import { cn } from "./utils";
 
+/**
+ * DropdownMenu boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable dropdown-menu component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function DropdownMenu({
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
   return <DropdownMenuPrimitive.Root data-slot="dropdown-menu" {...props} />;
 }
 
+/**
+ * DropdownMenuPortal boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable dropdown-menu component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function DropdownMenuPortal({
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Portal>) {
@@ -20,6 +51,14 @@ function DropdownMenuPortal({
   );
 }
 
+/**
+ * DropdownMenuTrigger boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable dropdown-menu component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function DropdownMenuTrigger({
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Trigger>) {
@@ -31,6 +70,14 @@ function DropdownMenuTrigger({
   );
 }
 
+/**
+ * DropdownMenuContent boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable dropdown-menu component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function DropdownMenuContent({
   className,
   sideOffset = 4,
@@ -51,6 +98,14 @@ function DropdownMenuContent({
   );
 }
 
+/**
+ * DropdownMenuGroup boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable dropdown-menu component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function DropdownMenuGroup({
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Group>) {
@@ -59,6 +114,14 @@ function DropdownMenuGroup({
   );
 }
 
+/**
+ * DropdownMenuItem boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable dropdown-menu component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function DropdownMenuItem({
   className,
   inset,
@@ -82,6 +145,14 @@ function DropdownMenuItem({
   );
 }
 
+/**
+ * DropdownMenuCheckboxItem boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable dropdown-menu component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function DropdownMenuCheckboxItem({
   className,
   children,
@@ -108,6 +179,14 @@ function DropdownMenuCheckboxItem({
   );
 }
 
+/**
+ * DropdownMenuRadioGroup boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable dropdown-menu component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function DropdownMenuRadioGroup({
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.RadioGroup>) {
@@ -119,6 +198,14 @@ function DropdownMenuRadioGroup({
   );
 }
 
+/**
+ * DropdownMenuRadioItem boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable dropdown-menu component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function DropdownMenuRadioItem({
   className,
   children,
@@ -143,6 +230,14 @@ function DropdownMenuRadioItem({
   );
 }
 
+/**
+ * DropdownMenuLabel boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable dropdown-menu component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function DropdownMenuLabel({
   className,
   inset,
@@ -163,6 +258,14 @@ function DropdownMenuLabel({
   );
 }
 
+/**
+ * DropdownMenuSeparator boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable dropdown-menu component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function DropdownMenuSeparator({
   className,
   ...props
@@ -176,6 +279,14 @@ function DropdownMenuSeparator({
   );
 }
 
+/**
+ * DropdownMenuShortcut boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable dropdown-menu component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function DropdownMenuShortcut({
   className,
   ...props
@@ -192,12 +303,28 @@ function DropdownMenuShortcut({
   );
 }
 
+/**
+ * DropdownMenuSub boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable dropdown-menu component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function DropdownMenuSub({
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Sub>) {
   return <DropdownMenuPrimitive.Sub data-slot="dropdown-menu-sub" {...props} />;
 }
 
+/**
+ * DropdownMenuSubTrigger boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable dropdown-menu component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function DropdownMenuSubTrigger({
   className,
   inset,
@@ -222,6 +349,14 @@ function DropdownMenuSubTrigger({
   );
 }
 
+/**
+ * DropdownMenuSubContent boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable dropdown-menu component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function DropdownMenuSubContent({
   className,
   ...props

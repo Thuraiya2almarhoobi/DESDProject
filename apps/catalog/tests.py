@@ -1,3 +1,20 @@
+"""
+DESD Marketplace documentation.
+
+File role:
+    Documents expected behavior through automated tests for this app's public contract.
+
+Domain context:
+    Catalog domain: public product browsing, producer/product data serialization, reviews, and marketplace-facing catalog APIs.
+
+Implementation notes:
+    This header is intentionally descriptive so future sprint contributors can
+    understand why the file exists before reading individual classes/functions.
+    Inline comments below are reserved for business rules, permission checks,
+    external-service calls, or data transformations that are not obvious from
+    the code itself.
+"""
+
 from calendar import month_name
 from datetime import date
 from decimal import Decimal
@@ -18,6 +35,13 @@ from apps.orders.models import (
 
 
 class ProductApiTests(APITestCase):
+    """
+    Documents the `ProductApiTests` boundary for this module.
+
+    The class belongs to the file role described above: Documents expected behavior through automated tests for this app's public contract.
+    It keeps related behavior grouped so the catalog domain: public product browsing, producer/product data serialization, reviews, and marketplace-facing catalog apis.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     @staticmethod
     def _out_of_season_range(reference_month: int) -> str:
         start_month = (reference_month % 12) + 1
@@ -176,7 +200,7 @@ class ProductApiTests(APITestCase):
 
     def test_products_support_search_by_name_description_and_producer(self):
         producer_response = self.client.get("/api/products", {"search": "green valley"})
-        self.assertEqual(producer_response.status_code, 200)                                
+        self.assertEqual(producer_response.status_code, 200)
         self.assertEqual(len(producer_response.data), 1)
         self.assertEqual(producer_response.data[0]["name"], "Organic Tomatoes")
 

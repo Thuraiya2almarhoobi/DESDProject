@@ -1,3 +1,18 @@
+/**
+ * DESD Marketplace documentation.
+ *
+ * File role:
+ *   Provides the reusable SurplusInfo component used by pages or layout shells.
+ *
+ * Frontend context:
+ *   Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ *
+ * Implementation notes:
+ *   Keep comments focused on state ownership, role-specific routing, API calls,
+ *   and non-obvious UI decisions. Styling-only class names are left uncommented
+ *   unless they communicate an important layout or accessibility choice.
+ */
+
 import { Clock, Calendar } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { Badge } from './ui/badge';
@@ -11,6 +26,14 @@ interface SurplusInfoProps {
   unit: string;
 }
 
+/**
+ * SurplusInfo boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable SurplusInfo component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 export function SurplusInfo({ discount, originalPrice, currentPrice, expiresAt, bestBefore, unit }: SurplusInfoProps) {
   const expiryDate = new Date(expiresAt);
   const now = new Date();
@@ -32,8 +55,8 @@ export function SurplusInfo({ discount, originalPrice, currentPrice, expiresAt, 
       <div className="flex items-center gap-1.5 text-xs text-orange-600">
         <Clock className="size-3" />
         <span className="font-medium">
-          Ends in: {hoursUntilExpiry < 1 
-            ? `${Math.round(hoursUntilExpiry * 60)} min` 
+          Ends in: {hoursUntilExpiry < 1
+            ? `${Math.round(hoursUntilExpiry * 60)} min`
             : `${Math.round(hoursUntilExpiry)}h`}
         </span>
       </div>

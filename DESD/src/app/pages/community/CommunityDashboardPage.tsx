@@ -1,3 +1,18 @@
+/**
+ * DESD Marketplace documentation.
+ *
+ * File role:
+ *   Implements the CommunityDashboardPage browser route and coordinates the UI state for that screen.
+ *
+ * Frontend context:
+ *   Route-level React page layer: one component per main browser page or role-specific workspace.
+ *
+ * Implementation notes:
+ *   Keep comments focused on state ownership, role-specific routing, API calls,
+ *   and non-obvious UI decisions. Styling-only class names are left uncommented
+ *   unless they communicate an important layout or accessibility choice.
+ */
+
 import {
   BookOpenText,
   Building2,
@@ -16,6 +31,14 @@ import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 
+/**
+ * CommunityDashboardPage boundary.
+ *
+ * This exported unit supports the file role: Implements the CommunityDashboardPage browser route and coordinates the UI state for that screen.
+ * It belongs to: Route-level React page layer: one component per main browser page or role-specific workspace.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 export function CommunityDashboardPage() {
   const navigate = useNavigate();
   const quickActions = [
@@ -91,6 +114,14 @@ export function CommunityDashboardPage() {
             <div className="space-y-4">
               <div className="grid gap-3 sm:grid-cols-3">
                 {workflowCards.map((card) => {
+/**
+ * Icon boundary.
+ *
+ * This exported unit supports the file role: Implements the CommunityDashboardPage browser route and coordinates the UI state for that screen.
+ * It belongs to: Route-level React page layer: one component per main browser page or role-specific workspace.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
                   const Icon = card.icon;
                   return (
                     <div key={card.title} className="rounded-2xl border bg-white/85 p-4 shadow-sm">
@@ -106,6 +137,14 @@ export function CommunityDashboardPage() {
               </div>
               <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-5">
                 {quickActions.map((action) => {
+/**
+ * Icon boundary.
+ *
+ * This exported unit supports the file role: Implements the CommunityDashboardPage browser route and coordinates the UI state for that screen.
+ * It belongs to: Route-level React page layer: one component per main browser page or role-specific workspace.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
                   const Icon = action.icon;
                   return (
                     <Button
@@ -152,6 +191,14 @@ export function CommunityDashboardPage() {
           </div>
           <div className="grid gap-4 md:grid-cols-3">
             {insightCards.map((card) => {
+/**
+ * Icon boundary.
+ *
+ * This exported unit supports the file role: Implements the CommunityDashboardPage browser route and coordinates the UI state for that screen.
+ * It belongs to: Route-level React page layer: one component per main browser page or role-specific workspace.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
               const Icon = card.icon;
               return (
                 <Card key={card.title} className="border-[oklch(0.88_0.02_145)] bg-white/90">

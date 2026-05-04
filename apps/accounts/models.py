@@ -1,3 +1,20 @@
+"""
+DESD Marketplace documentation.
+
+File role:
+    Defines persistent database models, relationships, and domain methods for this app.
+
+Domain context:
+    Accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+
+Implementation notes:
+    This header is intentionally descriptive so future sprint contributors can
+    understand why the file exists before reading individual classes/functions.
+    Inline comments below are reserved for business rules, permission checks,
+    external-service calls, or data transformations that are not obvious from
+    the code itself.
+"""
+
 from __future__ import annotations
 
 from django.contrib.auth.base_user import BaseUserManager
@@ -9,6 +26,13 @@ from django.utils import timezone
 
 
 class UserManager(BaseUserManager):
+    """
+    Documents the `UserManager` boundary for this module.
+
+    The class belongs to the file role described above: Defines persistent database models, relationships, and domain methods for this app.
+    It keeps related behavior grouped so the accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     use_in_migrations = True
 
     @staticmethod
@@ -60,6 +84,13 @@ class UserManager(BaseUserManager):
 
 
 class User(AbstractBaseUser, PermissionsMixin):
+    """
+    Documents the `User` boundary for this module.
+
+    The class belongs to the file role described above: Defines persistent database models, relationships, and domain methods for this app.
+    It keeps related behavior grouped so the accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     class Role(models.TextChoices):
         CUSTOMER = "CUSTOMER", "Customer"
         PRODUCER = "PRODUCER", "Producer"
@@ -89,6 +120,13 @@ class User(AbstractBaseUser, PermissionsMixin):
 
 
 class Address(models.Model):
+    """
+    Documents the `Address` boundary for this module.
+
+    The class belongs to the file role described above: Defines persistent database models, relationships, and domain methods for this app.
+    It keeps related behavior grouped so the accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="addresses")
     label = models.CharField(max_length=50)
     line1 = models.CharField(max_length=255)
@@ -112,6 +150,13 @@ class Address(models.Model):
 
 
 class CustomerProfile(models.Model):
+    """
+    Documents the `CustomerProfile` boundary for this module.
+
+    The class belongs to the file role described above: Defines persistent database models, relationships, and domain methods for this app.
+    It keeps related behavior grouped so the accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="customer_profile")
     full_name = models.CharField(max_length=255)
     phone = models.CharField(max_length=30)
@@ -139,6 +184,13 @@ class CustomerProfile(models.Model):
 
 
 class ProducerProfile(models.Model):
+    """
+    Documents the `ProducerProfile` boundary for this module.
+
+    The class belongs to the file role described above: Defines persistent database models, relationships, and domain methods for this app.
+    It keeps related behavior grouped so the accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="producer_profile")
     business_name = models.CharField(max_length=255)
     contact_name = models.CharField(max_length=255, blank=True, default="")
@@ -167,6 +219,13 @@ class ProducerProfile(models.Model):
 
 
 class CommunityGroupProfile(models.Model):
+    """
+    Documents the `CommunityGroupProfile` boundary for this module.
+
+    The class belongs to the file role described above: Defines persistent database models, relationships, and domain methods for this app.
+    It keeps related behavior grouped so the accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="community_profile")
     organisation_name = models.CharField(max_length=255)
     org_type = models.CharField(max_length=100)
@@ -194,6 +253,13 @@ class CommunityGroupProfile(models.Model):
 
 
 class RestaurantProfile(models.Model):
+    """
+    Documents the `RestaurantProfile` boundary for this module.
+
+    The class belongs to the file role described above: Defines persistent database models, relationships, and domain methods for this app.
+    It keeps related behavior grouped so the accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="restaurant_profile")
     business_name = models.CharField(max_length=255)
     contact_name = models.CharField(max_length=255)
@@ -220,6 +286,13 @@ class RestaurantProfile(models.Model):
 
 
 class LoginAttempt(models.Model):
+    """
+    Documents the `LoginAttempt` boundary for this module.
+
+    The class belongs to the file role described above: Defines persistent database models, relationships, and domain methods for this app.
+    It keeps related behavior grouped so the accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     email = models.EmailField()
     user = models.ForeignKey(
         User,

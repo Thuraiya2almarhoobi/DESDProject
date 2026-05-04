@@ -1,4 +1,19 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+/**
+ * DESD Marketplace documentation.
+ *
+ * File role:
+ *   Implements the ProductDetailPage browser route and coordinates the UI state for that screen.
+ *
+ * Frontend context:
+ *   Route-level React page layer: one component per main browser page or role-specific workspace.
+ *
+ * Implementation notes:
+ *   Keep comments focused on state ownership, role-specific routing, API calls,
+ *   and non-obvious UI decisions. Styling-only class names are left uncommented
+ *   unless they communicate an important layout or accessibility choice.
+ */
+
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import {
   ArrowLeft,
@@ -54,6 +69,14 @@ function formatReviewDate(value: string): string {
   });
 }
 
+/**
+ * ReviewStars boundary.
+ *
+ * This exported unit supports the file role: Implements the ProductDetailPage browser route and coordinates the UI state for that screen.
+ * It belongs to: Route-level React page layer: one component per main browser page or role-specific workspace.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function ReviewStars({ rating, iconClassName = 'size-4' }: { rating: number; iconClassName?: string }) {
   return (
     <div className="flex items-center">
@@ -76,6 +99,14 @@ function formatUnit(unit: string, quantity: number): string {
   return unit;
 }
 
+/**
+ * ProductDetailPage boundary.
+ *
+ * This exported unit supports the file role: Implements the ProductDetailPage browser route and coordinates the UI state for that screen.
+ * It belongs to: Route-level React page layer: one component per main browser page or role-specific workspace.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 export function ProductDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -1399,5 +1430,3 @@ export function ProductDetailPage() {
     </div>
   );
 }
-
-

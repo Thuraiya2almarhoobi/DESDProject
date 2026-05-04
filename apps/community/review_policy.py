@@ -1,3 +1,20 @@
+"""
+DESD Marketplace documentation.
+
+File role:
+    Source module for the community area.
+
+Domain context:
+    Community domain: community feedback, review policy, and URLs/views used by shared buyer-community workflows.
+
+Implementation notes:
+    This header is intentionally descriptive so future sprint contributors can
+    understand why the file exists before reading individual classes/functions.
+    Inline comments below are reserved for business rules, permission checks,
+    external-service calls, or data transformations that are not obvious from
+    the code itself.
+"""
+
 from __future__ import annotations
 
 import re
@@ -29,6 +46,13 @@ FLAGGED_LANGUAGE = {
 
 @dataclass(frozen=True)
 class ReviewEligibility:
+    """
+    Documents the `ReviewEligibility` boundary for this module.
+
+    The class belongs to the file role described above: Source module for the community area.
+    It keeps related behavior grouped so the community domain: community feedback, review policy, and urls/views used by shared buyer-community workflows.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     can_submit: bool
     reason: str
     has_verified_purchase: bool
@@ -40,11 +64,25 @@ class ReviewEligibility:
 
 @dataclass(frozen=True)
 class ReviewModerationDecision:
+    """
+    Documents the `ReviewModerationDecision` boundary for this module.
+
+    The class belongs to the file role described above: Source module for the community area.
+    It keeps related behavior grouped so the community domain: community feedback, review policy, and urls/views used by shared buyer-community workflows.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     status: str
     reason: str
 
 
 def find_matching_orders_product(catalog_product):
+    """
+    Helper for the file role: Source module for the community area.
+
+    `find_matching_orders_product` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Community domain: community feedback, review policy, and URLs/views used by shared buyer-community workflows.
+    """
     return (
         OrdersProduct.objects.select_related("producer", "producer__user")
         .filter(
@@ -57,6 +95,13 @@ def find_matching_orders_product(catalog_product):
 
 
 def has_verified_purchase(*, user, order_product) -> bool:
+    """
+    Helper for the file role: Source module for the community area.
+
+    `has_verified_purchase` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Community domain: community feedback, review policy, and URLs/views used by shared buyer-community workflows.
+    """
     if not user or not user.is_authenticated or order_product is None:
         return False
 
@@ -69,11 +114,25 @@ def has_verified_purchase(*, user, order_product) -> bool:
 
 
 def resolve_verified_purchase_status(*, user, catalog_product, order_product=None) -> bool:
+    """
+    Helper for the file role: Source module for the community area.
+
+    `resolve_verified_purchase_status` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Community domain: community feedback, review policy, and URLs/views used by shared buyer-community workflows.
+    """
     resolved_order_product = order_product or find_matching_orders_product(catalog_product)
     return has_verified_purchase(user=user, order_product=resolved_order_product)
 
 
 def get_review_eligibility(*, user, catalog_product, order_product=None, require_verified_purchase=False) -> ReviewEligibility:
+    """
+    Helper for the file role: Source module for the community area.
+
+    `get_review_eligibility` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Community domain: community feedback, review policy, and URLs/views used by shared buyer-community workflows.
+    """
     if not user or not user.is_authenticated:
         return ReviewEligibility(
             can_submit=False,
@@ -165,6 +224,13 @@ def get_review_eligibility(*, user, catalog_product, order_product=None, require
 
 
 def moderate_review_comment(comment: str) -> ReviewModerationDecision:
+    """
+    Helper for the file role: Source module for the community area.
+
+    `moderate_review_comment` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Community domain: community feedback, review policy, and URLs/views used by shared buyer-community workflows.
+    """
     normalized_comment = (comment or "").strip()
     if not normalized_comment:
         return ReviewModerationDecision(

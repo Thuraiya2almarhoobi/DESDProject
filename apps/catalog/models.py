@@ -1,3 +1,20 @@
+"""
+DESD Marketplace documentation.
+
+File role:
+    Defines persistent database models, relationships, and domain methods for this app.
+
+Domain context:
+    Catalog domain: public product browsing, producer/product data serialization, reviews, and marketplace-facing catalog APIs.
+
+Implementation notes:
+    This header is intentionally descriptive so future sprint contributors can
+    understand why the file exists before reading individual classes/functions.
+    Inline comments below are reserved for business rules, permission checks,
+    external-service calls, or data transformations that are not obvious from
+    the code itself.
+"""
+
 import re
 from datetime import date
 
@@ -6,6 +23,13 @@ from django.db import models
 
 
 class Category(models.Model):
+    """
+    Documents the `Category` boundary for this module.
+
+    The class belongs to the file role described above: Defines persistent database models, relationships, and domain methods for this app.
+    It keeps related behavior grouped so the catalog domain: public product browsing, producer/product data serialization, reviews, and marketplace-facing catalog apis.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     name = models.CharField(max_length=120, unique=True)
     slug = models.SlugField(max_length=120, unique=True)
 
@@ -17,6 +41,13 @@ class Category(models.Model):
 
 
 class Producer(models.Model):
+    """
+    Documents the `Producer` boundary for this module.
+
+    The class belongs to the file role described above: Defines persistent database models, relationships, and domain methods for this app.
+    It keeps related behavior grouped so the catalog domain: public product browsing, producer/product data serialization, reviews, and marketplace-facing catalog apis.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     name = models.CharField(max_length=160, unique=True)
     location = models.CharField(max_length=160)
     description = models.TextField(blank=True)
@@ -33,6 +64,13 @@ class Producer(models.Model):
 
 
 class Product(models.Model):
+    """
+    Documents the `Product` boundary for this module.
+
+    The class belongs to the file role described above: Defines persistent database models, relationships, and domain methods for this app.
+    It keeps related behavior grouped so the catalog domain: public product browsing, producer/product data serialization, reviews, and marketplace-facing catalog apis.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     class Unit(models.TextChoices):
         KG = "kg", "Kilogram"
         LITRE = "litre", "Litre"

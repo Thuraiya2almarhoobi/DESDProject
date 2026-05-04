@@ -1,3 +1,18 @@
+/**
+ * DESD Marketplace documentation.
+ *
+ * File role:
+ *   Provides the reusable menubar component used by pages or layout shells.
+ *
+ * Frontend context:
+ *   Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ *
+ * Implementation notes:
+ *   Keep comments focused on state ownership, role-specific routing, API calls,
+ *   and non-obvious UI decisions. Styling-only class names are left uncommented
+ *   unless they communicate an important layout or accessibility choice.
+ */
+
 "use client";
 
 import * as React from "react";
@@ -6,6 +21,14 @@ import { CheckIcon, ChevronRightIcon, CircleIcon } from "lucide-react";
 
 import { cn } from "./utils";
 
+/**
+ * Menubar boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable menubar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function Menubar({
   className,
   ...props
@@ -22,24 +45,56 @@ function Menubar({
   );
 }
 
+/**
+ * MenubarMenu boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable menubar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function MenubarMenu({
   ...props
 }: React.ComponentProps<typeof MenubarPrimitive.Menu>) {
   return <MenubarPrimitive.Menu data-slot="menubar-menu" {...props} />;
 }
 
+/**
+ * MenubarGroup boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable menubar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function MenubarGroup({
   ...props
 }: React.ComponentProps<typeof MenubarPrimitive.Group>) {
   return <MenubarPrimitive.Group data-slot="menubar-group" {...props} />;
 }
 
+/**
+ * MenubarPortal boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable menubar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function MenubarPortal({
   ...props
 }: React.ComponentProps<typeof MenubarPrimitive.Portal>) {
   return <MenubarPrimitive.Portal data-slot="menubar-portal" {...props} />;
 }
 
+/**
+ * MenubarRadioGroup boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable menubar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function MenubarRadioGroup({
   ...props
 }: React.ComponentProps<typeof MenubarPrimitive.RadioGroup>) {
@@ -48,6 +103,14 @@ function MenubarRadioGroup({
   );
 }
 
+/**
+ * MenubarTrigger boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable menubar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function MenubarTrigger({
   className,
   ...props
@@ -64,6 +127,14 @@ function MenubarTrigger({
   );
 }
 
+/**
+ * MenubarContent boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable menubar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function MenubarContent({
   className,
   align = "start",
@@ -88,6 +159,14 @@ function MenubarContent({
   );
 }
 
+/**
+ * MenubarItem boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable menubar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function MenubarItem({
   className,
   inset,
@@ -111,6 +190,14 @@ function MenubarItem({
   );
 }
 
+/**
+ * MenubarCheckboxItem boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable menubar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function MenubarCheckboxItem({
   className,
   children,
@@ -137,6 +224,14 @@ function MenubarCheckboxItem({
   );
 }
 
+/**
+ * MenubarRadioItem boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable menubar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function MenubarRadioItem({
   className,
   children,
@@ -161,6 +256,14 @@ function MenubarRadioItem({
   );
 }
 
+/**
+ * MenubarLabel boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable menubar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function MenubarLabel({
   className,
   inset,
@@ -181,6 +284,14 @@ function MenubarLabel({
   );
 }
 
+/**
+ * MenubarSeparator boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable menubar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function MenubarSeparator({
   className,
   ...props
@@ -194,6 +305,14 @@ function MenubarSeparator({
   );
 }
 
+/**
+ * MenubarShortcut boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable menubar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function MenubarShortcut({
   className,
   ...props
@@ -210,12 +329,28 @@ function MenubarShortcut({
   );
 }
 
+/**
+ * MenubarSub boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable menubar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function MenubarSub({
   ...props
 }: React.ComponentProps<typeof MenubarPrimitive.Sub>) {
   return <MenubarPrimitive.Sub data-slot="menubar-sub" {...props} />;
 }
 
+/**
+ * MenubarSubTrigger boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable menubar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function MenubarSubTrigger({
   className,
   inset,
@@ -240,6 +375,14 @@ function MenubarSubTrigger({
   );
 }
 
+/**
+ * MenubarSubContent boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable menubar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function MenubarSubContent({
   className,
   ...props

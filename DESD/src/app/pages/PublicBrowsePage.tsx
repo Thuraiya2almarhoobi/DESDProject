@@ -1,3 +1,18 @@
+/**
+ * DESD Marketplace documentation.
+ *
+ * File role:
+ *   Implements the PublicBrowsePage browser route and coordinates the UI state for that screen.
+ *
+ * Frontend context:
+ *   Route-level React page layer: one component per main browser page or role-specific workspace.
+ *
+ * Implementation notes:
+ *   Keep comments focused on state ownership, role-specific routing, API calls,
+ *   and non-obvious UI decisions. Styling-only class names are left uncommented
+ *   unless they communicate an important layout or accessibility choice.
+ */
+
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { AlertCircle, ArrowRight, Search } from 'lucide-react';
@@ -17,6 +32,14 @@ import { SurplusInfo } from '../components/SurplusInfo';
 
 type SortOption = 'featured' | 'price-low' | 'price-high' | 'nearest';
 
+/**
+ * PublicBrowsePage boundary.
+ *
+ * This exported unit supports the file role: Implements the PublicBrowsePage browser route and coordinates the UI state for that screen.
+ * It belongs to: Route-level React page layer: one component per main browser page or role-specific workspace.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 export function PublicBrowsePage() {
   const [searchParams] = useSearchParams();
   const [products, setProducts] = useState<Product[]>([]);
@@ -250,6 +273,14 @@ export function PublicBrowsePage() {
   );
 }
 
+/**
+ * PublicBrowseCard boundary.
+ *
+ * This exported unit supports the file role: Implements the PublicBrowsePage browser route and coordinates the UI state for that screen.
+ * It belongs to: Route-level React page layer: one component per main browser page or role-specific workspace.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function PublicBrowseCard({ product }: { product: Product }) {
   const isAvailable = product.availability !== 'unavailable' && product.stock > 0;
 

@@ -1,3 +1,20 @@
+"""
+DESD Marketplace documentation.
+
+File role:
+    Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+
+Domain context:
+    Accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+
+Implementation notes:
+    This header is intentionally descriptive so future sprint contributors can
+    understand why the file exists before reading individual classes/functions.
+    Inline comments below are reserved for business rules, permission checks,
+    external-service calls, or data transformations that are not obvious from
+    the code itself.
+"""
+
 from __future__ import annotations
 
 import re
@@ -21,6 +38,13 @@ UserModel = get_user_model()
 
 
 def _infer_city_from_address(address_line: str) -> str:
+    """
+    Helper for the file role: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+
+    `_infer_city_from_address` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    """
     parts = [part.strip() for part in address_line.split(",") if part.strip()]
     if len(parts) >= 2:
         return parts[-1]
@@ -28,6 +52,16 @@ def _infer_city_from_address(address_line: str) -> str:
 
 
 def _validate_password_complexity(password: str):
+    """
+    Helper for the file role: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+
+    `_validate_password_complexity` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    """
+    # Django's configured validators handle length/similarity/common-password
+    # checks. These explicit checks document the TC-022 complexity requirement
+    # and give the frontend clear field-level messages.
     errors = []
     checks = [
         (r"[A-Z]", "Password must contain at least one uppercase letter."),
@@ -45,12 +79,26 @@ def _validate_password_complexity(password: str):
 
 
 class UserSummarySerializer(serializers.ModelSerializer):
+    """
+    Documents the `UserSummarySerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     class Meta:
         model = UserModel
         fields = ("id", "email", "role", "email_verified")
 
 
 class AddressSerializer(serializers.ModelSerializer):
+    """
+    Documents the `AddressSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     class Meta:
         model = Address
         fields = ("id", "label", "line1", "line2", "city", "postcode", "is_default")
@@ -58,6 +106,8 @@ class AddressSerializer(serializers.ModelSerializer):
 
     @transaction.atomic
     def create(self, validated_data):
+        # A user can have many saved addresses, but only one should drive
+        # checkout defaults, postcode display, and near-me searches.
         user = self.context["request"].user
         if validated_data.get("is_default"):
             Address.objects.filter(user=user, is_default=True).update(is_default=False)
@@ -73,9 +123,18 @@ class AddressSerializer(serializers.ModelSerializer):
 
 
 class _ProfileAddressValidationMixin:
+    """
+    Documents the `_ProfileAddressValidationMixin` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     address_field_name: str
 
     def _validate_address(self, value):
+        # Prevent users from assigning another account's saved address to their
+        # profile through a crafted API payload.
         if value is None:
             return value
         user = self.context["request"].user
@@ -85,6 +144,13 @@ class _ProfileAddressValidationMixin:
 
 
 class CustomerProfileSerializer(_ProfileAddressValidationMixin, serializers.ModelSerializer):
+    """
+    Documents the `CustomerProfileSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     class Meta:
         model = CustomerProfile
         fields = ("full_name", "phone", "allergies_text", "preferences_text", "default_address")
@@ -94,6 +160,13 @@ class CustomerProfileSerializer(_ProfileAddressValidationMixin, serializers.Mode
 
 
 class ProducerProfileSerializer(_ProfileAddressValidationMixin, serializers.ModelSerializer):
+    """
+    Documents the `ProducerProfileSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     class Meta:
         model = ProducerProfile
         fields = ("business_name", "contact_name", "phone", "farm_origin_text", "lead_time_hours", "address")
@@ -103,6 +176,13 @@ class ProducerProfileSerializer(_ProfileAddressValidationMixin, serializers.Mode
 
 
 class CommunityGroupProfileSerializer(_ProfileAddressValidationMixin, serializers.ModelSerializer):
+    """
+    Documents the `CommunityGroupProfileSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     class Meta:
         model = CommunityGroupProfile
         fields = ("organisation_name", "org_type", "contact_name", "phone", "delivery_address")
@@ -112,6 +192,13 @@ class CommunityGroupProfileSerializer(_ProfileAddressValidationMixin, serializer
 
 
 class RestaurantProfileSerializer(_ProfileAddressValidationMixin, serializers.ModelSerializer):
+    """
+    Documents the `RestaurantProfileSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     class Meta:
         model = RestaurantProfile
         fields = ("business_name", "contact_name", "phone", "delivery_address")
@@ -136,6 +223,13 @@ PROFILE_MODEL_BY_ROLE = {
 
 
 class BaseRegistrationSerializer(serializers.Serializer):
+    """
+    Documents the `BaseRegistrationSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True)
     confirm_password = serializers.CharField(write_only=True)
@@ -143,6 +237,8 @@ class BaseRegistrationSerializer(serializers.Serializer):
     user_role: str
 
     def validate_email(self, value):
+        # Email is the login identifier for every role, so uniqueness is checked
+        # case-insensitively before creating any role-specific profile records.
         email = UserModel.objects.normalize_email(value)
         if UserModel.objects.filter(email__iexact=email).exists():
             raise serializers.ValidationError("A user with this email already exists.")
@@ -161,6 +257,8 @@ class BaseRegistrationSerializer(serializers.Serializer):
 
     @transaction.atomic
     def create(self, validated_data):
+        # User and profile creation are atomic: if profile validation/persistence
+        # fails, the partially-created login account is rolled back too.
         email = validated_data.pop("email")
         password = validated_data.pop("password")
         validated_data.pop("confirm_password", None)
@@ -178,6 +276,13 @@ class BaseRegistrationSerializer(serializers.Serializer):
 
 
 class CustomerRegistrationSerializer(BaseRegistrationSerializer):
+    """
+    Documents the `CustomerRegistrationSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     user_role = User.Role.CUSTOMER
 
     full_name = serializers.CharField(max_length=255)
@@ -192,6 +297,8 @@ class CustomerRegistrationSerializer(BaseRegistrationSerializer):
         return value
 
     def create_profile(self, user, profile_data):
+        # Customers store delivery address data both as a reusable Address and
+        # as the profile's default address reference for checkout/account pages.
         delivery_address = profile_data.pop("delivery_address")
         postcode = profile_data.pop("postcode")
         profile_data.pop("accept_terms", None)
@@ -210,6 +317,13 @@ class CustomerRegistrationSerializer(BaseRegistrationSerializer):
 
 
 class ProducerRegistrationSerializer(BaseRegistrationSerializer):
+    """
+    Documents the `ProducerRegistrationSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     user_role = User.Role.PRODUCER
 
     business_name = serializers.CharField(max_length=255)
@@ -221,6 +335,9 @@ class ProducerRegistrationSerializer(BaseRegistrationSerializer):
     lead_time_hours = serializers.IntegerField(required=False, min_value=1, default=48)
 
     def create_profile(self, user, profile_data):
+        # Producer registration captures the business address and lead time used
+        # later by product pages, delivery-date validation, and producer profile
+        # editing.
         business_address = profile_data.pop("business_address")
         postcode = profile_data.pop("postcode")
 
@@ -238,6 +355,13 @@ class ProducerRegistrationSerializer(BaseRegistrationSerializer):
 
 
 class CommunityRegistrationSerializer(BaseRegistrationSerializer):
+    """
+    Documents the `CommunityRegistrationSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     user_role = User.Role.COMMUNITY
 
     organisation_name = serializers.CharField(max_length=255)
@@ -248,6 +372,8 @@ class CommunityRegistrationSerializer(BaseRegistrationSerializer):
     postcode = serializers.CharField(max_length=20)
 
     def create_profile(self, user, profile_data):
+        # Community accounts behave as bulk buyers, so their delivery address is
+        # stored as the default address used by bulk checkout and near-me lookup.
         delivery_address = profile_data.pop("delivery_address")
         postcode = profile_data.pop("postcode")
 
@@ -265,6 +391,13 @@ class CommunityRegistrationSerializer(BaseRegistrationSerializer):
 
 
 class RestaurantRegistrationSerializer(BaseRegistrationSerializer):
+    """
+    Documents the `RestaurantRegistrationSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     user_role = User.Role.RESTAURANT
 
     business_name = serializers.CharField(max_length=255)
@@ -274,6 +407,8 @@ class RestaurantRegistrationSerializer(BaseRegistrationSerializer):
     postcode = serializers.CharField(max_length=20)
 
     def create_profile(self, user, profile_data):
+        # Restaurant accounts share the buyer-side address model but route to
+        # recurring-order capable checkout screens after login.
         delivery_address = profile_data.pop("delivery_address")
         postcode = profile_data.pop("postcode")
 
@@ -291,6 +426,13 @@ class RestaurantRegistrationSerializer(BaseRegistrationSerializer):
 
 
 class LoginSerializer(serializers.Serializer):
+    """
+    Documents the `LoginSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True)
     remember_me = serializers.BooleanField(required=False, default=False)
@@ -318,13 +460,34 @@ class LoginSerializer(serializers.Serializer):
 
 
 class VerifyEmailSerializer(serializers.Serializer):
+    """
+    Documents the `VerifyEmailSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     token = serializers.CharField()
 
 
 class PasswordResetRequestSerializer(serializers.Serializer):
+    """
+    Documents the `PasswordResetRequestSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     email = serializers.EmailField()
 
 
 class PasswordResetConfirmSerializer(serializers.Serializer):
+    """
+    Documents the `PasswordResetConfirmSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     token = serializers.CharField()
     new_password = serializers.CharField(write_only=True)

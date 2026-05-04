@@ -1,3 +1,20 @@
+"""
+DESD Marketplace documentation.
+
+File role:
+    Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+Domain context:
+    Content domain: recipes, farm stories, saved recipe feeds, and AI-assisted producer content generation.
+
+Implementation notes:
+    This header is intentionally descriptive so future sprint contributors can
+    understand why the file exists before reading individual classes/functions.
+    Inline comments below are reserved for business rules, permission checks,
+    external-service calls, or data transformations that are not obvious from
+    the code itself.
+"""
+
 from django.shortcuts import get_object_or_404
 from django.db import transaction
 from rest_framework import status
@@ -13,10 +30,29 @@ from .serializers import FarmStorySerializer, GeneratedContentSuggestionSerializ
 
 
 def _get_request_producer(user) -> Producer | None:
+    """
+    Helper for the file role: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+    `_get_request_producer` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Content domain: recipes, farm stories, saved recipe feeds, and AI-assisted producer content generation.
+    """
+    # AI generation and producer-owned recipes must resolve through the active
+    # producer record, not only the user's role, because inactive producers
+    # should not publish marketplace content.
     return Producer.objects.filter(user=user, is_active=True).first()
 
 
 def _product_ai_payload(product: Product) -> dict:
+    """
+    Helper for the file role: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+    `_product_ai_payload` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Content domain: recipes, farm stories, saved recipe feeds, and AI-assisted producer content generation.
+    """
+    # Keep the prompt input factual and product-scoped. The AI service is
+    # instructed not to invent facts beyond this payload and the request context.
     return {
         "id": product.id,
         "name": product.name,
@@ -34,6 +70,13 @@ def _product_ai_payload(product: Product) -> dict:
 
 
 def _prompt_context(request, producer: Producer, seasonal_tag: str) -> dict:
+    """
+    Helper for the file role: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+    `_prompt_context` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Content domain: recipes, farm stories, saved recipe feeds, and AI-assisted producer content generation.
+    """
     return {
         "producer": {
             "business_name": producer.business_name,
@@ -48,9 +91,18 @@ def _prompt_context(request, producer: Producer, seasonal_tag: str) -> dict:
 
 
 class ContentFeedAPIView(APIView):
+    """
+    Documents the `ContentFeedAPIView` boundary for this module.
+
+    The class belongs to the file role described above: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+    It keeps related behavior grouped so the content domain: recipes, farm stories, saved recipe feeds, and ai-assisted producer content generation.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        # Buyer-facing feed merges published recipes and stories into one
+        # chronological stream while preserving the item type for frontend cards.
         recipes = (
             Recipe.objects.filter(is_published=True)
             .select_related("producer")
@@ -102,6 +154,13 @@ class ContentFeedAPIView(APIView):
 
 
 class RecipeListCreateAPIView(APIView):
+    """
+    Documents the `RecipeListCreateAPIView` boundary for this module.
+
+    The class belongs to the file role described above: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+    It keeps related behavior grouped so the content domain: recipes, farm stories, saved recipe feeds, and ai-assisted producer content generation.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -134,6 +193,13 @@ class RecipeListCreateAPIView(APIView):
 
 
 class RecipeDetailAPIView(APIView):
+    """
+    Documents the `RecipeDetailAPIView` boundary for this module.
+
+    The class belongs to the file role described above: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+    It keeps related behavior grouped so the content domain: recipes, farm stories, saved recipe feeds, and ai-assisted producer content generation.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     permission_classes = [IsAuthenticated]
 
     def get(self, request, recipe_id: int):
@@ -164,6 +230,13 @@ class RecipeDetailAPIView(APIView):
 
 
 class FarmStoryListCreateAPIView(APIView):
+    """
+    Documents the `FarmStoryListCreateAPIView` boundary for this module.
+
+    The class belongs to the file role described above: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+    It keeps related behavior grouped so the content domain: recipes, farm stories, saved recipe feeds, and ai-assisted producer content generation.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -194,6 +267,13 @@ class FarmStoryListCreateAPIView(APIView):
 
 
 class FarmStoryDetailAPIView(APIView):
+    """
+    Documents the `FarmStoryDetailAPIView` boundary for this module.
+
+    The class belongs to the file role described above: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+    It keeps related behavior grouped so the content domain: recipes, farm stories, saved recipe feeds, and ai-assisted producer content generation.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     permission_classes = [IsAuthenticated]
 
     def get(self, request, story_id: int):
@@ -223,6 +303,13 @@ class FarmStoryDetailAPIView(APIView):
 
 
 class ProductRecipesAPIView(APIView):
+    """
+    Documents the `ProductRecipesAPIView` boundary for this module.
+
+    The class belongs to the file role described above: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+    It keeps related behavior grouped so the content domain: recipes, farm stories, saved recipe feeds, and ai-assisted producer content generation.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     permission_classes = [IsAuthenticated]
 
     def get(self, request, product_id: int):
@@ -232,6 +319,13 @@ class ProductRecipesAPIView(APIView):
 
 
 class ProducerOwnedProductsAPIView(APIView):
+    """
+    Documents the `ProducerOwnedProductsAPIView` boundary for this module.
+
+    The class belongs to the file role described above: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+    It keeps related behavior grouped so the content domain: recipes, farm stories, saved recipe feeds, and ai-assisted producer content generation.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -258,6 +352,13 @@ class ProducerOwnedProductsAPIView(APIView):
 
 
 class GeneratedContentSuggestionListCreateAPIView(APIView):
+    """
+    Documents the `GeneratedContentSuggestionListCreateAPIView` boundary for this module.
+
+    The class belongs to the file role described above: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+    It keeps related behavior grouped so the content domain: recipes, farm stories, saved recipe feeds, and ai-assisted producer content generation.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -272,6 +373,9 @@ class GeneratedContentSuggestionListCreateAPIView(APIView):
         return Response(GeneratedContentSuggestionSerializer(suggestions, many=True).data)
 
     def post(self, request):
+        # Producers can generate draft recipe/story suggestions only from their
+        # own products. This prevents prompt injection through another producer's
+        # catalog data and keeps generated drafts properly attributed.
         producer = _get_request_producer(request.user)
         if not producer:
             return Response(
@@ -314,6 +418,9 @@ class GeneratedContentSuggestionListCreateAPIView(APIView):
         context = _prompt_context(request, producer, seasonal_tag)
         product_payloads = [_product_ai_payload(product) for product in products]
 
+        # `generate_content_suggestions` hides whether the provider is Gemini API
+        # key mode or Vertex ADC mode, so this view only handles user-facing
+        # errors and persistence.
         try:
             generated = generate_content_suggestions(
                 content_type=content_type,
@@ -325,6 +432,8 @@ class GeneratedContentSuggestionListCreateAPIView(APIView):
         except VertexAIResponseError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
 
+        # Replace previous suggestions to keep the producer dashboard simple:
+        # each generation shows the latest small set of editable drafts.
         with transaction.atomic():
             GeneratedContentSuggestion.objects.filter(producer=producer).delete()
             suggestions = []
@@ -350,6 +459,13 @@ class GeneratedContentSuggestionListCreateAPIView(APIView):
 
 
 class GeneratedContentSuggestionDetailAPIView(APIView):
+    """
+    Documents the `GeneratedContentSuggestionDetailAPIView` boundary for this module.
+
+    The class belongs to the file role described above: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+    It keeps related behavior grouped so the content domain: recipes, farm stories, saved recipe feeds, and ai-assisted producer content generation.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     permission_classes = [IsAuthenticated]
 
     def _get_suggestion(self, request, suggestion_id: int):
@@ -390,9 +506,18 @@ class GeneratedContentSuggestionDetailAPIView(APIView):
 
 
 class ToggleSavedRecipeAPIView(APIView):
+    """
+    Documents the `ToggleSavedRecipeAPIView` boundary for this module.
+
+    The class belongs to the file role described above: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+    It keeps related behavior grouped so the content domain: recipes, farm stories, saved recipe feeds, and ai-assisted producer content generation.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     permission_classes = [IsAuthenticated]
 
     def post(self, request, recipe_id: int):
+        # Saved recipes are a toggle endpoint for the frontend bookmark action:
+        # one click saves, the next click removes the same recipe.
         recipe = get_object_or_404(Recipe, id=recipe_id, is_published=True)
         saved = SavedRecipe.objects.filter(user=request.user, recipe=recipe).first()
         if saved:

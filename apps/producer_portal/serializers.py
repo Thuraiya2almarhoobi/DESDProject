@@ -1,3 +1,20 @@
+"""
+DESD Marketplace documentation.
+
+File role:
+    Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+
+Domain context:
+    Producer portal domain: producer inventory, dashboard summaries, order management, and producer-facing APIs.
+
+Implementation notes:
+    This header is intentionally descriptive so future sprint contributors can
+    understand why the file exists before reading individual classes/functions.
+    Inline comments below are reserved for business rules, permission checks,
+    external-service calls, or data transformations that are not obvious from
+    the code itself.
+"""
+
 from __future__ import annotations
 
 from rest_framework import serializers
@@ -11,6 +28,13 @@ from .models import (
 
 
 class ProducerProductSerializer(serializers.ModelSerializer):
+    """
+    Documents the `ProducerProductSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the producer portal domain: producer inventory, dashboard summaries, order management, and producer-facing apis.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     producer_id = serializers.IntegerField(read_only=True)
     producer_name = serializers.SerializerMethodField()
     producer_email = serializers.EmailField(source="producer.email", read_only=True)
@@ -94,6 +118,13 @@ class ProducerProductSerializer(serializers.ModelSerializer):
 
 
 class ProducerOrderItemSerializer(serializers.ModelSerializer):
+    """
+    Documents the `ProducerOrderItemSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the producer portal domain: producer inventory, dashboard summaries, order management, and producer-facing apis.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     line_total = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
 
     class Meta:
@@ -102,6 +133,13 @@ class ProducerOrderItemSerializer(serializers.ModelSerializer):
 
 
 class ProducerOrderSerializer(serializers.ModelSerializer):
+    """
+    Documents the `ProducerOrderSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the producer portal domain: producer inventory, dashboard summaries, order management, and producer-facing apis.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     items = ProducerOrderItemSerializer(many=True, read_only=True)
     lead_time_hours = serializers.IntegerField(read_only=True)
 
@@ -126,6 +164,13 @@ class ProducerOrderSerializer(serializers.ModelSerializer):
 
 
 class ProducerOrderStatusUpdateSerializer(serializers.ModelSerializer):
+    """
+    Documents the `ProducerOrderStatusUpdateSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the producer portal domain: producer inventory, dashboard summaries, order management, and producer-facing apis.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     class Meta:
         model = ProducerOrder
         fields = ["status"]

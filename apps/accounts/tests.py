@@ -1,3 +1,20 @@
+"""
+DESD Marketplace documentation.
+
+File role:
+    Documents expected behavior through automated tests for this app's public contract.
+
+Domain context:
+    Accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+
+Implementation notes:
+    This header is intentionally descriptive so future sprint contributors can
+    understand why the file exists before reading individual classes/functions.
+    Inline comments below are reserved for business rules, permission checks,
+    external-service calls, or data transformations that are not obvious from
+    the code itself.
+"""
+
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.core import mail
@@ -36,6 +53,13 @@ UserModel = get_user_model()
     ACCOUNT_EMAIL_SUPPRESS_LOCAL_PARTS="",
 )
 class AccountsRegistrationTests(APITestCase):
+    """
+    Documents the `AccountsRegistrationTests` boundary for this module.
+
+    The class belongs to the file role described above: Documents expected behavior through automated tests for this app's public contract.
+    It keeps related behavior grouped so the accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     def setUp(self):
         super().setUp()
         cache.clear()
@@ -301,6 +325,13 @@ class AccountsRegistrationTests(APITestCase):
 
 
 class AccountsLoginTests(APITestCase):
+    """
+    Documents the `AccountsLoginTests` boundary for this module.
+
+    The class belongs to the file role described above: Documents expected behavior through automated tests for this app's public contract.
+    It keeps related behavior grouped so the accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     def test_wrong_password_returns_specific_message(self):
         UserModel.objects.create_user(
             email="login-user@example.com",
@@ -410,6 +441,13 @@ class AccountsLoginTests(APITestCase):
 
 
 class AccountsEditableProfileBootstrapTests(APITestCase):
+    """
+    Documents the `AccountsEditableProfileBootstrapTests` boundary for this module.
+
+    The class belongs to the file role described above: Documents expected behavior through automated tests for this app's public contract.
+    It keeps related behavior grouped so the accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     def test_me_get_bootstraps_missing_customer_profile_from_existing_order_profile(self):
         user = UserModel.objects.create_user(
             email="editable-customer@example.com",
@@ -508,6 +546,13 @@ class AccountsEditableProfileBootstrapTests(APITestCase):
     ACCOUNT_EMAIL_SUPPRESS_LOCAL_PARTS="",
 )
 class AccountsVerificationAndPasswordResetTests(APITestCase):
+    """
+    Documents the `AccountsVerificationAndPasswordResetTests` boundary for this module.
+
+    The class belongs to the file role described above: Documents expected behavior through automated tests for this app's public contract.
+    It keeps related behavior grouped so the accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     def setUp(self):
         super().setUp()
         cache.clear()
@@ -605,6 +650,13 @@ class AccountsVerificationAndPasswordResetTests(APITestCase):
 
 
 class AccountsSecurityThrottleTests(APITestCase):
+    """
+    Documents the `AccountsSecurityThrottleTests` boundary for this module.
+
+    The class belongs to the file role described above: Documents expected behavior through automated tests for this app's public contract.
+    It keeps related behavior grouped so the accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     def setUp(self):
         from .views import LoginAnonThrottle, LoginUserThrottle
 
@@ -646,6 +698,13 @@ class AccountsSecurityThrottleTests(APITestCase):
 
 
 class AccountsAuthorizationTests(APITestCase):
+    """
+    Documents the `AccountsAuthorizationTests` boundary for this module.
+
+    The class belongs to the file role described above: Documents expected behavior through automated tests for this app's public contract.
+    It keeps related behavior grouped so the accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     def _auth_as(self, user):
         refresh = RefreshToken.for_user(user)
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {refresh.access_token}")
@@ -680,6 +739,13 @@ class AccountsAuthorizationTests(APITestCase):
 
 
 class AccountsAddressOwnershipTests(APITestCase):
+    """
+    Documents the `AccountsAddressOwnershipTests` boundary for this module.
+
+    The class belongs to the file role described above: Documents expected behavior through automated tests for this app's public contract.
+    It keeps related behavior grouped so the accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     def _auth_as(self, user):
         refresh = RefreshToken.for_user(user)
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {refresh.access_token}")
@@ -773,6 +839,13 @@ class AccountsAddressOwnershipTests(APITestCase):
 
 
 class AccountsImageUploadTests(APITestCase):
+    """
+    Documents the `AccountsImageUploadTests` boundary for this module.
+
+    The class belongs to the file role described above: Documents expected behavior through automated tests for this app's public contract.
+    It keeps related behavior grouped so the accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     def setUp(self):
         self.temp_media_dir = tempfile.mkdtemp()
         self.addCleanup(lambda: shutil.rmtree(self.temp_media_dir, ignore_errors=True))

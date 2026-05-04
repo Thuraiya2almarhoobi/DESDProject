@@ -1,3 +1,18 @@
+/**
+ * DESD Marketplace documentation.
+ *
+ * File role:
+ *   Provides the reusable alert-dialog component used by pages or layout shells.
+ *
+ * Frontend context:
+ *   Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ *
+ * Implementation notes:
+ *   Keep comments focused on state ownership, role-specific routing, API calls,
+ *   and non-obvious UI decisions. Styling-only class names are left uncommented
+ *   unless they communicate an important layout or accessibility choice.
+ */
+
 "use client";
 
 import * as React from "react";
@@ -6,12 +21,28 @@ import * as AlertDialogPrimitive from "@radix-ui/react-alert-dialog";
 import { cn } from "./utils";
 import { buttonVariants } from "./button";
 
+/**
+ * AlertDialog boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable alert-dialog component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function AlertDialog({
   ...props
 }: React.ComponentProps<typeof AlertDialogPrimitive.Root>) {
   return <AlertDialogPrimitive.Root data-slot="alert-dialog" {...props} />;
 }
 
+/**
+ * AlertDialogTrigger boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable alert-dialog component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function AlertDialogTrigger({
   ...props
 }: React.ComponentProps<typeof AlertDialogPrimitive.Trigger>) {
@@ -20,6 +51,14 @@ function AlertDialogTrigger({
   );
 }
 
+/**
+ * AlertDialogPortal boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable alert-dialog component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function AlertDialogPortal({
   ...props
 }: React.ComponentProps<typeof AlertDialogPrimitive.Portal>) {
@@ -28,6 +67,14 @@ function AlertDialogPortal({
   );
 }
 
+/**
+ * AlertDialogOverlay boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable alert-dialog component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function AlertDialogOverlay({
   className,
   ...props
@@ -44,6 +91,14 @@ function AlertDialogOverlay({
   );
 }
 
+/**
+ * AlertDialogContent boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable alert-dialog component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function AlertDialogContent({
   className,
   ...props
@@ -63,6 +118,14 @@ function AlertDialogContent({
   );
 }
 
+/**
+ * AlertDialogHeader boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable alert-dialog component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function AlertDialogHeader({
   className,
   ...props
@@ -76,6 +139,14 @@ function AlertDialogHeader({
   );
 }
 
+/**
+ * AlertDialogFooter boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable alert-dialog component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function AlertDialogFooter({
   className,
   ...props
@@ -92,6 +163,14 @@ function AlertDialogFooter({
   );
 }
 
+/**
+ * AlertDialogTitle boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable alert-dialog component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function AlertDialogTitle({
   className,
   ...props
@@ -105,6 +184,14 @@ function AlertDialogTitle({
   );
 }
 
+/**
+ * AlertDialogDescription boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable alert-dialog component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function AlertDialogDescription({
   className,
   ...props
@@ -118,6 +205,14 @@ function AlertDialogDescription({
   );
 }
 
+/**
+ * AlertDialogAction boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable alert-dialog component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function AlertDialogAction({
   className,
   ...props
@@ -130,6 +225,14 @@ function AlertDialogAction({
   );
 }
 
+/**
+ * AlertDialogCancel boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable alert-dialog component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function AlertDialogCancel({
   className,
   ...props

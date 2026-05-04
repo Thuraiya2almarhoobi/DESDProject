@@ -1,3 +1,18 @@
+/**
+ * DESD Marketplace documentation.
+ *
+ * File role:
+ *   Implements the ProducerDashboardPage browser route and coordinates the UI state for that screen.
+ *
+ * Frontend context:
+ *   Route-level React page layer: one component per main browser page or role-specific workspace.
+ *
+ * Implementation notes:
+ *   Keep comments focused on state ownership, role-specific routing, API calls,
+ *   and non-obvious UI decisions. Styling-only class names are left uncommented
+ *   unless they communicate an important layout or accessibility choice.
+ */
+
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
@@ -133,6 +148,14 @@ function chartCurrencyTick(value: number): string {
   return `£${value}`;
 }
 
+/**
+ * PIE_COLORS boundary.
+ *
+ * This exported unit supports the file role: Implements the ProducerDashboardPage browser route and coordinates the UI state for that screen.
+ * It belongs to: Route-level React page layer: one component per main browser page or role-specific workspace.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 const PIE_COLORS = ['#1a5c35', '#9b9184', '#7a7063', '#c35b3f'];
 
 export function ProducerDashboardPage() {
@@ -443,6 +466,14 @@ export function ProducerDashboardPage() {
 
                   <div className="mt-4 grid gap-3">
                     {notifications.slice(0, 4).map((item) => {
+/**
+ * Icon boundary.
+ *
+ * This exported unit supports the file role: Implements the ProducerDashboardPage browser route and coordinates the UI state for that screen.
+ * It belongs to: Route-level React page layer: one component per main browser page or role-specific workspace.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
                       const Icon = item.icon;
                       return (
                         <button
@@ -532,6 +563,14 @@ export function ProducerDashboardPage() {
                   </CardHeader>
                   <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     {primaryActions.map((action) => {
+/**
+ * Icon boundary.
+ *
+ * This exported unit supports the file role: Implements the ProducerDashboardPage browser route and coordinates the UI state for that screen.
+ * It belongs to: Route-level React page layer: one component per main browser page or role-specific workspace.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
                       const Icon = action.icon;
                       return (
                         <Button
@@ -569,6 +608,14 @@ export function ProducerDashboardPage() {
                       { label: 'Season starting', value: seasonStartingSoonProducts.length, icon: Calendar, color: 'bg-[var(--forest-green)]' },
                       { label: 'Surplus deals', value: activeSurplusDeals.length, icon: Tag, color: 'bg-[var(--earth-accent)]' },
                     ].map((row) => {
+/**
+ * Icon boundary.
+ *
+ * This exported unit supports the file role: Implements the ProducerDashboardPage browser route and coordinates the UI state for that screen.
+ * It belongs to: Route-level React page layer: one component per main browser page or role-specific workspace.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
                       const Icon = row.icon;
                       const max = Math.max(1, products.length);
                       return (

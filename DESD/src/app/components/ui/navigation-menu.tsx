@@ -1,3 +1,18 @@
+/**
+ * DESD Marketplace documentation.
+ *
+ * File role:
+ *   Provides the reusable navigation-menu component used by pages or layout shells.
+ *
+ * Frontend context:
+ *   Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ *
+ * Implementation notes:
+ *   Keep comments focused on state ownership, role-specific routing, API calls,
+ *   and non-obvious UI decisions. Styling-only class names are left uncommented
+ *   unless they communicate an important layout or accessibility choice.
+ */
+
 import * as React from "react";
 import * as NavigationMenuPrimitive from "@radix-ui/react-navigation-menu";
 import { cva } from "class-variance-authority";
@@ -5,6 +20,14 @@ import { ChevronDownIcon } from "lucide-react";
 
 import { cn } from "./utils";
 
+/**
+ * NavigationMenu boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable navigation-menu component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function NavigationMenu({
   className,
   children,
@@ -29,6 +52,14 @@ function NavigationMenu({
   );
 }
 
+/**
+ * NavigationMenuList boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable navigation-menu component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function NavigationMenuList({
   className,
   ...props
@@ -45,6 +76,14 @@ function NavigationMenuList({
   );
 }
 
+/**
+ * NavigationMenuItem boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable navigation-menu component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function NavigationMenuItem({
   className,
   ...props
@@ -62,6 +101,14 @@ const navigationMenuTriggerStyle = cva(
   "group inline-flex h-9 w-max items-center justify-center rounded-md bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground disabled:pointer-events-none disabled:opacity-50 data-[state=open]:hover:bg-accent data-[state=open]:text-accent-foreground data-[state=open]:focus:bg-accent data-[state=open]:bg-accent/50 focus-visible:ring-ring/50 outline-none transition-[color,box-shadow] focus-visible:ring-[3px] focus-visible:outline-1",
 );
 
+/**
+ * NavigationMenuTrigger boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable navigation-menu component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function NavigationMenuTrigger({
   className,
   children,
@@ -82,6 +129,14 @@ function NavigationMenuTrigger({
   );
 }
 
+/**
+ * NavigationMenuContent boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable navigation-menu component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function NavigationMenuContent({
   className,
   ...props
@@ -99,6 +154,14 @@ function NavigationMenuContent({
   );
 }
 
+/**
+ * NavigationMenuViewport boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable navigation-menu component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function NavigationMenuViewport({
   className,
   ...props
@@ -121,6 +184,14 @@ function NavigationMenuViewport({
   );
 }
 
+/**
+ * NavigationMenuLink boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable navigation-menu component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function NavigationMenuLink({
   className,
   ...props
@@ -137,6 +208,14 @@ function NavigationMenuLink({
   );
 }
 
+/**
+ * NavigationMenuIndicator boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable navigation-menu component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function NavigationMenuIndicator({
   className,
   ...props

@@ -1,7 +1,38 @@
+/**
+ * DESD Marketplace documentation.
+ *
+ * File role:
+ *   Contains reusable helper functions for googleMaps concerns across the frontend.
+ *
+ * Frontend context:
+ *   Frontend utility layer: route helpers, token storage, API clients, formatting, maps, and domain helpers.
+ *
+ * Implementation notes:
+ *   Keep comments focused on state ownership, role-specific routing, API calls,
+ *   and non-obvious UI decisions. Styling-only class names are left uncommented
+ *   unless they communicate an important layout or accessibility choice.
+ */
+
+/**
+ * GOOGLE_MAPS_EMBED_BASE boundary.
+ *
+ * This exported unit supports the file role: Contains reusable helper functions for googleMaps concerns across the frontend.
+ * It belongs to: Frontend utility layer: route helpers, token storage, API clients, formatting, maps, and domain helpers.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 const GOOGLE_MAPS_EMBED_BASE = 'https://www.google.com/maps/embed/v1/place';
 const GOOGLE_MAPS_DIRECTIONS_EMBED_BASE = 'https://www.google.com/maps/embed/v1/directions';
 const GOOGLE_MAPS_SEARCH_BASE = 'https://www.google.com/maps/search/';
 const GOOGLE_MAPS_DIRECTIONS_BASE = 'https://www.google.com/maps/dir/';
+/**
+ * GOOGLE_MAPS_JS_BASE boundary.
+ *
+ * This exported unit supports the file role: Contains reusable helper functions for googleMaps concerns across the frontend.
+ * It belongs to: Frontend utility layer: route helpers, token storage, API clients, formatting, maps, and domain helpers.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 const GOOGLE_MAPS_JS_BASE = 'https://maps.googleapis.com/maps/api/js';
 
 /**
@@ -19,10 +50,14 @@ declare global {
 }
 
 export function getGoogleMapsApiKey(): string {
+  // Vite exposes only variables prefixed with VITE_. The key is read at build
+  // time from `.env`, so Docker/frontend rebuilds are required after changing it.
   return import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim() || '';
 }
 
 export function getGoogleMapsEmbedUrl(coordinates?: { lat: number; lng: number }, zoom = 12): string | null {
+  // Product/farm map cards use the lightweight Embed API. Returning null lets
+  // the UI show the address fallback when the key or coordinates are missing.
   const apiKey = getGoogleMapsApiKey();
   if (!apiKey || !coordinates) {
     return null;
@@ -55,6 +90,8 @@ export function getGoogleMapsDirectionsEmbedUrl(
   destination?: string,
   mode: 'driving' | 'walking' | 'bicycling' | 'transit' = 'driving',
 ): string | null {
+  // Live delivery pages use an embedded directions map from producer pickup to
+  // customer dropoff, matching the route shown in the separate Google Maps tab.
   const apiKey = getGoogleMapsApiKey();
   if (!apiKey || !origin?.trim() || !destination?.trim()) {
     return null;
@@ -75,6 +112,8 @@ export function getGoogleMapsDirectionsUrl(
   destination?: string,
   mode: 'driving' | 'walking' | 'bicycling' | 'transit' = 'driving',
 ): string | null {
+  // External Google Maps links do not require our API key, so users can still
+  // open directions even if the embedded map is unavailable.
   if (!origin?.trim() || !destination?.trim()) {
     return null;
   }

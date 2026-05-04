@@ -1,4 +1,19 @@
-﻿import { useState, useMemo, useEffect } from 'react';
+/**
+ * DESD Marketplace documentation.
+ *
+ * File role:
+ *   Implements the MarketplacePage browser route and coordinates the UI state for that screen.
+ *
+ * Frontend context:
+ *   Route-level React page layer: one component per main browser page or role-specific workspace.
+ *
+ * Implementation notes:
+ *   Keep comments focused on state ownership, role-specific routing, API calls,
+ *   and non-obvious UI decisions. Styling-only class names are left uncommented
+ *   unless they communicate an important layout or accessibility choice.
+ */
+
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { Filter, X, Plus, Minus, AlertCircle, AlertTriangle, Star } from 'lucide-react';
 import { toast } from 'sonner';
@@ -59,6 +74,14 @@ function getPriceBounds(priceFilter: PriceFilter): { minPrice?: number; maxPrice
   }
 }
 
+/**
+ * MarketplacePage boundary.
+ *
+ * This exported unit supports the file role: Implements the MarketplacePage browser route and coordinates the UI state for that screen.
+ * It belongs to: Route-level React page layer: one component per main browser page or role-specific workspace.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 export function MarketplacePage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -290,7 +313,7 @@ export function MarketplacePage() {
     setExcludedAllergens([]);
   };
 
-  const activeFiltersCount = 
+  const activeFiltersCount =
     (selectedCategories.includes('All') ? 0 : selectedCategories.length) +
     (showOnlyOrganic ? 1 : 0) +
     (priceFilter !== 'any' ? 1 : 0) +
@@ -419,6 +442,14 @@ export function MarketplacePage() {
     setReloadKey((value) => value + 1);
   };
 
+/**
+ * FiltersContent boundary.
+ *
+ * This exported unit supports the file role: Implements the MarketplacePage browser route and coordinates the UI state for that screen.
+ * It belongs to: Route-level React page layer: one component per main browser page or role-specific workspace.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
   const FiltersContent = () => (
     <div className="space-y-6">
       <div>
@@ -673,13 +704,13 @@ export function MarketplacePage() {
             <div className="mb-4">
               <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as ViewMode)}>
                 <TabsList>
-                  <TabsTrigger 
+                  <TabsTrigger
                     value="all"
                     className="focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
                   >
                     Marketplace
                   </TabsTrigger>
-                  <TabsTrigger 
+                  <TabsTrigger
                     value="surplus"
                     className="focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
                     title="Discounted items to reduce waste"
@@ -701,15 +732,15 @@ export function MarketplacePage() {
                   {sortedProducts.length} product{sortedProducts.length !== 1 ? 's' : ''} found
                 </p>
               </div>
-              
+
               <div className="flex items-center gap-3 w-full sm:w-auto">
                 {/* H) Improved Sort Dropdown */}
                 <Select
                   value={sortBy}
                   onValueChange={(value) => setSortBy(value as SortOption)}
                 >
-                  <SelectTrigger 
-                    className="w-full sm:w-[220px] focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2" 
+                  <SelectTrigger
+                    className="w-full sm:w-[220px] focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
                     aria-label="Sort products"
                   >
                     <SelectValue>
@@ -727,14 +758,14 @@ export function MarketplacePage() {
                     )}
                   </SelectContent>
                 </Select>
-                
+
                 {/* Mobile Filter Button */}
                 <Sheet>
                   <SheetTrigger asChild>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="lg:hidden focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2" 
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="lg:hidden focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
                       aria-label="Open filters"
                     >
                       <Filter className="size-4 mr-2" />
@@ -763,13 +794,13 @@ export function MarketplacePage() {
               <div className="mb-4 p-3 bg-white rounded-lg border">
                 <div className="flex flex-wrap gap-2 items-center">
                   <span className="text-xs text-gray-500 font-medium">Applied filters:</span>
-                  
+
                   {/* Category chips */}
                   {!selectedCategories.includes('All') && selectedCategories.map(cat => (
-                    <Badge 
-                      key={cat} 
-                      variant="secondary" 
-                      className="gap-1 cursor-pointer hover:bg-gray-300 transition-colors focus-visible:ring-2 focus-visible:ring-green-600" 
+                    <Badge
+                      key={cat}
+                      variant="secondary"
+                      className="gap-1 cursor-pointer hover:bg-gray-300 transition-colors focus-visible:ring-2 focus-visible:ring-green-600"
                       onClick={() => handleCategoryToggle(cat)}
                       tabIndex={0}
                       onKeyDown={(e) => e.key === 'Enter' && handleCategoryToggle(cat)}
@@ -778,12 +809,12 @@ export function MarketplacePage() {
                       <X className="size-3" />
                     </Badge>
                   ))}
-                  
+
                   {/* Attribute chips */}
                   {showOnlyOrganic && (
-                    <Badge 
-                      variant="secondary" 
-                      className="gap-1 cursor-pointer hover:bg-gray-300 transition-colors focus-visible:ring-2 focus-visible:ring-green-600" 
+                    <Badge
+                      variant="secondary"
+                      className="gap-1 cursor-pointer hover:bg-gray-300 transition-colors focus-visible:ring-2 focus-visible:ring-green-600"
                       onClick={() => setShowOnlyOrganic(false)}
                       tabIndex={0}
                       onKeyDown={(e) => e.key === 'Enter' && setShowOnlyOrganic(false)}
@@ -793,9 +824,9 @@ export function MarketplacePage() {
                     </Badge>
                   )}
                   {priceFilter !== 'any' && (
-                    <Badge 
-                      variant="secondary" 
-                      className="gap-1 cursor-pointer hover:bg-gray-300 transition-colors focus-visible:ring-2 focus-visible:ring-green-600" 
+                    <Badge
+                      variant="secondary"
+                      className="gap-1 cursor-pointer hover:bg-gray-300 transition-colors focus-visible:ring-2 focus-visible:ring-green-600"
                       onClick={() => setPriceFilter('any')}
                       tabIndex={0}
                       onKeyDown={(e) => e.key === 'Enter' && setPriceFilter('any')}
@@ -805,9 +836,9 @@ export function MarketplacePage() {
                     </Badge>
                   )}
                   {showOnlyInSeason && (
-                    <Badge 
-                      variant="secondary" 
-                      className="gap-1 cursor-pointer hover:bg-gray-300 transition-colors focus-visible:ring-2 focus-visible:ring-green-600" 
+                    <Badge
+                      variant="secondary"
+                      className="gap-1 cursor-pointer hover:bg-gray-300 transition-colors focus-visible:ring-2 focus-visible:ring-green-600"
                       onClick={() => setShowOnlyInSeason(false)}
                       tabIndex={0}
                       onKeyDown={(e) => e.key === 'Enter' && setShowOnlyInSeason(false)}
@@ -817,9 +848,9 @@ export function MarketplacePage() {
                     </Badge>
                   )}
                   {!showOnlyInStock && (
-                    <Badge 
-                      variant="secondary" 
-                      className="gap-1 cursor-pointer hover:bg-gray-300 transition-colors focus-visible:ring-2 focus-visible:ring-green-600" 
+                    <Badge
+                      variant="secondary"
+                      className="gap-1 cursor-pointer hover:bg-gray-300 transition-colors focus-visible:ring-2 focus-visible:ring-green-600"
                       onClick={() => setShowOnlyInStock(true)}
                       tabIndex={0}
                       onKeyDown={(e) => e.key === 'Enter' && setShowOnlyInStock(true)}
@@ -828,10 +859,10 @@ export function MarketplacePage() {
                       <X className="size-3" />
                     </Badge>
                   )}
-                  
+
                   {/* Allergen chips */}
                   {excludedAllergens.map(allergen => (
-                    <Badge 
+                    <Badge
                       key={allergen}
                       variant="destructive"
                       className="gap-1 cursor-pointer hover:bg-red-700 transition-colors focus-visible:ring-2 focus-visible:ring-green-600"
@@ -843,10 +874,10 @@ export function MarketplacePage() {
                       <X className="size-3" />
                     </Badge>
                   ))}
-                  
+
                   {/* View mode chip */}
                   {viewMode === 'surplus' && (
-                    <Badge 
+                    <Badge
                       variant="secondary"
                       className="gap-1 cursor-pointer hover:bg-gray-300 transition-colors focus-visible:ring-2 focus-visible:ring-green-600"
                       onClick={() => setViewMode('all')}
@@ -857,10 +888,10 @@ export function MarketplacePage() {
                       <X className="size-3" />
                     </Badge>
                   )}
-                  
+
                   {/* Sort chip */}
                   {sortBy !== 'relevance' && (
-                    <Badge 
+                    <Badge
                       variant="secondary"
                       className="gap-1 cursor-pointer hover:bg-gray-300 transition-colors focus-visible:ring-2 focus-visible:ring-green-600"
                       onClick={() => setSortBy('relevance')}
@@ -871,11 +902,11 @@ export function MarketplacePage() {
                       <X className="size-3" />
                     </Badge>
                   )}
-                  
+
                   {/* Clear all button */}
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={clearFilters}
                     className="h-6 text-xs px-2 ml-auto focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
                   >
@@ -945,10 +976,10 @@ export function MarketplacePage() {
             ) : (
               <div className="grid grid-cols-1 auto-rows-fr gap-6 sm:grid-cols-2 lg:grid-cols-3">
                 {sortedProducts.map(product => (
-                  <ProductCard 
-                    key={product.id} 
-                    product={product} 
-                    handleAddToCart={handleAddToCart} 
+                  <ProductCard
+                    key={product.id}
+                    product={product}
+                    handleAddToCart={handleAddToCart}
                     handleBuyNow={handleBuyNow}
                     currentCartQuantity={getProductCartQuantity(product.id)}
                     isBulkBuyer={isBulkBuyer}
@@ -965,15 +996,23 @@ export function MarketplacePage() {
 }
 
 // B) Product card with quantity stepper
-function ProductCard({ 
-  product, 
+/**
+ * ProductCard boundary.
+ *
+ * This exported unit supports the file role: Implements the MarketplacePage browser route and coordinates the UI state for that screen.
+ * It belongs to: Route-level React page layer: one component per main browser page or role-specific workspace.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
+function ProductCard({
+  product,
   handleAddToCart,
   handleBuyNow,
   currentCartQuantity,
   isBulkBuyer,
   userRole,
-}: { 
-  product: Product; 
+}: {
+  product: Product;
   handleAddToCart: (product: Product, quantity: number, e: React.MouseEvent) => Promise<void>;
   handleBuyNow: (product: Product, quantity: number, e: React.MouseEvent) => Promise<void>;
   currentCartQuantity: number;
@@ -987,6 +1026,9 @@ function ProductCard({
 
   const isAvailable = product.availability !== 'unavailable' && product.stock > 0;
   const hasAllergens = product.allergens && product.allergens.length > 0;
+  // Role-aware cap: customers use normal buyer quantities, while restaurant and
+  // community buyers can order in bulk, but never above the producer's live
+  // available stock once existing cart quantity is considered.
   const remainingStock = Math.max(0, getQuantityCapForRole(userRole, product.stock) - currentCartQuantity);
   const maxQuantity = Math.max(1, remainingStock);
 
@@ -1017,6 +1059,8 @@ function ProductCard({
     if (!Number.isFinite(next)) {
       return;
     }
+    // Typing above the cap is clamped immediately and explained with a small
+    // inline message instead of failing later at checkout.
     if (isBulkBuyer && next > maxQuantity) {
       setQuantityLimitMessage(`Only ${maxQuantity} ${product.unit} available in stock.`);
     } else {
@@ -1026,7 +1070,7 @@ function ProductCard({
   };
 
   return (
-    <Card 
+    <Card
       className="group h-full gap-0 overflow-hidden cursor-pointer hover:shadow-lg transition-shadow focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
       onClick={() => navigate(`/product/${product.id}`)}
       tabIndex={0}
@@ -1046,13 +1090,15 @@ function ProductCard({
           {product.isSurplus && <SurplusBadge />}
         </div>
       </div>
-      
+
       <CardContent className="flex flex-1 flex-col justify-between px-4 pb-3.5 pt-4">
-        {/* Title */}
-        <div className="space-y-2">
+          {/* Title and allergen warning stay compact so cards remain equal height. */}
+          <div className="space-y-2">
           <div className="mb-1 flex items-start gap-2">
             <h3 className="line-clamp-2 flex-1 font-semibold leading-tight">{product.name}</h3>
             {hasAllergens && (
+              /* The card shows only a warning icon; the full allergen text is
+                 available on hover/focus so product cards stay visually tidy. */
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
@@ -1071,12 +1117,12 @@ function ProductCard({
               </Tooltip>
             )}
           </div>
-          
+
           {/* Producer */}
           <p className="mb-1 line-clamp-1 text-sm text-gray-600">{product.producerName}</p>
           <p className="mb-2 line-clamp-1 text-xs text-gray-500">{product.category}</p>
-          
-          {/* Meta row: distance + harvested */}
+
+          {/* Bulk-buyer cards use badges to shorten dense logistics metadata. */}
           {isBulkBuyer ? (
             <div className="space-y-1.5 text-xs text-gray-600">
               <div className="flex flex-wrap items-center gap-2">
@@ -1132,7 +1178,8 @@ function ProductCard({
             </Badge>
           )}
 
-          {/* Price + quantity row */}
+          {/* Price and quantity share one row to avoid the large vertical gaps
+              that previously made users scroll within a single product card. */}
           <div className="space-y-1">
             <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3">
               {product.isSurplus && product.surplusDiscount && product.surplusOriginalPrice && product.surplusExpiresAt && product.surplusBestBefore ? (

@@ -1,3 +1,20 @@
+"""
+DESD Marketplace documentation.
+
+File role:
+    Documents expected behavior through automated tests for this app's public contract.
+
+Domain context:
+    Content domain: recipes, farm stories, saved recipe feeds, and AI-assisted producer content generation.
+
+Implementation notes:
+    This header is intentionally descriptive so future sprint contributors can
+    understand why the file exists before reading individual classes/functions.
+    Inline comments below are reserved for business rules, permission checks,
+    external-service calls, or data transformations that are not obvious from
+    the code itself.
+"""
+
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -15,6 +32,13 @@ User = get_user_model()
 
 
 class ContentApiTests(APITestCase):
+    """
+    Documents the `ContentApiTests` boundary for this module.
+
+    The class belongs to the file role described above: Documents expected behavior through automated tests for this app's public contract.
+    It keeps related behavior grouped so the content domain: recipes, farm stories, saved recipe feeds, and ai-assisted producer content generation.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     def setUp(self):
         self.producer_user = User.objects.create_user(username="content_producer", password="pass1234")
         self.customer_user = User.objects.create_user(username="content_customer", password="pass1234")

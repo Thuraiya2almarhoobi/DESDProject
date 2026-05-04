@@ -1,3 +1,18 @@
+/**
+ * DESD Marketplace documentation.
+ *
+ * File role:
+ *   Implements the StakeholderPortalPage browser route and coordinates the UI state for that screen.
+ *
+ * Frontend context:
+ *   Route-level React page layer: one component per main browser page or role-specific workspace.
+ *
+ * Implementation notes:
+ *   Keep comments focused on state ownership, role-specific routing, API calls,
+ *   and non-obvious UI decisions. Styling-only class names are left uncommented
+ *   unless they communicate an important layout or accessibility choice.
+ */
+
 import { Link } from 'react-router';
 
 import { useAuth } from '../../contexts/AuthContext';
@@ -12,6 +27,14 @@ interface StakeholderPortalPageProps {
   role: PortalRole;
 }
 
+/**
+ * StakeholderPortalPage boundary.
+ *
+ * This exported unit supports the file role: Implements the StakeholderPortalPage browser route and coordinates the UI state for that screen.
+ * It belongs to: Route-level React page layer: one component per main browser page or role-specific workspace.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 export function StakeholderPortalPage({ role }: StakeholderPortalPageProps) {
   const definition = getPortalDefinition(role);
   const { user } = useAuth();

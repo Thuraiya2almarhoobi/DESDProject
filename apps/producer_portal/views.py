@@ -1,3 +1,20 @@
+"""
+DESD Marketplace documentation.
+
+File role:
+    Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+Domain context:
+    Producer portal domain: producer inventory, dashboard summaries, order management, and producer-facing APIs.
+
+Implementation notes:
+    This header is intentionally descriptive so future sprint contributors can
+    understand why the file exists before reading individual classes/functions.
+    Inline comments below are reserved for business rules, permission checks,
+    external-service calls, or data transformations that are not obvious from
+    the code itself.
+"""
+
 from __future__ import annotations
 
 from decimal import Decimal, ROUND_CEILING
@@ -26,6 +43,13 @@ User = get_user_model()
 
 
 def _effective_customer_visible_ids(queryset):
+    """
+    Helper for the file role: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+    `_effective_customer_visible_ids` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Producer portal domain: producer inventory, dashboard summaries, order management, and producer-facing APIs.
+    """
     matching_ids = []
     for product in queryset:
         if product.effective_availability in {ProductAvailability.IN_SEASON, ProductAvailability.YEAR_ROUND}:
@@ -34,6 +58,13 @@ def _effective_customer_visible_ids(queryset):
 
 
 def _get_or_create_demo_user(email: str):
+    """
+    Helper for the file role: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+    `_get_or_create_demo_user` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Producer portal domain: producer inventory, dashboard summaries, order management, and producer-facing APIs.
+    """
     normalized_email = (email or "producer@example.com").strip().lower()
     existing = User.objects.filter(email__iexact=normalized_email).first()
     if existing:
@@ -46,6 +77,13 @@ def _get_or_create_demo_user(email: str):
 
 
 def _resolve_actor_user(request):
+    """
+    Helper for the file role: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+    `_resolve_actor_user` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Producer portal domain: producer inventory, dashboard summaries, order management, and producer-facing APIs.
+    """
     if request.user and request.user.is_authenticated:
         return request.user
     demo_email = request.headers.get("X-Demo-User") or request.query_params.get("demo_user") or "producer@example.com"
@@ -53,6 +91,13 @@ def _resolve_actor_user(request):
 
 
 def _producer_order_stock_units(quantity: Decimal) -> int:
+    """
+    Helper for the file role: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+    `_producer_order_stock_units` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Producer portal domain: producer inventory, dashboard summaries, order management, and producer-facing APIs.
+    """
     whole_units = quantity.to_integral_value()
     if quantity == whole_units:
         return int(whole_units)
@@ -60,6 +105,13 @@ def _producer_order_stock_units(quantity: Decimal) -> int:
 
 
 def _deduct_stock_for_producer_order(order: ProducerOrder) -> None:
+    """
+    Helper for the file role: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+    `_deduct_stock_for_producer_order` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Producer portal domain: producer inventory, dashboard summaries, order management, and producer-facing APIs.
+    """
     for item in order.items.select_related("product"):
         quantity_to_deduct = _producer_order_stock_units(item.quantity)
         if quantity_to_deduct <= 0:
@@ -83,6 +135,13 @@ def _deduct_stock_for_producer_order(order: ProducerOrder) -> None:
         sync_orders_product_from_producer_product(producer_product)
 
 class PublicMarketplaceProductsAPIView(generics.ListAPIView):
+    """
+    Documents the `PublicMarketplaceProductsAPIView` boundary for this module.
+
+    The class belongs to the file role described above: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+    It keeps related behavior grouped so the producer portal domain: producer inventory, dashboard summaries, order management, and producer-facing apis.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     serializer_class = ProducerProductSerializer
     permission_classes = [permissions.AllowAny]
 
@@ -99,6 +158,13 @@ class PublicMarketplaceProductsAPIView(generics.ListAPIView):
 
 
 class PublicMarketplaceProductDetailAPIView(generics.RetrieveAPIView):
+    """
+    Documents the `PublicMarketplaceProductDetailAPIView` boundary for this module.
+
+    The class belongs to the file role described above: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+    It keeps related behavior grouped so the producer portal domain: producer inventory, dashboard summaries, order management, and producer-facing apis.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     serializer_class = ProducerProductSerializer
     permission_classes = [permissions.AllowAny]
 
@@ -114,6 +180,13 @@ class PublicMarketplaceProductDetailAPIView(generics.RetrieveAPIView):
 
 
 class ProducerProductListCreateAPIView(generics.ListCreateAPIView):
+    """
+    Documents the `ProducerProductListCreateAPIView` boundary for this module.
+
+    The class belongs to the file role described above: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+    It keeps related behavior grouped so the producer portal domain: producer inventory, dashboard summaries, order management, and producer-facing apis.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     serializer_class = ProducerProductSerializer
     permission_classes = [permissions.AllowAny]
 
@@ -139,6 +212,13 @@ class ProducerProductListCreateAPIView(generics.ListCreateAPIView):
 
 
 class ProducerProductDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
+    """
+    Documents the `ProducerProductDetailAPIView` boundary for this module.
+
+    The class belongs to the file role described above: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+    It keeps related behavior grouped so the producer portal domain: producer inventory, dashboard summaries, order management, and producer-facing apis.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     serializer_class = ProducerProductSerializer
     permission_classes = [permissions.AllowAny]
 
@@ -161,6 +241,13 @@ class ProducerProductDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
 
 
 class ProducerSurplusDealAPIView(APIView):
+    """
+    Documents the `ProducerSurplusDealAPIView` boundary for this module.
+
+    The class belongs to the file role described above: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+    It keeps related behavior grouped so the producer portal domain: producer inventory, dashboard summaries, order management, and producer-facing apis.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     permission_classes = [permissions.AllowAny]
 
     def patch(self, request, pk: int):
@@ -173,6 +260,13 @@ class ProducerSurplusDealAPIView(APIView):
 
 
 class ProducerLowStockAlertsAPIView(APIView):
+    """
+    Documents the `ProducerLowStockAlertsAPIView` boundary for this module.
+
+    The class belongs to the file role described above: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+    It keeps related behavior grouped so the producer portal domain: producer inventory, dashboard summaries, order management, and producer-facing apis.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     permission_classes = [permissions.AllowAny]
 
     def get(self, request):
@@ -193,6 +287,13 @@ class ProducerLowStockAlertsAPIView(APIView):
 
 
 class ProducerOrdersInboxAPIView(generics.ListAPIView):
+    """
+    Documents the `ProducerOrdersInboxAPIView` boundary for this module.
+
+    The class belongs to the file role described above: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+    It keeps related behavior grouped so the producer portal domain: producer inventory, dashboard summaries, order management, and producer-facing apis.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     serializer_class = ProducerOrderSerializer
     permission_classes = [permissions.IsAuthenticated]
 
@@ -209,6 +310,13 @@ class ProducerOrdersInboxAPIView(generics.ListAPIView):
 
 
 class ProducerOrderDetailAPIView(generics.RetrieveAPIView):
+    """
+    Documents the `ProducerOrderDetailAPIView` boundary for this module.
+
+    The class belongs to the file role described above: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+    It keeps related behavior grouped so the producer portal domain: producer inventory, dashboard summaries, order management, and producer-facing apis.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     serializer_class = ProducerOrderSerializer
     permission_classes = [permissions.IsAuthenticated]
 
@@ -217,6 +325,13 @@ class ProducerOrderDetailAPIView(generics.RetrieveAPIView):
 
 
 class ProducerOrderStatusUpdateAPIView(generics.UpdateAPIView):
+    """
+    Documents the `ProducerOrderStatusUpdateAPIView` boundary for this module.
+
+    The class belongs to the file role described above: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+    It keeps related behavior grouped so the producer portal domain: producer inventory, dashboard summaries, order management, and producer-facing apis.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     serializer_class = ProducerOrderStatusUpdateSerializer
     permission_classes = [permissions.IsAuthenticated]
     http_method_names = ["patch"]

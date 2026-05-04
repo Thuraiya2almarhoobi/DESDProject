@@ -1,3 +1,20 @@
+"""
+DESD Marketplace documentation.
+
+File role:
+    Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+
+Domain context:
+    Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+
+Implementation notes:
+    This header is intentionally descriptive so future sprint contributors can
+    understand why the file exists before reading individual classes/functions.
+    Inline comments below are reserved for business rules, permission checks,
+    external-service calls, or data transformations that are not obvious from
+    the code itself.
+"""
+
 from decimal import Decimal
 
 from django.db.models import Avg, Count, Q
@@ -27,6 +44,13 @@ from .models import (
     RecurringOrderInstanceOverrideItem,
 )
 class ProducerSerializer(serializers.ModelSerializer):
+    """
+    Documents the `ProducerSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     class Meta:
         model = Producer
         fields = [
@@ -40,6 +64,13 @@ class ProducerSerializer(serializers.ModelSerializer):
 
 
 class ProductSerializer(serializers.ModelSerializer):
+    """
+    Documents the `ProductSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     producer = ProducerSerializer(read_only=True)
     producer_id = serializers.PrimaryKeyRelatedField(
         source="producer", queryset=Producer.objects.all(), write_only=True, required=False
@@ -67,6 +98,13 @@ class ProductSerializer(serializers.ModelSerializer):
 
 
 class MarketplaceProductSerializer(serializers.ModelSerializer):
+    """
+    Documents the `MarketplaceProductSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     producer_id = serializers.IntegerField(source="producer.id", read_only=True)
     producer_name = serializers.CharField(source="producer.business_name", read_only=True)
     producer_location = serializers.SerializerMethodField()
@@ -279,6 +317,13 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
 
 
 class PendingReviewModerationSerializer(serializers.ModelSerializer):
+    """
+    Documents the `PendingReviewModerationSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     order_product_id = serializers.SerializerMethodField()
     product_name = serializers.CharField(source="product.name", read_only=True)
     producer_name = serializers.CharField(source="product.producer.name", read_only=True)
@@ -325,12 +370,26 @@ class PendingReviewModerationSerializer(serializers.ModelSerializer):
         return "Verified purchase" if self.get_has_verified_purchase(obj) else "Unverified purchase"
 
 class CustomerProfileSerializer(serializers.ModelSerializer):
+    """
+    Documents the `CustomerProfileSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     class Meta:
         model = CustomerProfile
         fields = ["full_name", "phone", "delivery_address", "postcode"]
 
 
 class CartItemSerializer(serializers.ModelSerializer):
+    """
+    Documents the `CartItemSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     product = ProductSerializer(read_only=True)
     product_id = serializers.PrimaryKeyRelatedField(
         source="product", queryset=Product.objects.select_related("producer").all(), write_only=True
@@ -350,6 +409,13 @@ class CartItemSerializer(serializers.ModelSerializer):
 
 
 class CheckoutRequestSerializer(serializers.Serializer):
+    """
+    Documents the `CheckoutRequestSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     delivery_address = serializers.CharField()
     customer_postcode = serializers.CharField(max_length=12)
     special_instructions = serializers.CharField(required=False, allow_blank=True)
@@ -367,6 +433,13 @@ class CheckoutRequestSerializer(serializers.Serializer):
 
 
 class ProducerSubOrderSerializer(serializers.ModelSerializer):
+    """
+    Documents the `ProducerSubOrderSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     producer = ProducerSerializer(read_only=True)
     producer_contact_email = serializers.CharField(source="producer.contact_email", read_only=True)
     producer_contact_phone = serializers.CharField(source="producer.phone", read_only=True)
@@ -399,6 +472,13 @@ class ProducerSubOrderSerializer(serializers.ModelSerializer):
 
 
 class OrderItemSerializer(serializers.ModelSerializer):
+    """
+    Documents the `OrderItemSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     product_id = serializers.IntegerField(source="product.id", read_only=True)
 
     class Meta:
@@ -416,6 +496,13 @@ class OrderItemSerializer(serializers.ModelSerializer):
 
 
 class OrderSummarySerializer(serializers.ModelSerializer):
+    """
+    Documents the `OrderSummarySerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     producer_names = serializers.SerializerMethodField()
     delivery_date_from = serializers.SerializerMethodField()
     delivery_date_to = serializers.SerializerMethodField()
@@ -456,6 +543,13 @@ class OrderSummarySerializer(serializers.ModelSerializer):
 
 
 class OrderDetailSerializer(serializers.ModelSerializer):
+    """
+    Documents the `OrderDetailSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     sub_orders = ProducerSubOrderSerializer(many=True, read_only=True)
     items = OrderItemSerializer(many=True, read_only=True)
 
@@ -485,6 +579,13 @@ class OrderDetailSerializer(serializers.ModelSerializer):
 
 
 class RecurringOrderTemplateItemSerializer(serializers.ModelSerializer):
+    """
+    Documents the `RecurringOrderTemplateItemSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     product_id = serializers.IntegerField(source="product.id", read_only=True)
     product_name = serializers.CharField(source="product.name", read_only=True)
     producer_id = serializers.IntegerField(source="product.producer.id", read_only=True)
@@ -514,6 +615,13 @@ class RecurringOrderTemplateItemSerializer(serializers.ModelSerializer):
 
 
 class RecurringOrderTemplateSerializer(serializers.ModelSerializer):
+    """
+    Documents the `RecurringOrderTemplateSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     items = RecurringOrderTemplateItemSerializer(many=True, read_only=True)
 
     class Meta:
@@ -537,6 +645,13 @@ class RecurringOrderTemplateSerializer(serializers.ModelSerializer):
 
 
 class RecurringOrderTemplateCreateSerializer(serializers.Serializer):
+    """
+    Documents the `RecurringOrderTemplateCreateSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     frequency = serializers.ChoiceField(choices=RecurringOrderTemplate.Frequency.choices, default="weekly")
     order_day = serializers.IntegerField(min_value=0, max_value=6)
     delivery_day = serializers.IntegerField(min_value=0, max_value=6)
@@ -557,6 +672,13 @@ class RecurringOrderTemplateCreateSerializer(serializers.Serializer):
 
 
 class RecurringOrderTemplateUpdateSerializer(serializers.Serializer):
+    """
+    Documents the `RecurringOrderTemplateUpdateSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     frequency = serializers.ChoiceField(
         choices=RecurringOrderTemplate.Frequency.choices, required=False
     )
@@ -568,6 +690,13 @@ class RecurringOrderTemplateUpdateSerializer(serializers.Serializer):
 
 
 class RecurringOrderInstanceOverrideItemInputSerializer(serializers.Serializer):
+    """
+    Documents the `RecurringOrderInstanceOverrideItemInputSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     product_id = serializers.IntegerField()
     quantity = serializers.DecimalField(
         max_digits=10,
@@ -577,6 +706,13 @@ class RecurringOrderInstanceOverrideItemInputSerializer(serializers.Serializer):
 
 
 class RecurringOrderInstanceOverrideSerializer(serializers.ModelSerializer):
+    """
+    Documents the `RecurringOrderInstanceOverrideSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     items = serializers.SerializerMethodField()
 
     class Meta:
@@ -595,6 +731,13 @@ class RecurringOrderInstanceOverrideSerializer(serializers.ModelSerializer):
 
 
 class RecurringOrderNextInstancePatchSerializer(serializers.Serializer):
+    """
+    Documents the `RecurringOrderNextInstancePatchSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     items = RecurringOrderInstanceOverrideItemInputSerializer(many=True)
 
     def validate_items(self, value):

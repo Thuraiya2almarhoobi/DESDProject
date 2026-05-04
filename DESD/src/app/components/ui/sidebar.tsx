@@ -1,3 +1,18 @@
+/**
+ * DESD Marketplace documentation.
+ *
+ * File role:
+ *   Provides the reusable sidebar component used by pages or layout shells.
+ *
+ * Frontend context:
+ *   Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ *
+ * Implementation notes:
+ *   Keep comments focused on state ownership, role-specific routing, API calls,
+ *   and non-obvious UI decisions. Styling-only class names are left uncommented
+ *   unless they communicate an important layout or accessibility choice.
+ */
+
 "use client";
 
 import * as React from "react";
@@ -25,10 +40,26 @@ import {
   TooltipTrigger,
 } from "./tooltip";
 
+/**
+ * SIDEBAR_COOKIE_NAME boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable sidebar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 const SIDEBAR_COOKIE_NAME = "sidebar_state";
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
 const SIDEBAR_WIDTH = "16rem";
 const SIDEBAR_WIDTH_MOBILE = "18rem";
+/**
+ * SIDEBAR_WIDTH_ICON boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable sidebar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 const SIDEBAR_WIDTH_ICON = "3rem";
 const SIDEBAR_KEYBOARD_SHORTCUT = "b";
 
@@ -42,6 +73,14 @@ type SidebarContextProps = {
   toggleSidebar: () => void;
 };
 
+/**
+ * SidebarContext boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable sidebar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 const SidebarContext = React.createContext<SidebarContextProps | null>(null);
 
 function useSidebar() {
@@ -53,6 +92,14 @@ function useSidebar() {
   return context;
 }
 
+/**
+ * SidebarProvider boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable sidebar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function SidebarProvider({
   defaultOpen = true,
   open: openProp,
@@ -151,6 +198,14 @@ function SidebarProvider({
   );
 }
 
+/**
+ * Sidebar boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable sidebar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function Sidebar({
   side = "left",
   variant = "sidebar",
@@ -253,6 +308,14 @@ function Sidebar({
   );
 }
 
+/**
+ * SidebarTrigger boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable sidebar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function SidebarTrigger({
   className,
   onClick,
@@ -279,6 +342,14 @@ function SidebarTrigger({
   );
 }
 
+/**
+ * SidebarRail boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable sidebar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
   const { toggleSidebar } = useSidebar();
 
@@ -304,6 +375,14 @@ function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
   );
 }
 
+/**
+ * SidebarInset boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable sidebar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function SidebarInset({ className, ...props }: React.ComponentProps<"main">) {
   return (
     <main
@@ -318,6 +397,14 @@ function SidebarInset({ className, ...props }: React.ComponentProps<"main">) {
   );
 }
 
+/**
+ * SidebarInput boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable sidebar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function SidebarInput({
   className,
   ...props
@@ -332,6 +419,14 @@ function SidebarInput({
   );
 }
 
+/**
+ * SidebarHeader boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable sidebar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function SidebarHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -343,6 +438,14 @@ function SidebarHeader({ className, ...props }: React.ComponentProps<"div">) {
   );
 }
 
+/**
+ * SidebarFooter boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable sidebar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function SidebarFooter({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -354,6 +457,14 @@ function SidebarFooter({ className, ...props }: React.ComponentProps<"div">) {
   );
 }
 
+/**
+ * SidebarSeparator boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable sidebar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function SidebarSeparator({
   className,
   ...props
@@ -368,6 +479,14 @@ function SidebarSeparator({
   );
 }
 
+/**
+ * SidebarContent boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable sidebar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function SidebarContent({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -382,6 +501,14 @@ function SidebarContent({ className, ...props }: React.ComponentProps<"div">) {
   );
 }
 
+/**
+ * SidebarGroup boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable sidebar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function SidebarGroup({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -393,11 +520,27 @@ function SidebarGroup({ className, ...props }: React.ComponentProps<"div">) {
   );
 }
 
+/**
+ * SidebarGroupLabel boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable sidebar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function SidebarGroupLabel({
   className,
   asChild = false,
   ...props
 }: React.ComponentProps<"div"> & { asChild?: boolean }) {
+/**
+ * Comp boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable sidebar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
   const Comp = asChild ? Slot : "div";
 
   return (
@@ -414,11 +557,27 @@ function SidebarGroupLabel({
   );
 }
 
+/**
+ * SidebarGroupAction boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable sidebar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function SidebarGroupAction({
   className,
   asChild = false,
   ...props
 }: React.ComponentProps<"button"> & { asChild?: boolean }) {
+/**
+ * Comp boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable sidebar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
   const Comp = asChild ? Slot : "button";
 
   return (
@@ -437,6 +596,14 @@ function SidebarGroupAction({
   );
 }
 
+/**
+ * SidebarGroupContent boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable sidebar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function SidebarGroupContent({
   className,
   ...props
@@ -451,6 +618,14 @@ function SidebarGroupContent({
   );
 }
 
+/**
+ * SidebarMenu boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable sidebar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function SidebarMenu({ className, ...props }: React.ComponentProps<"ul">) {
   return (
     <ul
@@ -462,6 +637,14 @@ function SidebarMenu({ className, ...props }: React.ComponentProps<"ul">) {
   );
 }
 
+/**
+ * SidebarMenuItem boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable sidebar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function SidebarMenuItem({ className, ...props }: React.ComponentProps<"li">) {
   return (
     <li
@@ -495,6 +678,14 @@ const sidebarMenuButtonVariants = cva(
   },
 );
 
+/**
+ * SidebarMenuButton boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable sidebar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function SidebarMenuButton({
   asChild = false,
   isActive = false,
@@ -508,6 +699,14 @@ function SidebarMenuButton({
   isActive?: boolean;
   tooltip?: string | React.ComponentProps<typeof TooltipContent>;
 } & VariantProps<typeof sidebarMenuButtonVariants>) {
+/**
+ * Comp boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable sidebar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
   const Comp = asChild ? Slot : "button";
   const { isMobile, state } = useSidebar();
 
@@ -545,6 +744,14 @@ function SidebarMenuButton({
   );
 }
 
+/**
+ * SidebarMenuAction boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable sidebar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function SidebarMenuAction({
   className,
   asChild = false,
@@ -554,6 +761,14 @@ function SidebarMenuAction({
   asChild?: boolean;
   showOnHover?: boolean;
 }) {
+/**
+ * Comp boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable sidebar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
   const Comp = asChild ? Slot : "button";
 
   return (
@@ -577,6 +792,14 @@ function SidebarMenuAction({
   );
 }
 
+/**
+ * SidebarMenuBadge boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable sidebar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function SidebarMenuBadge({
   className,
   ...props
@@ -599,6 +822,14 @@ function SidebarMenuBadge({
   );
 }
 
+/**
+ * SidebarMenuSkeleton boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable sidebar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function SidebarMenuSkeleton({
   className,
   showIcon = false,
@@ -637,6 +868,14 @@ function SidebarMenuSkeleton({
   );
 }
 
+/**
+ * SidebarMenuSub boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable sidebar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function SidebarMenuSub({ className, ...props }: React.ComponentProps<"ul">) {
   return (
     <ul
@@ -652,6 +891,14 @@ function SidebarMenuSub({ className, ...props }: React.ComponentProps<"ul">) {
   );
 }
 
+/**
+ * SidebarMenuSubItem boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable sidebar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function SidebarMenuSubItem({
   className,
   ...props
@@ -666,6 +913,14 @@ function SidebarMenuSubItem({
   );
 }
 
+/**
+ * SidebarMenuSubButton boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable sidebar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function SidebarMenuSubButton({
   asChild = false,
   size = "md",
@@ -677,6 +932,14 @@ function SidebarMenuSubButton({
   size?: "sm" | "md";
   isActive?: boolean;
 }) {
+/**
+ * Comp boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable sidebar component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
   const Comp = asChild ? Slot : "a";
 
   return (

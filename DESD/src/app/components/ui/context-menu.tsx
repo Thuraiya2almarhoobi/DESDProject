@@ -1,3 +1,18 @@
+/**
+ * DESD Marketplace documentation.
+ *
+ * File role:
+ *   Provides the reusable context-menu component used by pages or layout shells.
+ *
+ * Frontend context:
+ *   Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ *
+ * Implementation notes:
+ *   Keep comments focused on state ownership, role-specific routing, API calls,
+ *   and non-obvious UI decisions. Styling-only class names are left uncommented
+ *   unless they communicate an important layout or accessibility choice.
+ */
+
 "use client";
 
 import * as React from "react";
@@ -6,12 +21,28 @@ import { CheckIcon, ChevronRightIcon, CircleIcon } from "lucide-react";
 
 import { cn } from "./utils";
 
+/**
+ * ContextMenu boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable context-menu component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function ContextMenu({
   ...props
 }: React.ComponentProps<typeof ContextMenuPrimitive.Root>) {
   return <ContextMenuPrimitive.Root data-slot="context-menu" {...props} />;
 }
 
+/**
+ * ContextMenuTrigger boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable context-menu component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function ContextMenuTrigger({
   ...props
 }: React.ComponentProps<typeof ContextMenuPrimitive.Trigger>) {
@@ -20,6 +51,14 @@ function ContextMenuTrigger({
   );
 }
 
+/**
+ * ContextMenuGroup boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable context-menu component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function ContextMenuGroup({
   ...props
 }: React.ComponentProps<typeof ContextMenuPrimitive.Group>) {
@@ -28,6 +67,14 @@ function ContextMenuGroup({
   );
 }
 
+/**
+ * ContextMenuPortal boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable context-menu component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function ContextMenuPortal({
   ...props
 }: React.ComponentProps<typeof ContextMenuPrimitive.Portal>) {
@@ -36,12 +83,28 @@ function ContextMenuPortal({
   );
 }
 
+/**
+ * ContextMenuSub boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable context-menu component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function ContextMenuSub({
   ...props
 }: React.ComponentProps<typeof ContextMenuPrimitive.Sub>) {
   return <ContextMenuPrimitive.Sub data-slot="context-menu-sub" {...props} />;
 }
 
+/**
+ * ContextMenuRadioGroup boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable context-menu component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function ContextMenuRadioGroup({
   ...props
 }: React.ComponentProps<typeof ContextMenuPrimitive.RadioGroup>) {
@@ -53,6 +116,14 @@ function ContextMenuRadioGroup({
   );
 }
 
+/**
+ * ContextMenuSubTrigger boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable context-menu component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function ContextMenuSubTrigger({
   className,
   inset,
@@ -77,6 +148,14 @@ function ContextMenuSubTrigger({
   );
 }
 
+/**
+ * ContextMenuSubContent boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable context-menu component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function ContextMenuSubContent({
   className,
   ...props
@@ -93,6 +172,14 @@ function ContextMenuSubContent({
   );
 }
 
+/**
+ * ContextMenuContent boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable context-menu component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function ContextMenuContent({
   className,
   ...props
@@ -111,6 +198,14 @@ function ContextMenuContent({
   );
 }
 
+/**
+ * ContextMenuItem boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable context-menu component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function ContextMenuItem({
   className,
   inset,
@@ -134,6 +229,14 @@ function ContextMenuItem({
   );
 }
 
+/**
+ * ContextMenuCheckboxItem boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable context-menu component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function ContextMenuCheckboxItem({
   className,
   children,
@@ -160,6 +263,14 @@ function ContextMenuCheckboxItem({
   );
 }
 
+/**
+ * ContextMenuRadioItem boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable context-menu component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function ContextMenuRadioItem({
   className,
   children,
@@ -184,6 +295,14 @@ function ContextMenuRadioItem({
   );
 }
 
+/**
+ * ContextMenuLabel boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable context-menu component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function ContextMenuLabel({
   className,
   inset,
@@ -204,6 +323,14 @@ function ContextMenuLabel({
   );
 }
 
+/**
+ * ContextMenuSeparator boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable context-menu component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function ContextMenuSeparator({
   className,
   ...props
@@ -217,6 +344,14 @@ function ContextMenuSeparator({
   );
 }
 
+/**
+ * ContextMenuShortcut boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable context-menu component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function ContextMenuShortcut({
   className,
   ...props

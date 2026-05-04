@@ -1,3 +1,20 @@
+"""
+DESD Marketplace documentation.
+
+File role:
+    Documents expected behavior through automated tests for this app's public contract.
+
+Domain context:
+    Geospatial domain: postcode/location lookup, distance calculations, and map-friendly producer/customer coordinates.
+
+Implementation notes:
+    This header is intentionally descriptive so future sprint contributors can
+    understand why the file exists before reading individual classes/functions.
+    Inline comments below are reserved for business rules, permission checks,
+    external-service calls, or data transformations that are not obvious from
+    the code itself.
+"""
+
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -12,6 +29,13 @@ User = get_user_model()
 
 
 class GeoApiTests(APITestCase):
+    """
+    Documents the `GeoApiTests` boundary for this module.
+
+    The class belongs to the file role described above: Documents expected behavior through automated tests for this app's public contract.
+    It keeps related behavior grouped so the geospatial domain: postcode/location lookup, distance calculations, and map-friendly producer/customer coordinates.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     def setUp(self):
         self.customer = User.objects.create_user(username="geo_customer", password="pass1234")
         self.client = APIClient()

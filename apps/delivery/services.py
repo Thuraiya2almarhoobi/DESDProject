@@ -1,3 +1,20 @@
+"""
+DESD Marketplace documentation.
+
+File role:
+    Holds domain/service logic that should stay outside thin HTTP view classes.
+
+Domain context:
+    Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
+
+Implementation notes:
+    This header is intentionally descriptive so future sprint contributors can
+    understand why the file exists before reading individual classes/functions.
+    Inline comments below are reserved for business rules, permission checks,
+    external-service calls, or data transformations that are not obvious from
+    the code itself.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -25,11 +42,25 @@ TERMINAL_DELIVERY_STATUSES = {
 
 @dataclass(frozen=True)
 class StuartDeliveryResult:
+    """
+    Documents the `StuartDeliveryResult` boundary for this module.
+
+    The class belongs to the file role described above: Holds domain/service logic that should stay outside thin HTTP view classes.
+    It keeps related behavior grouped so the delivery domain: delivery jobs, tracking snapshots, stuart/simulation integration, and delivery api endpoints.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     delivery_job: DeliveryJob
     created: bool
 
 
 def _service_base_url() -> str:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_service_base_url` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
+    """
     base_url = (getattr(settings, "STUART_SERVICE_BASE_URL", "") or "").strip().rstrip("/")
     if not base_url:
         raise ValueError("Stuart delivery service is not configured.")
@@ -37,6 +68,16 @@ def _service_base_url() -> str:
 
 
 def _service_headers() -> dict[str, str]:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_service_headers` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
+    """
+    # Stuart credentials live in the delivery microservice. Django authenticates
+    # to that service with a shared internal token rather than sending the Stuart
+    # client secret from this app.
     headers = {"Content-Type": "application/json"}
     shared_secret = (getattr(settings, "STUART_SERVICE_SHARED_SECRET", "") or "").strip()
     if shared_secret:
@@ -45,14 +86,35 @@ def _service_headers() -> dict[str, str]:
 
 
 def _service_timeout() -> int:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_service_timeout` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
+    """
     return int(getattr(settings, "STUART_SERVICE_TIMEOUT_SECONDS", 15))
 
 
 def _simulation_enabled() -> bool:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_simulation_enabled` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
+    """
     return str(getattr(settings, "DELIVERY_SIMULATION_ENABLED", True)).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _simulation_total_seconds() -> int:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_simulation_total_seconds` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
+    """
     try:
         value = int(getattr(settings, "DELIVERY_SIMULATION_TOTAL_SECONDS", 120))
     except (TypeError, ValueError):
@@ -61,6 +123,16 @@ def _simulation_total_seconds() -> int:
 
 
 def _service_request(path: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_service_request` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
+    """
+    # All Stuart API calls are proxied through the local delivery service. That
+    # gives the marketplace one consistent error surface whether the real Stuart
+    # sandbox or the local simulation is being used.
     url = f"{_service_base_url()}{path}"
     try:
         response = requests.post(
@@ -89,6 +161,13 @@ def _service_request(path: str, payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def _path_lookup(payload: Any, *paths: tuple[str, ...]) -> Any:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_path_lookup` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
+    """
     for path in paths:
         current = payload
         found = True
@@ -104,6 +183,16 @@ def _path_lookup(payload: Any, *paths: tuple[str, ...]) -> Any:
 
 
 def _normalize_status(raw_status: str | None) -> str:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_normalize_status` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
+    """
+    # Stuart webhooks/service responses use several status names. Normalising
+    # them here keeps the frontend tracking timeline stable even if the provider
+    # sends `package_delivering`, `in_transit`, or `dropoff` style statuses.
     value = (raw_status or "").strip().lower()
     if not value:
         return DeliveryJob.Status.UNKNOWN
@@ -137,6 +226,13 @@ def _normalize_status(raw_status: str | None) -> str:
 
 
 def _parse_decimal(value: Any) -> Decimal | None:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_parse_decimal` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
+    """
     if value in (None, ""):
         return None
     try:
@@ -146,6 +242,13 @@ def _parse_decimal(value: Any) -> Decimal | None:
 
 
 def _parse_datetime_value(value: Any):
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_parse_datetime_value` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
+    """
     if not value or not isinstance(value, str):
         return None
     parsed = parse_datetime(value)
@@ -157,10 +260,24 @@ def _parse_datetime_value(value: Any):
 
 
 def _quantized_coordinate(value: float) -> Decimal:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_quantized_coordinate` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
+    """
     return Decimal(str(round(value, 7))).quantize(Decimal("0.0000001"))
 
 
 def _infer_city_from_address(address_line: str, postcode: str) -> str:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_infer_city_from_address` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
+    """
     parts = [part.strip() for part in (address_line or "").split(",") if part.strip()]
     if len(parts) >= 2:
         candidate = parts[-1]
@@ -171,6 +288,13 @@ def _infer_city_from_address(address_line: str, postcode: str) -> str:
 
 
 def _full_address(line1: str, line2: str, city: str, postcode: str) -> str:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_full_address` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
+    """
     normalized_parts: list[str] = []
     for raw_part in [line1, line2, city, postcode.upper() if postcode else postcode]:
         part = (raw_part or "").strip()
@@ -183,6 +307,16 @@ def _full_address(line1: str, line2: str, city: str, postcode: str) -> str:
 
 
 def _enrich_snapshot_with_coordinates(snapshot: dict[str, Any]) -> dict[str, Any]:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_enrich_snapshot_with_coordinates` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
+    """
+    # The map UI needs coordinates, but order/profile records often store only
+    # postcodes. Enrichment keeps original address data while adding map-ready
+    # lat/lng when the postcode database/fallback can resolve it.
     enriched = dict(snapshot)
     postcode = str(enriched.get("postcode") or "")
     coordinates = get_postcode_coordinates(postcode)
@@ -192,6 +326,13 @@ def _enrich_snapshot_with_coordinates(snapshot: dict[str, Any]) -> dict[str, Any
 
 
 def _snapshot_coordinates(snapshot: dict[str, Any]) -> tuple[float, float] | None:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_snapshot_coordinates` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
+    """
     if not isinstance(snapshot, dict):
         return None
     coordinates = snapshot.get("coordinates")
@@ -209,6 +350,13 @@ def _snapshot_coordinates(snapshot: dict[str, Any]) -> tuple[float, float] | Non
 
 
 def _producer_snapshot(sub_order: ProducerSubOrder) -> tuple[dict[str, Any], str, str]:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_producer_snapshot` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
+    """
     from apps.accounts.views import _bootstrap_producer_profile
 
     producer_user = sub_order.producer.user
@@ -235,6 +383,13 @@ def _producer_snapshot(sub_order: ProducerSubOrder) -> tuple[dict[str, Any], str
 
 
 def _customer_snapshot(sub_order: ProducerSubOrder) -> tuple[dict[str, Any], str, str]:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_customer_snapshot` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
+    """
     from apps.accounts.views import _bootstrap_customer_profile
 
     order = sub_order.order
@@ -258,10 +413,24 @@ def _customer_snapshot(sub_order: ProducerSubOrder) -> tuple[dict[str, Any], str
 
 
 def _client_reference(sub_order: ProducerSubOrder) -> str:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_client_reference` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
+    """
     return f"suborder:{sub_order.id}"
 
 
 def _build_create_payload(sub_order: ProducerSubOrder) -> dict[str, Any]:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_build_create_payload` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
+    """
     pickup_snapshot, producer_contact_name, producer_phone = _producer_snapshot(sub_order)
     dropoff_snapshot, customer_contact_name, customer_phone = _customer_snapshot(sub_order)
 
@@ -300,6 +469,13 @@ def _build_create_payload(sub_order: ProducerSubOrder) -> dict[str, Any]:
 
 
 def _mark_delivery_job_completed(delivery_job: DeliveryJob) -> None:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_mark_delivery_job_completed` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
+    """
     sub_order = delivery_job.sub_order
     if sub_order.status != Order.Status.DELIVERED:
         sub_order.status = Order.Status.DELIVERED
@@ -312,6 +488,13 @@ def _mark_delivery_job_completed(delivery_job: DeliveryJob) -> None:
 
 
 def _extract_raw_status(payload: dict[str, Any]) -> str:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_extract_raw_status` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
+    """
     for value in (
         _path_lookup(
             payload,
@@ -332,6 +515,13 @@ def _extract_raw_status(payload: dict[str, Any]) -> str:
 
 
 def _apply_payload_to_delivery_job(delivery_job: DeliveryJob, payload: dict[str, Any]) -> DeliveryJob:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_apply_payload_to_delivery_job` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
+    """
     raw_status = _extract_raw_status(payload)
     normalized_status = _normalize_status(raw_status)
     tracking_url = _path_lookup(
@@ -477,6 +667,13 @@ def _apply_payload_to_delivery_job(delivery_job: DeliveryJob, payload: dict[str,
 
 
 def _simulation_status_for_progress(progress: Decimal) -> str:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_simulation_status_for_progress` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
+    """
     if progress >= Decimal("1"):
         return DeliveryJob.Status.DELIVERED
     if progress < Decimal("0.10"):
@@ -489,16 +686,37 @@ def _simulation_status_for_progress(progress: Decimal) -> str:
 
 
 def _simulation_delivery_progress(progress: Decimal) -> Decimal:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_simulation_delivery_progress` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
+    """
     if progress <= Decimal("0.40"):
         return Decimal("0")
     return min(Decimal("1"), max(Decimal("0"), (progress - Decimal("0.40")) / Decimal("0.60")))
 
 
 def _is_simulation_generated(delivery_job: DeliveryJob) -> bool:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_is_simulation_generated` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
+    """
     return bool(isinstance(delivery_job.raw_payload, dict) and delivery_job.raw_payload.get("_simulation_generated"))
 
 
 def _provider_payload_has_coordinates(payload: Any) -> bool:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_provider_payload_has_coordinates` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
+    """
     return _path_lookup(
         payload,
         ("courier", "lat"),
@@ -509,6 +727,15 @@ def _provider_payload_has_coordinates(payload: Any) -> bool:
 
 
 def hydrate_delivery_job_snapshots(delivery_job: DeliveryJob) -> DeliveryJob:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `hydrate_delivery_job_snapshots` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
+    """
+    # Snapshot hydration is safe to run on read: it fills missing coordinates
+    # without changing the original address text captured at dispatch time.
     update_fields: list[str] = []
     pickup_snapshot = dict(delivery_job.pickup_address_snapshot or {})
     dropoff_snapshot = dict(delivery_job.dropoff_address_snapshot or {})
@@ -533,6 +760,16 @@ def hydrate_delivery_job_snapshots(delivery_job: DeliveryJob) -> DeliveryJob:
 
 @transaction.atomic
 def sync_delivery_job_simulation(delivery_job: DeliveryJob, now=None) -> DeliveryJob:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `sync_delivery_job_simulation` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
+    """
+    # In sandbox mode we generate a realistic courier progression between the
+    # producer pickup postcode and buyer dropoff postcode. If Stuart later sends
+    # real courier coordinates, provider data wins over simulated coordinates.
     delivery_job = hydrate_delivery_job_snapshots(delivery_job)
     if (
         delivery_job.provider != DeliveryJob.Provider.STUART
@@ -607,6 +844,13 @@ def sync_delivery_job_simulation(delivery_job: DeliveryJob, now=None) -> Deliver
 
 @transaction.atomic
 def restart_delivery_job_simulation(delivery_job: DeliveryJob) -> DeliveryJob:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `restart_delivery_job_simulation` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
+    """
     if delivery_job.provider != DeliveryJob.Provider.STUART or not delivery_job.test_mode:
         raise ValueError("Simulation restart is only available for Stuart sandbox deliveries.")
     if not _simulation_enabled():
@@ -643,6 +887,15 @@ def restart_delivery_job_simulation(delivery_job: DeliveryJob) -> DeliveryJob:
 
 
 def latest_delivery_job(sub_order: ProducerSubOrder, *, sync_for_read: bool = False) -> DeliveryJob | None:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `latest_delivery_job` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
+    """
+    # Read paths can request a simulation sync so the UI map appears live even
+    # without a real Stuart webhook stream during demos.
     delivery_job = sub_order.delivery_jobs.order_by("-created_at").first()
     if delivery_job is None:
         return None
@@ -652,6 +905,13 @@ def latest_delivery_job(sub_order: ProducerSubOrder, *, sync_for_read: bool = Fa
 
 
 def active_delivery_job(sub_order: ProducerSubOrder) -> DeliveryJob | None:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `active_delivery_job` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
+    """
     return (
         sub_order.delivery_jobs.exclude(status__in=TERMINAL_DELIVERY_STATUSES)
         .order_by("-created_at")
@@ -661,6 +921,16 @@ def active_delivery_job(sub_order: ProducerSubOrder) -> DeliveryJob | None:
 
 @transaction.atomic
 def dispatch_sub_order_to_stuart(sub_order: ProducerSubOrder) -> StuartDeliveryResult:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `dispatch_sub_order_to_stuart` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
+    """
+    # Each producer sub-order can have only one active courier job at a time.
+    # This prevents duplicate delivery bookings for the same supplier/customer
+    # leg.
     existing_active = active_delivery_job(sub_order)
     if existing_active is not None:
         raise ValueError("An active Stuart delivery already exists for this producer sub-order.")
@@ -674,6 +944,9 @@ def dispatch_sub_order_to_stuart(sub_order: ProducerSubOrder) -> StuartDeliveryR
     simulation_started_at = dispatched_at if test_mode and _simulation_enabled() else None
     simulation_duration_seconds = _simulation_total_seconds() if simulation_started_at else 0
 
+    # Persist both provider identifiers and address snapshots. Provider IDs are
+    # used for refresh/webhook matching; snapshots preserve the exact pickup and
+    # dropoff details used when the courier was booked.
     delivery_job = DeliveryJob.objects.create(
         sub_order=sub_order,
         provider=DeliveryJob.Provider.STUART,
@@ -704,6 +977,16 @@ def dispatch_sub_order_to_stuart(sub_order: ProducerSubOrder) -> StuartDeliveryR
 
 @transaction.atomic
 def refresh_delivery_job(delivery_job: DeliveryJob) -> DeliveryJob:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `refresh_delivery_job` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
+    """
+    # Manual refresh is useful when webhooks are delayed: it asks the delivery
+    # service for the current Stuart state and applies the same mapper used by
+    # webhook updates.
     if not delivery_job.provider_reference:
         raise ValueError("This Stuart delivery does not have a provider reference yet.")
     response_payload = _service_request(
@@ -722,6 +1005,13 @@ def refresh_delivery_job(delivery_job: DeliveryJob) -> DeliveryJob:
 
 @transaction.atomic
 def cancel_delivery_job(delivery_job: DeliveryJob) -> DeliveryJob:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `cancel_delivery_job` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
+    """
     if not delivery_job.provider_reference:
         raise ValueError("This Stuart delivery does not have a provider reference yet.")
     response_payload = _service_request(
@@ -736,16 +1026,39 @@ def cancel_delivery_job(delivery_job: DeliveryJob) -> DeliveryJob:
 
 
 def _extract_event_type(payload: dict[str, Any]) -> str:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_extract_event_type` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
+    """
     value = _path_lookup(payload, ("event",), ("type",), ("topic",))
     return str(value or "")
 
 
 def _extract_provider_event_id(payload: dict[str, Any]) -> str:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_extract_provider_event_id` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
+    """
     value = _path_lookup(payload, ("event_id",), ("details", "event", "id"), ("id",))
     return str(value or "")
 
 
 def _resolve_delivery_job_for_payload(payload: dict[str, Any]) -> DeliveryJob | None:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_resolve_delivery_job_for_payload` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
+    """
+    # Stuart payload shapes can vary by event. Try our own client reference
+    # first, then package id, then job id, from most stable to most provider-led.
     client_reference = str(
         _path_lookup(
             payload,
@@ -779,6 +1092,15 @@ def _resolve_delivery_job_for_payload(payload: dict[str, Any]) -> DeliveryJob | 
 
 @transaction.atomic
 def handle_stuart_webhook_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `handle_stuart_webhook_payload` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
+    """
+    # Webhooks are idempotent by provider_event_id so retries update the delivery
+    # once and then return a duplicate marker.
     delivery_job = _resolve_delivery_job_for_payload(payload)
     if delivery_job is None:
         raise ValueError("No matching Stuart delivery job was found for this webhook event.")

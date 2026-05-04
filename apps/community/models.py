@@ -1,3 +1,20 @@
+"""
+DESD Marketplace documentation.
+
+File role:
+    Defines persistent database models, relationships, and domain methods for this app.
+
+Domain context:
+    Community domain: community feedback, review policy, and URLs/views used by shared buyer-community workflows.
+
+Implementation notes:
+    This header is intentionally descriptive so future sprint contributors can
+    understand why the file exists before reading individual classes/functions.
+    Inline comments below are reserved for business rules, permission checks,
+    external-service calls, or data transformations that are not obvious from
+    the code itself.
+"""
+
 from django.conf import settings
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
@@ -7,6 +24,13 @@ from apps.catalog.models import Product
 
 
 class ProductReview(models.Model):
+    """
+    Documents the `ProductReview` boundary for this module.
+
+    The class belongs to the file role described above: Defines persistent database models, relationships, and domain methods for this app.
+    It keeps related behavior grouped so the community domain: community feedback, review policy, and urls/views used by shared buyer-community workflows.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     class ModerationStatus(models.TextChoices):
         PUBLISHED = "published", "Published"
         PENDING = "pending", "Pending moderation"

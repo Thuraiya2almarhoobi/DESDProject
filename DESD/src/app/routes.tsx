@@ -1,3 +1,18 @@
+/**
+ * DESD Marketplace documentation.
+ *
+ * File role:
+ *   Frontend source file for routes.
+ *
+ * Frontend context:
+ *   Frontend source module for the React/Vite application.
+ *
+ * Implementation notes:
+ *   Keep comments focused on state ownership, role-specific routing, API calls,
+ *   and non-obvious UI decisions. Styling-only class names are left uncommented
+ *   unless they communicate an important layout or accessibility choice.
+ */
+
 import { createBrowserRouter, Navigate } from 'react-router';
 import { AppShell } from './components/AppShell';
 import { AdminLayout } from './components/admin/AdminLayout';

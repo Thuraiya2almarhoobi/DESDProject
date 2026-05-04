@@ -1,3 +1,18 @@
+/**
+ * DESD Marketplace documentation.
+ *
+ * File role:
+ *   Provides the reusable tabs component used by pages or layout shells.
+ *
+ * Frontend context:
+ *   Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ *
+ * Implementation notes:
+ *   Keep comments focused on state ownership, role-specific routing, API calls,
+ *   and non-obvious UI decisions. Styling-only class names are left uncommented
+ *   unless they communicate an important layout or accessibility choice.
+ */
+
 "use client";
 
 import * as React from "react";
@@ -5,6 +20,14 @@ import * as TabsPrimitive from "@radix-ui/react-tabs";
 
 import { cn } from "./utils";
 
+/**
+ * Tabs boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable tabs component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function Tabs({
   className,
   ...props
@@ -18,6 +41,14 @@ function Tabs({
   );
 }
 
+/**
+ * TabsList boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable tabs component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function TabsList({
   className,
   ...props
@@ -34,6 +65,14 @@ function TabsList({
   );
 }
 
+/**
+ * TabsTrigger boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable tabs component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function TabsTrigger({
   className,
   ...props
@@ -50,6 +89,14 @@ function TabsTrigger({
   );
 }
 
+/**
+ * TabsContent boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable tabs component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function TabsContent({
   className,
   ...props

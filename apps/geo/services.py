@@ -1,3 +1,20 @@
+"""
+DESD Marketplace documentation.
+
+File role:
+    Holds domain/service logic that should stay outside thin HTTP view classes.
+
+Domain context:
+    Geospatial domain: postcode/location lookup, distance calculations, and map-friendly producer/customer coordinates.
+
+Implementation notes:
+    This header is intentionally descriptive so future sprint contributors can
+    understand why the file exists before reading individual classes/functions.
+    Inline comments below are reserved for business rules, permission checks,
+    external-service calls, or data transformations that are not obvious from
+    the code itself.
+"""
+
 import math
 from decimal import Decimal
 
@@ -27,10 +44,26 @@ FALLBACK_POSTCODE_COORDINATES = {
 
 
 def normalize_postcode(postcode: str) -> str:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `normalize_postcode` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Geospatial domain: postcode/location lookup, distance calculations, and map-friendly producer/customer coordinates.
+    """
     return "".join((postcode or "").upper().split())
 
 
 def get_postcode_coordinates(postcode: str) -> tuple[float, float] | None:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `get_postcode_coordinates` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Geospatial domain: postcode/location lookup, distance calculations, and map-friendly producer/customer coordinates.
+    """
+    # Prefer cached database coordinates, then seed known Bristol fallback
+    # postcodes into the database so demo/test runs are deterministic offline.
     normalized = normalize_postcode(postcode)
     if not normalized:
         return None
@@ -48,6 +81,15 @@ def get_postcode_coordinates(postcode: str) -> tuple[float, float] | None:
 
 
 def haversine_miles(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `haversine_miles` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Geospatial domain: postcode/location lookup, distance calculations, and map-friendly producer/customer coordinates.
+    """
+    # Haversine is enough for Bristol-area food-mile estimates and avoids
+    # calling a paid distance API for every marketplace/card render.
     radius_miles = 3958.8
     phi1 = math.radians(lat1)
     phi2 = math.radians(lat2)
@@ -60,6 +102,15 @@ def haversine_miles(lat1: float, lon1: float, lat2: float, lon2: float) -> float
 
 
 def get_producers_near_postcode(postcode: str, radius_miles: float = 20.0) -> dict:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `get_producers_near_postcode` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Geospatial domain: postcode/location lookup, distance calculations, and map-friendly producer/customer coordinates.
+    """
+    # Used by the "Near Me" page: resolve the buyer postcode once, then compare
+    # every active producer by straight-line food miles.
     customer_coords = get_postcode_coordinates(postcode)
     if not customer_coords:
         return {"postcode": postcode, "radius_miles": radius_miles, "producers": []}
@@ -96,6 +147,15 @@ def get_producers_near_postcode(postcode: str, radius_miles: float = 20.0) -> di
 
 
 def get_user_default_postcode(user) -> str:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `get_user_default_postcode` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Geospatial domain: postcode/location lookup, distance calculations, and map-friendly producer/customer coordinates.
+    """
+    # Role-specific profiles store their address relation under different field
+    # names; this helper gives the rest of the app one postcode lookup path.
     if not user or not getattr(user, "is_authenticated", False):
         return ""
 
@@ -130,6 +190,15 @@ def get_user_default_postcode(user) -> str:
 
 
 def get_cart_food_miles(user, postcode: str | None = None) -> dict:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `get_cart_food_miles` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Geospatial domain: postcode/location lookup, distance calculations, and map-friendly producer/customer coordinates.
+    """
+    # Cart food miles are grouped by producer because multi-producer checkout
+    # needs to show where each supplier is coming from.
     cart = get_or_create_cart(user)
     customer_postcode = postcode or get_user_default_postcode(user)
     customer_coords = get_postcode_coordinates(customer_postcode)

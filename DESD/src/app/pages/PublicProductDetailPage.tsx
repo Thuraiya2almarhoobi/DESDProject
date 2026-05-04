@@ -1,3 +1,18 @@
+/**
+ * DESD Marketplace documentation.
+ *
+ * File role:
+ *   Implements the PublicProductDetailPage browser route and coordinates the UI state for that screen.
+ *
+ * Frontend context:
+ *   Route-level React page layer: one component per main browser page or role-specific workspace.
+ *
+ * Implementation notes:
+ *   Keep comments focused on state ownership, role-specific routing, API calls,
+ *   and non-obvious UI decisions. Styling-only class names are left uncommented
+ *   unless they communicate an important layout or accessibility choice.
+ */
+
 import { useEffect, useState } from 'react';
 import { ArrowLeft, ArrowRight, AlertCircle, ChefHat, MapPin, Sprout, Star } from 'lucide-react';
 import { Link, useParams } from 'react-router';
@@ -12,6 +27,14 @@ import { Skeleton } from '../components/ui/skeleton';
 import { fetchPublicMarketplaceProductById } from '../services/productApi';
 import { Product } from '../types';
 
+/**
+ * ReviewStars boundary.
+ *
+ * This exported unit supports the file role: Implements the PublicProductDetailPage browser route and coordinates the UI state for that screen.
+ * It belongs to: Route-level React page layer: one component per main browser page or role-specific workspace.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function ReviewStars({ rating, iconClassName = 'size-4' }: { rating: number; iconClassName?: string }) {
   return (
     <div className="flex items-center">
@@ -34,6 +57,14 @@ function formatUnit(unit: string, quantity: number): string {
   return unit;
 }
 
+/**
+ * PublicProductDetailPage boundary.
+ *
+ * This exported unit supports the file role: Implements the PublicProductDetailPage browser route and coordinates the UI state for that screen.
+ * It belongs to: Route-level React page layer: one component per main browser page or role-specific workspace.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 export function PublicProductDetailPage() {
   const { id = '' } = useParams();
   const [product, setProduct] = useState<Product | null>(null);

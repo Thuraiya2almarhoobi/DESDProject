@@ -1,3 +1,18 @@
+/**
+ * DESD Marketplace documentation.
+ *
+ * File role:
+ *   Provides the reusable ProductMeta component used by pages or layout shells.
+ *
+ * Frontend context:
+ *   Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ *
+ * Implementation notes:
+ *   Keep comments focused on state ownership, role-specific routing, API calls,
+ *   and non-obvious UI decisions. Styling-only class names are left uncommented
+ *   unless they communicate an important layout or accessibility choice.
+ */
+
 import { MapPin, Calendar, Truck } from 'lucide-react';
 import { format, isThisWeek } from 'date-fns';
 
@@ -10,11 +25,19 @@ interface ProductMetaProps {
   compact?: boolean;
 }
 
+/**
+ * ProductMeta boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable ProductMeta component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 export function ProductMeta({ producerName, producerLocation, harvestDate, foodMiles, seasonalDates, compact = false }: ProductMetaProps) {
   const harvestDateObj = new Date(harvestDate);
   const harvestedThisWeek = isThisWeek(harvestDateObj);
   const foodMilesLabel = Number.isFinite(foodMiles) ? foodMiles.toFixed(2) : '0.00';
-  
+
   if (compact) {
     // Compact version for cards
     return (
@@ -26,8 +49,8 @@ export function ProductMeta({ producerName, producerLocation, harvestDate, foodM
         <div className="flex items-center gap-1">
           <Calendar className="size-3" />
           <span>
-            {harvestedThisWeek 
-              ? 'Harvested this week' 
+            {harvestedThisWeek
+              ? 'Harvested this week'
               : `Harvested ${format(harvestDateObj, 'MMM d')}`}
           </span>
         </div>

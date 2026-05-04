@@ -1,3 +1,18 @@
+/**
+ * DESD Marketplace documentation.
+ *
+ * File role:
+ *   Provides the reusable pagination component used by pages or layout shells.
+ *
+ * Frontend context:
+ *   Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ *
+ * Implementation notes:
+ *   Keep comments focused on state ownership, role-specific routing, API calls,
+ *   and non-obvious UI decisions. Styling-only class names are left uncommented
+ *   unless they communicate an important layout or accessibility choice.
+ */
+
 import * as React from "react";
 import {
   ChevronLeftIcon,
@@ -8,6 +23,14 @@ import {
 import { cn } from "./utils";
 import { Button, buttonVariants } from "./button";
 
+/**
+ * Pagination boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable pagination component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function Pagination({ className, ...props }: React.ComponentProps<"nav">) {
   return (
     <nav
@@ -20,6 +43,14 @@ function Pagination({ className, ...props }: React.ComponentProps<"nav">) {
   );
 }
 
+/**
+ * PaginationContent boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable pagination component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function PaginationContent({
   className,
   ...props
@@ -33,6 +64,14 @@ function PaginationContent({
   );
 }
 
+/**
+ * PaginationItem boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable pagination component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function PaginationItem({ ...props }: React.ComponentProps<"li">) {
   return <li data-slot="pagination-item" {...props} />;
 }
@@ -42,6 +81,14 @@ type PaginationLinkProps = {
 } & Pick<React.ComponentProps<typeof Button>, "size"> &
   React.ComponentProps<"a">;
 
+/**
+ * PaginationLink boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable pagination component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function PaginationLink({
   className,
   isActive,
@@ -65,6 +112,14 @@ function PaginationLink({
   );
 }
 
+/**
+ * PaginationPrevious boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable pagination component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function PaginationPrevious({
   className,
   ...props
@@ -82,6 +137,14 @@ function PaginationPrevious({
   );
 }
 
+/**
+ * PaginationNext boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable pagination component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function PaginationNext({
   className,
   ...props
@@ -99,6 +162,14 @@ function PaginationNext({
   );
 }
 
+/**
+ * PaginationEllipsis boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable pagination component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function PaginationEllipsis({
   className,
   ...props

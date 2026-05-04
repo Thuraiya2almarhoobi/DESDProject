@@ -1,8 +1,32 @@
+"""
+DESD Marketplace documentation.
+
+File role:
+    Defines persistent database models, relationships, and domain methods for this app.
+
+Domain context:
+    Content domain: recipes, farm stories, saved recipe feeds, and AI-assisted producer content generation.
+
+Implementation notes:
+    This header is intentionally descriptive so future sprint contributors can
+    understand why the file exists before reading individual classes/functions.
+    Inline comments below are reserved for business rules, permission checks,
+    external-service calls, or data transformations that are not obvious from
+    the code itself.
+"""
+
 from django.conf import settings
 from django.db import models
 
 
 class Recipe(models.Model):
+    """
+    Documents the `Recipe` boundary for this module.
+
+    The class belongs to the file role described above: Defines persistent database models, relationships, and domain methods for this app.
+    It keeps related behavior grouped so the content domain: recipes, farm stories, saved recipe feeds, and ai-assisted producer content generation.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     producer = models.ForeignKey(
         "orders.Producer", on_delete=models.CASCADE, related_name="recipes"
     )
@@ -25,6 +49,13 @@ class Recipe(models.Model):
 
 
 class RecipeProduct(models.Model):
+    """
+    Documents the `RecipeProduct` boundary for this module.
+
+    The class belongs to the file role described above: Defines persistent database models, relationships, and domain methods for this app.
+    It keeps related behavior grouped so the content domain: recipes, farm stories, saved recipe feeds, and ai-assisted producer content generation.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     recipe = models.ForeignKey(Recipe, on_delete=models.CASCADE, related_name="recipe_products")
     product = models.ForeignKey("orders.Product", on_delete=models.CASCADE, related_name="product_recipes")
 
@@ -35,6 +66,13 @@ class RecipeProduct(models.Model):
 
 
 class FarmStory(models.Model):
+    """
+    Documents the `FarmStory` boundary for this module.
+
+    The class belongs to the file role described above: Defines persistent database models, relationships, and domain methods for this app.
+    It keeps related behavior grouped so the content domain: recipes, farm stories, saved recipe feeds, and ai-assisted producer content generation.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     producer = models.ForeignKey(
         "orders.Producer", on_delete=models.CASCADE, related_name="farm_stories"
     )
@@ -55,6 +93,13 @@ class FarmStory(models.Model):
 
 
 class SavedRecipe(models.Model):
+    """
+    Documents the `SavedRecipe` boundary for this module.
+
+    The class belongs to the file role described above: Defines persistent database models, relationships, and domain methods for this app.
+    It keeps related behavior grouped so the content domain: recipes, farm stories, saved recipe feeds, and ai-assisted producer content generation.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="saved_recipes")
     recipe = models.ForeignKey(Recipe, on_delete=models.CASCADE, related_name="saved_by_users")
     created_at = models.DateTimeField(auto_now_add=True)
@@ -64,6 +109,13 @@ class SavedRecipe(models.Model):
 
 
 class GeneratedContentSuggestion(models.Model):
+    """
+    Documents the `GeneratedContentSuggestion` boundary for this module.
+
+    The class belongs to the file role described above: Defines persistent database models, relationships, and domain methods for this app.
+    It keeps related behavior grouped so the content domain: recipes, farm stories, saved recipe feeds, and ai-assisted producer content generation.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     class ContentType(models.TextChoices):
         RECIPE = "recipe", "Recipe"
         STORY = "story", "Farm story"

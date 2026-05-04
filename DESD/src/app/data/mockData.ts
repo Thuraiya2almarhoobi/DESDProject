@@ -1,3 +1,18 @@
+/**
+ * DESD Marketplace documentation.
+ *
+ * File role:
+ *   Frontend source file for mockData.
+ *
+ * Frontend context:
+ *   Static/mock data layer used by demos, fallbacks, and local development fixtures.
+ *
+ * Implementation notes:
+ *   Keep comments focused on state ownership, role-specific routing, API calls,
+ *   and non-obvious UI decisions. Styling-only class names are left uncommented
+ *   unless they communicate an important layout or accessibility choice.
+ */
+
 import { Product, Producer, User, Order, CommissionRecord } from '../types';
 
 // Mock Users

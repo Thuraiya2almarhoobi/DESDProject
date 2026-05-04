@@ -1,3 +1,20 @@
+"""
+DESD Marketplace documentation.
+
+File role:
+    Exposes recurring-order HTTP endpoints and converts scheduling service results into API responses.
+
+Domain context:
+    Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+
+Implementation notes:
+    This header is intentionally descriptive so future sprint contributors can
+    understand why the file exists before reading individual classes/functions.
+    Inline comments below are reserved for business rules, permission checks,
+    external-service calls, or data transformations that are not obvious from
+    the code itself.
+"""
+
 from __future__ import annotations
 
 from dataclasses import asdict
@@ -34,6 +51,13 @@ from .serializers import (
 
 
 def _template_payload(template: RecurringOrderTemplate) -> dict:
+    """
+    Helper for the file role: Exposes recurring-order HTTP endpoints and converts scheduling service results into API responses.
+
+    `_template_payload` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
     payload = RecurringOrderTemplateSerializer(template).data
     payload["alerts"] = build_template_alerts(template)
     next_override = (

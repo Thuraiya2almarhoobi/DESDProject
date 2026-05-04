@@ -1,3 +1,20 @@
+"""
+DESD Marketplace documentation.
+
+File role:
+    Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+Domain context:
+    Accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+
+Implementation notes:
+    This header is intentionally descriptive so future sprint contributors can
+    understand why the file exists before reading individual classes/functions.
+    Inline comments below are reserved for business rules, permission checks,
+    external-service calls, or data transformations that are not obvious from
+    the code itself.
+"""
+
 from __future__ import annotations
 
 import logging
@@ -92,6 +109,13 @@ class LoginUserThrottle(UserRateThrottle):
 
 
 def _get_client_ip(request) -> str:
+    """
+    Helper for the file role: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+    `_get_client_ip` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    """
     forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
     if forwarded_for:
         return forwarded_for.split(",")[0].strip()
@@ -99,10 +123,26 @@ def _get_client_ip(request) -> str:
 
 
 def _get_user_agent(request) -> str:
+    """
+    Helper for the file role: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+    `_get_user_agent` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    """
     return (request.META.get("HTTP_USER_AGENT", "") or "")[:512]
 
 
 def _resolve_failed_login_context(email: str, password: str):
+    """
+    Helper for the file role: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+    `_resolve_failed_login_context` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    """
+    # Keep the public login response safe, but still record whether the failure
+    # was a missing account, inactive user, or wrong password for admin audit.
     normalized_email = UserModel.objects.normalize_email(email or "")
     if not normalized_email:
         return None, "invalid_credentials"
@@ -118,6 +158,13 @@ def _resolve_failed_login_context(email: str, password: str):
 
 
 def _record_login_attempt(request, *, email: str, user, success: bool, reason: str = ""):
+    """
+    Helper for the file role: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+    `_record_login_attempt` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    """
     LoginAttempt.objects.create(
         email=UserModel.objects.normalize_email(email or ""),
         user=user,
@@ -129,6 +176,15 @@ def _record_login_attempt(request, *, email: str, user, success: bool, reason: s
 
 
 def _build_auth_payload(user, *, remember_me: bool = False):
+    """
+    Helper for the file role: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+    `_build_auth_payload` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    """
+    # SimpleJWT is preferred for API clients. The fallback keeps local/demo
+    # environments usable if the optional dependency is missing.
     if RefreshToken is None:
         return {
             "access": "",
@@ -151,10 +207,24 @@ def _build_auth_payload(user, *, remember_me: bool = False):
 
 
 def _get_user_profile(user):
+    """
+    Helper for the file role: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+    `_get_user_profile` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    """
     return _get_or_create_editable_profile(user, ensure_exists=False)
 
 
 def _infer_city_from_address(address_line: str) -> str:
+    """
+    Helper for the file role: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+    `_infer_city_from_address` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    """
     parts = [part.strip() for part in (address_line or "").split(",") if part.strip()]
     if len(parts) >= 2:
         return parts[-1]
@@ -162,6 +232,13 @@ def _infer_city_from_address(address_line: str) -> str:
 
 
 def _infer_display_name_from_email(email: str) -> str:
+    """
+    Helper for the file role: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+    `_infer_display_name_from_email` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    """
     local_part = (email or "user").split("@")[0]
     chunks = [chunk for chunk in re.split(r"[._-]+", local_part) if chunk]
     if not chunks:
@@ -170,10 +247,29 @@ def _infer_display_name_from_email(email: str) -> str:
 
 
 def _preferred_address_for_user(user):
+    """
+    Helper for the file role: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+    `_preferred_address_for_user` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    """
+    # Account, checkout, "near me", and header postcode displays all prefer the
+    # same default address so location behaviour stays consistent across pages.
     return user.addresses.filter(is_default=True).first() or user.addresses.order_by("id").first()
 
 
 def _bootstrap_customer_profile(user):
+    """
+    Helper for the file role: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+    `_bootstrap_customer_profile` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    """
+    # Earlier sprint data sometimes exists only in `apps.orders.CustomerProfile`.
+    # Bootstrapping migrates enough data into the editable accounts profile so
+    # the Account page does not show "No editable profile exists".
     profile = CustomerProfile.objects.filter(user=user).first()
     if profile is not None:
         return profile
@@ -201,6 +297,16 @@ def _bootstrap_customer_profile(user):
 
 
 def _bootstrap_producer_profile(user):
+    """
+    Helper for the file role: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+    `_bootstrap_producer_profile` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    """
+    # Producer users may also pre-date the accounts profile table. This bridge
+    # keeps their dashboard/account editing working without changing the older
+    # orders-domain producer record.
     profile = ProducerProfile.objects.filter(user=user).first()
     if profile is not None:
         return profile
@@ -233,6 +339,13 @@ def _bootstrap_producer_profile(user):
 
 
 def _get_or_create_editable_profile(user, *, ensure_exists: bool):
+    """
+    Helper for the file role: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+    `_get_or_create_editable_profile` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    """
     profile_model = PROFILE_MODEL_BY_ROLE.get(user.role)
     if profile_model is None:
         return None
@@ -249,6 +362,13 @@ def _get_or_create_editable_profile(user, *, ensure_exists: bool):
 
 
 def _build_me_payload(request):
+    """
+    Helper for the file role: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+    `_build_me_payload` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
+    """
     user = request.user
     profile_instance = _get_or_create_editable_profile(user, ensure_exists=True)
     profile_serializer = PROFILE_SERIALIZER_BY_ROLE.get(user.role)
@@ -273,6 +393,9 @@ class BaseRegistrationView(APIView):
     serializer_class = None
 
     def post(self, request):
+        # Registration is role-specific at the serializer level, but the API
+        # response is unified: create the user/profile, attempt confirmation
+        # email delivery, then return auth tokens so the UI can sign in directly.
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
@@ -374,6 +497,8 @@ class VerifyEmailView(APIView):
     permission_classes = (AllowAny,)
 
     def post(self, request):
+        # Tokens are URL-decoded because email clients may escape the signed
+        # value when it is embedded in the verification link.
         serializer = VerifyEmailSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         token = unquote(serializer.validated_data["token"])
@@ -406,6 +531,9 @@ class PasswordResetRequestView(APIView):
     throttle_classes = (RegisterAnonThrottle, RegisterUserThrottle)
 
     def post(self, request):
+        # Always return the same message whether the email exists or not. This
+        # prevents account enumeration while still sending a real reset link for
+        # registered addresses when SMTP is configured.
         serializer = PasswordResetRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         email = serializer.validated_data["email"]
@@ -433,6 +561,8 @@ class PasswordResetConfirmView(APIView):
     throttle_classes = (RegisterAnonThrottle, RegisterUserThrottle)
 
     def post(self, request):
+        # Password reset reuses the same complexity rules as registration so
+        # recovered accounts cannot be weakened after the initial sign-up.
         serializer = PasswordResetConfirmSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         token = unquote(serializer.validated_data["token"])
@@ -480,6 +610,8 @@ class MeView(APIView):
         return Response(_build_me_payload(request), status=status.HTTP_200_OK)
 
     def patch(self, request):
+        # Profile editing is allowed, role mutation is not. Role changes affect
+        # RBAC, dashboards, and ordering permissions, so they remain staff-only.
         if "role" in request.data or "user" in request.data:
             return Response(
                 {"detail": "Changing user role is not allowed."},
@@ -533,6 +665,9 @@ class ImageUploadView(APIView):
     parser_classes = (MultiPartParser, FormParser)
 
     def post(self, request):
+        # The upload endpoint keeps validation deliberately small and explicit:
+        # only image MIME types, predictable scopes, and a 5 MB cap are accepted
+        # before the file is written to configured Django storage.
         upload = request.FILES.get("image")
         if upload is None:
             return Response(

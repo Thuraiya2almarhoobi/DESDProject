@@ -1,3 +1,18 @@
+/**
+ * DESD Marketplace documentation.
+ *
+ * File role:
+ *   Implements the RegisterPage browser route and coordinates the UI state for that screen.
+ *
+ * Frontend context:
+ *   Route-level React page layer: one component per main browser page or role-specific workspace.
+ *
+ * Implementation notes:
+ *   Keep comments focused on state ownership, role-specific routing, API calls,
+ *   and non-obvious UI decisions. Styling-only class names are left uncommented
+ *   unless they communicate an important layout or accessibility choice.
+ */
+
 import { Eye, EyeOff } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
@@ -10,6 +25,14 @@ import '../../styles/marketing-auth.css';
 
 type RegisterRole = Exclude<UserRole, 'ADMIN'>;
 
+/**
+ * PASSWORD_MIN_LENGTH boundary.
+ *
+ * This exported unit supports the file role: Implements the RegisterPage browser route and coordinates the UI state for that screen.
+ * It belongs to: Route-level React page layer: one component per main browser page or role-specific workspace.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 const PASSWORD_MIN_LENGTH = 10;
 
 const roleOptions: Array<{ value: RegisterRole; label: string; icon: string; description: string }> = [
@@ -27,6 +50,14 @@ function isRegisterRole(value: string): value is RegisterRole {
 
 type PasswordStrength = 'Weak' | 'Medium' | 'Strong';
 
+/**
+ * RegisterPage boundary.
+ *
+ * This exported unit supports the file role: Implements the RegisterPage browser route and coordinates the UI state for that screen.
+ * It belongs to: Route-level React page layer: one component per main browser page or role-specific workspace.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 export function RegisterPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();

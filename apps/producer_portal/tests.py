@@ -1,3 +1,20 @@
+"""
+DESD Marketplace documentation.
+
+File role:
+    Documents expected behavior through automated tests for this app's public contract.
+
+Domain context:
+    Producer portal domain: producer inventory, dashboard summaries, order management, and producer-facing APIs.
+
+Implementation notes:
+    This header is intentionally descriptive so future sprint contributors can
+    understand why the file exists before reading individual classes/functions.
+    Inline comments below are reserved for business rules, permission checks,
+    external-service calls, or data transformations that are not obvious from
+    the code itself.
+"""
+
 from __future__ import annotations
 
 from calendar import month_abbr
@@ -24,6 +41,13 @@ User = get_user_model()
 
 
 class ProducerPortalCriticalTestCases(APITestCase):
+    """
+    Documents the `ProducerPortalCriticalTestCases` boundary for this module.
+
+    The class belongs to the file role described above: Documents expected behavior through automated tests for this app's public contract.
+    It keeps related behavior grouped so the producer portal domain: producer inventory, dashboard summaries, order management, and producer-facing apis.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     def setUp(self):
         self.producer = User.objects.create_user(
             username="producer_user",

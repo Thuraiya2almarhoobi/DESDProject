@@ -1,3 +1,20 @@
+"""
+DESD Marketplace documentation.
+
+File role:
+    Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+Domain context:
+    Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+
+Implementation notes:
+    This header is intentionally descriptive so future sprint contributors can
+    understand why the file exists before reading individual classes/functions.
+    Inline comments below are reserved for business rules, permission checks,
+    external-service calls, or data transformations that are not obvious from
+    the code itself.
+"""
+
 from datetime import date
 from decimal import Decimal, InvalidOperation, ROUND_CEILING
 
@@ -47,6 +64,13 @@ FALSE_VALUES = {"0", "false", "no", "off"}
 
 
 def _filter_order_products_by_effective_availability(queryset, allowed_availabilities: set[str]):
+    """
+    Helper for the file role: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+    `_filter_order_products_by_effective_availability` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
     matching_ids = []
     for product in queryset:
         if product.effective_availability() in allowed_availabilities:
@@ -55,6 +79,13 @@ def _filter_order_products_by_effective_availability(queryset, allowed_availabil
 
 
 def _parse_quantity(value) -> Decimal:
+    """
+    Helper for the file role: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+    `_parse_quantity` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
     try:
         quantity = Decimal(str(value))
     except (InvalidOperation, TypeError):
@@ -65,6 +96,13 @@ def _parse_quantity(value) -> Decimal:
 
 
 def _parse_boolean(value: str | None) -> bool | None:
+    """
+    Helper for the file role: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+    `_parse_boolean` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
     if value is None:
         return None
     normalized = value.strip().lower()
@@ -76,6 +114,13 @@ def _parse_boolean(value: str | None) -> bool | None:
 
 
 def _parse_decimal(value: str | None) -> Decimal | None:
+    """
+    Helper for the file role: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+    `_parse_decimal` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
     if value is None:
         return None
     try:
@@ -85,12 +130,26 @@ def _parse_decimal(value: str | None) -> Decimal | None:
 
 
 def _quantity_cap_for_user_and_stock(user, stock_quantity: Decimal) -> Decimal:
+    """
+    Helper for the file role: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+    `_quantity_cap_for_user_and_stock` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
     if getattr(user, "role", None) in {User.Role.COMMUNITY, User.Role.RESTAURANT}:
         return stock_quantity
     return min(MAX_ORDER_ITEM_QUANTITY, stock_quantity)
 
 
 def _enforce_cart_quantity_cap(quantity: Decimal, *, user, stock_quantity: Decimal) -> None:
+    """
+    Helper for the file role: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+    `_enforce_cart_quantity_cap` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
     if quantity > _quantity_cap_for_user_and_stock(user, stock_quantity):
         raise ValueError(f"Maximum quantity per product is {MAX_ORDER_ITEM_QUANTITY.quantize(Decimal('1'))}.")
 
@@ -105,6 +164,13 @@ PRODUCER_SUBORDER_ALLOWED_TRANSITIONS = {
 
 
 def _customer_name_for_order(order: Order) -> str:
+    """
+    Helper for the file role: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+    `_customer_name_for_order` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
     profile = getattr(order.customer, "orders_customer_profile", None)
     if profile and profile.full_name:
         return profile.full_name
@@ -115,11 +181,25 @@ def _customer_name_for_order(order: Order) -> str:
 
 
 def _allowed_next_statuses(current_status: str) -> list[str]:
+    """
+    Helper for the file role: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+    `_allowed_next_statuses` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
     allowed = sorted((str(value) for value in PRODUCER_SUBORDER_ALLOWED_TRANSITIONS.get(current_status, set())))
     return [str(current_status), *allowed]
 
 
 def _sync_parent_order_status(order: Order) -> None:
+    """
+    Helper for the file role: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+    `_sync_parent_order_status` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
     statuses = list(order.sub_orders.values_list("status", flat=True))
     if not statuses:
         return
@@ -143,6 +223,13 @@ def _sync_parent_order_status(order: Order) -> None:
 
 
 def _producer_portal_stock_units(quantity: Decimal) -> int:
+    """
+    Helper for the file role: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+    `_producer_portal_stock_units` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
     whole_units = quantity.to_integral_value()
     if quantity == whole_units:
         return int(whole_units)
@@ -152,6 +239,13 @@ def _producer_portal_stock_units(quantity: Decimal) -> int:
 
 
 def _deduct_producer_portal_stock_for_delivery(sub_order: ProducerSubOrder) -> None:
+    """
+    Helper for the file role: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+    `_deduct_producer_portal_stock_for_delivery` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
     payment_record = getattr(sub_order.order, "payment", None)
     if payment_record and bool((payment_record.raw_payload or {}).get("stock_reserved")):
         return
@@ -195,6 +289,13 @@ def _deduct_producer_portal_stock_for_delivery(sub_order: ProducerSubOrder) -> N
 
 
 def _producer_sub_order_payload(sub_order: ProducerSubOrder) -> dict:
+    """
+    Helper for the file role: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+    `_producer_sub_order_payload` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
     from apps.delivery.serializers import DeliveryJobSerializer
     from apps.delivery.services import latest_delivery_job
 

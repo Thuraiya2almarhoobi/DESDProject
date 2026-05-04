@@ -1,3 +1,18 @@
+/**
+ * DESD Marketplace documentation.
+ *
+ * File role:
+ *   Provides the CartContext React context/provider and exposes shared state to child components.
+ *
+ * Frontend context:
+ *   React context layer: owns cross-page state such as authentication and cart contents.
+ *
+ * Implementation notes:
+ *   Keep comments focused on state ownership, role-specific routing, API calls,
+ *   and non-obvious UI decisions. Styling-only class names are left uncommented
+ *   unless they communicate an important layout or accessibility choice.
+ */
+
 import React, {
   createContext,
   useCallback,
@@ -51,6 +66,14 @@ interface CartContextType {
   isLoading: boolean;
 }
 
+/**
+ * CartContext boundary.
+ *
+ * This exported unit supports the file role: Provides the CartContext React context/provider and exposes shared state to child components.
+ * It belongs to: React context layer: owns cross-page state such as authentication and cart contents.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 const CART_IMAGE_LIBRARY = [
@@ -172,6 +195,14 @@ function cartItemIdsFromApiCart(cart: ApiCart | null): string[] {
   return cart.groups.flatMap((group) => group.items.map((item) => String(item.cart_item_id)));
 }
 
+/**
+ * CartProvider boundary.
+ *
+ * This exported unit supports the file role: Provides the CartContext React context/provider and exposes shared state to child components.
+ * It belongs to: React context layer: owns cross-page state such as authentication and cart contents.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 export function CartProvider({ children }: { children: ReactNode }) {
   // Cart data is refreshed from Django whenever the signed-in user changes so
   // cross-role state does not leak between sessions.
@@ -218,6 +249,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, [refreshCart]);
 
   useEffect(() => {
+    // Keep selection in sync with server responses. Newly-added items are
+    // selected automatically for checkout, while deleted items are removed from
+    // selection so stale cart_item_ids are never submitted.
     const validIds = items.map((item) => item.cartItemId).filter((value): value is string => Boolean(value));
     const previousIds = previousCartItemIdsRef.current;
 
@@ -233,6 +267,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, [items]);
 
   const addToCartAndWait = useCallback(async (product: Product, quantity: number) => {
+    // Add-to-cart always goes through Django. The backend enforces buyer role,
+    // available stock, and max quantity before returning the updated cart.
     const productId = Number(product.id);
     if (!Number.isInteger(productId)) {
       toast.error('Invalid product selected.');
@@ -296,6 +332,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
   };
 
   const updateQuantity = (productId: string, quantity: number) => {
+    // Quantity edits reuse the cart item id returned by the server; product ids
+    // alone are not enough because the backend cart row is the record being
+    // patched.
     const cartItem = findApiCartItem(cart, productId);
     if (!cartItem) {
       return;
@@ -380,6 +419,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
   };
 
   const setCartItemSelection = (cartItemIds: string[], checked: boolean) => {
+    // Selected item ids are what allow checkout of only part of the cart, which
+    // is important for multi-producer orders where buyers may defer one supplier.
     setSelectedCartItemIds((previous) => {
       const next = new Set(previous);
       cartItemIds.forEach((cartItemId) => {
@@ -409,6 +450,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
   };
 
   const prepareSingleItemCheckout = useCallback(async (product: Product, quantity: number) => {
+    // "Buy now" is implemented by preparing exactly one selected cart item. It
+    // updates an existing cart row when possible rather than duplicating product
+    // lines, then the checkout page submits only that selected row.
     const productId = Number(product.id);
     if (!Number.isInteger(productId)) {
       toast.error('Invalid product selected.');
@@ -459,6 +503,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, [cart]);
 
   const undoLastAdd = () => {
+    // Undo mirrors the last successful add. If the product already existed in
+    // the cart, only the just-added quantity is removed rather than deleting the
+    // buyer's previous quantity.
     if (!lastAddedItem) {
       return;
     }
@@ -515,6 +562,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * useCart boundary.
+ *
+ * This exported unit supports the file role: Provides the CartContext React context/provider and exposes shared state to child components.
+ * It belongs to: React context layer: owns cross-page state such as authentication and cart contents.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 export function useCart() {
   const context = useContext(CartContext);
   if (!context) {

@@ -1,3 +1,20 @@
+"""
+DESD Marketplace documentation.
+
+File role:
+    Builds administrator-facing financial report APIs and CSV/reporting responses.
+
+Domain context:
+    Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+
+Implementation notes:
+    This header is intentionally descriptive so future sprint contributors can
+    understand why the file exists before reading individual classes/functions.
+    Inline comments below are reserved for business rules, permission checks,
+    external-service calls, or data transformations that are not obvious from
+    the code itself.
+"""
+
 from __future__ import annotations
 
 import csv
@@ -22,10 +39,24 @@ MONEY_Q = Decimal("0.01")
 
 
 def _money(value: Decimal) -> Decimal:
+    """
+    Helper for the file role: Builds administrator-facing financial report APIs and CSV/reporting responses.
+
+    `_money` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
     return value.quantize(MONEY_Q)
 
 
 def _parse_iso_date(raw: str | None, *, field_name: str) -> date:
+    """
+    Helper for the file role: Builds administrator-facing financial report APIs and CSV/reporting responses.
+
+    `_parse_iso_date` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
     if not raw:
         raise ValueError(f"{field_name} is required (YYYY-MM-DD).")
     try:
@@ -35,6 +66,13 @@ def _parse_iso_date(raw: str | None, *, field_name: str) -> date:
 
 
 def _normalize_status(raw_status: str) -> str:
+    """
+    Helper for the file role: Builds administrator-facing financial report APIs and CSV/reporting responses.
+
+    `_normalize_status` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
     status_map = {
         "completed": Order.Status.DELIVERED,
         "delivered": Order.Status.DELIVERED,
@@ -47,6 +85,16 @@ def _normalize_status(raw_status: str) -> str:
 
 
 def _report_queryset(start_date: date, end_date: date, producer_id: str | None, status_value: str | None):
+    """
+    Helper for the file role: Builds administrator-facing financial report APIs and CSV/reporting responses.
+
+    `_report_queryset` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
+    # TC-025 asks for a previous-two-weeks report with optional producer/status
+    # drilldowns. The shared queryset keeps list, detail, and CSV export filters
+    # consistent.
     queryset = (
         Order.objects.filter(created_at__date__gte=start_date, created_at__date__lte=end_date)
         .prefetch_related("sub_orders__producer", "payment")
@@ -60,6 +108,15 @@ def _report_queryset(start_date: date, end_date: date, producer_id: str | None, 
 
 
 def _order_breakdown(order: Order) -> dict:
+    """
+    Helper for the file role: Builds administrator-facing financial report APIs and CSV/reporting responses.
+
+    `_order_breakdown` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
+    # Multi-vendor orders are expanded into producer rows so the admin can audit
+    # the 5% commission and 95% payout per supplier, not only per buyer order.
     producer_breakdown = []
     for sub_order in order.sub_orders.select_related("producer").all():
         producer_breakdown.append(
@@ -94,6 +151,8 @@ class AdminCommissionReportAPIView(APIView):
     permission_classes = [IsAuthenticated, IsAdmin]
 
     def get(self, request):
+        # Main financial report endpoint: returns totals, per-order rows, and
+        # applied filters for the React admin dashboard charts and tables.
         try:
             start_date = _parse_iso_date(request.query_params.get("start"), field_name="start")
             end_date = _parse_iso_date(request.query_params.get("end"), field_name="end")
@@ -140,6 +199,8 @@ class AdminCommissionReportDetailAPIView(APIView):
     permission_classes = [IsAuthenticated, IsAdmin]
 
     def get(self, request, order_id: int):
+        # Detail endpoint mirrors the report row but includes payment reference
+        # and the explicit commission formula for test-case verification.
         order = get_object_or_404(
             Order.objects.prefetch_related("sub_orders__producer", "payment"),
             id=order_id,
@@ -172,6 +233,8 @@ class AdminCommissionReportExportCSVAPIView(APIView):
     permission_classes = [IsAuthenticated, IsAdmin]
 
     def get(self, request):
+        # CSV output is deliberately flat: one row per producer sub-order so it
+        # can be imported into spreadsheet/accounting tools without nested JSON.
         try:
             start_date = _parse_iso_date(request.query_params.get("start"), field_name="start")
             end_date = _parse_iso_date(request.query_params.get("end"), field_name="end")
@@ -226,6 +289,8 @@ class AdminCommissionMonthlySummaryAPIView(APIView):
     permission_classes = [IsAuthenticated, IsAdmin]
 
     def get(self, request):
+        # Monthly rows power the dashboard chart and prove that commission totals
+        # can be reviewed beyond the default two-week reporting window.
         year_raw = request.query_params.get("year")
         if not year_raw:
             return Response({"detail": "year is required."}, status=status.HTTP_400_BAD_REQUEST)
@@ -262,6 +327,8 @@ class AdminCommissionYTDSummaryAPIView(APIView):
     permission_classes = [IsAuthenticated, IsAdmin]
 
     def get(self, request):
+        # Year-to-date summary gives admins a fast sustainability/revenue total
+        # without downloading the full order-level report.
         year_raw = request.query_params.get("year")
         if not year_raw:
             return Response({"detail": "year is required."}, status=status.HTTP_400_BAD_REQUEST)

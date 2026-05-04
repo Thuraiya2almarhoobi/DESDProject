@@ -1,3 +1,18 @@
+/**
+ * DESD Marketplace documentation.
+ *
+ * File role:
+ *   Provides the reusable FarmLocationMap component used by pages or layout shells.
+ *
+ * Frontend context:
+ *   Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ *
+ * Implementation notes:
+ *   Keep comments focused on state ownership, role-specific routing, API calls,
+ *   and non-obvious UI decisions. Styling-only class names are left uncommented
+ *   unless they communicate an important layout or accessibility choice.
+ */
+
 import { MapPin, Navigation } from 'lucide-react';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
@@ -14,12 +29,20 @@ interface FarmLocationMapProps {
   foodMiles: number;
 }
 
-export function FarmLocationMap({ 
-  producerName, 
-  location, 
-  postcode, 
+/**
+ * FarmLocationMap boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable FarmLocationMap component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
+export function FarmLocationMap({
+  producerName,
+  location,
+  postcode,
   coordinates,
-  foodMiles 
+  foodMiles
 }: FarmLocationMapProps) {
   const embedUrl = getGoogleMapsEmbedUrl(coordinates, 12);
   const openInMapsUrl = getGoogleMapsSearchUrl(coordinates);
@@ -57,7 +80,7 @@ export function FarmLocationMap({
                   <p className="text-xs text-white/80 mt-1">{postcode}</p>
                 )}
               </div>
-              
+
               <Badge className="bg-green-600 hover:bg-green-700 border-0">
                 <Navigation className="size-3 mr-1" />
                 {foodMiles} miles

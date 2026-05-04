@@ -1,3 +1,20 @@
+"""
+DESD Marketplace documentation.
+
+File role:
+    Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+
+Domain context:
+    Payments domain: Stripe checkout, settlement records, commission capture, and payment-service integration.
+
+Implementation notes:
+    This header is intentionally descriptive so future sprint contributors can
+    understand why the file exists before reading individual classes/functions.
+    Inline comments below are reserved for business rules, permission checks,
+    external-service calls, or data transformations that are not obvious from
+    the code itself.
+"""
+
 from __future__ import annotations
 
 from decimal import Decimal
@@ -9,18 +26,46 @@ from .models import SettlementOrderLine, WeeklySettlement
 
 
 class StripeCheckoutSessionRequestSerializer(serializers.Serializer):
+    """
+    Documents the `StripeCheckoutSessionRequestSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the payments domain: stripe checkout, settlement records, commission capture, and payment-service integration.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     order_id = serializers.IntegerField(min_value=1)
 
 
 class StripeCheckoutSessionConfirmSerializer(serializers.Serializer):
+    """
+    Documents the `StripeCheckoutSessionConfirmSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the payments domain: stripe checkout, settlement records, commission capture, and payment-service integration.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     session_id = serializers.CharField(max_length=255)
 
 
 class StripeCheckoutCancelSerializer(serializers.Serializer):
+    """
+    Documents the `StripeCheckoutCancelSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the payments domain: stripe checkout, settlement records, commission capture, and payment-service integration.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     order_id = serializers.IntegerField(min_value=1)
 
 
 class SettlementOrderLineSerializer(serializers.ModelSerializer):
+    """
+    Documents the `SettlementOrderLineSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the payments domain: stripe checkout, settlement records, commission capture, and payment-service integration.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     order_number = serializers.CharField(source="order.order_number", read_only=True)
     delivery_date = serializers.DateTimeField(source="order.delivery_date", read_only=True)
 
@@ -39,6 +84,13 @@ class SettlementOrderLineSerializer(serializers.ModelSerializer):
 
 
 class WeeklySettlementSerializer(serializers.ModelSerializer):
+    """
+    Documents the `WeeklySettlementSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the payments domain: stripe checkout, settlement records, commission capture, and payment-service integration.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     lines = SettlementOrderLineSerializer(many=True, read_only=True)
     running_tax_year_total = serializers.SerializerMethodField()
     order_count = serializers.SerializerMethodField()

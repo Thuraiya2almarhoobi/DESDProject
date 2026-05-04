@@ -1,3 +1,18 @@
+/**
+ * DESD Marketplace documentation.
+ *
+ * File role:
+ *   Frontend source file for types.
+ *
+ * Frontend context:
+ *   Frontend source module for the React/Vite application.
+ *
+ * Implementation notes:
+ *   Keep comments focused on state ownership, role-specific routing, API calls,
+ *   and non-obvious UI decisions. Styling-only class names are left uncommented
+ *   unless they communicate an important layout or accessibility choice.
+ */
+
 // User and Auth Types
 export type UserRole = 'CUSTOMER' | 'PRODUCER' | 'COMMUNITY' | 'RESTAURANT' | 'ADMIN';
 export type CustomerType = 'standard' | 'community' | 'restaurant';

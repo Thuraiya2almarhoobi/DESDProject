@@ -1,3 +1,18 @@
+/**
+ * DESD Marketplace documentation.
+ *
+ * File role:
+ *   Provides the reusable LoadingSkeletons component used by pages or layout shells.
+ *
+ * Frontend context:
+ *   Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ *
+ * Implementation notes:
+ *   Keep comments focused on state ownership, role-specific routing, API calls,
+ *   and non-obvious UI decisions. Styling-only class names are left uncommented
+ *   unless they communicate an important layout or accessibility choice.
+ */
+
 import { Card, CardContent } from './ui/card';
 import { Skeleton } from './ui/skeleton';
 
@@ -6,6 +21,14 @@ interface LoadingSkeletonProps {
   cards?: number;
 }
 
+/**
+ * PageLoadingSkeleton boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable LoadingSkeletons component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 export function PageLoadingSkeleton({ rows = 3, cards = 3 }: LoadingSkeletonProps) {
   return (
     <div className="grid gap-5">
@@ -39,6 +62,14 @@ export function PageLoadingSkeleton({ rows = 3, cards = 3 }: LoadingSkeletonProp
   );
 }
 
+/**
+ * FeedLoadingSkeleton boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable LoadingSkeletons component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 export function FeedLoadingSkeleton({ rows = 4 }: Pick<LoadingSkeletonProps, 'rows'>) {
   return (
     <div className="grid gap-4">

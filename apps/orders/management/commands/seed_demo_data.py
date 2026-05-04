@@ -1,3 +1,20 @@
+"""
+DESD Marketplace documentation.
+
+File role:
+    Source module for the orders area.
+
+Domain context:
+    Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+
+Implementation notes:
+    This header is intentionally descriptive so future sprint contributors can
+    understand why the file exists before reading individual classes/functions.
+    Inline comments below are reserved for business rules, permission checks,
+    external-service calls, or data transformations that are not obvious from
+    the code itself.
+"""
+
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 
@@ -34,6 +51,13 @@ from apps.producer_portal.models import (
 
 
 class Command(BaseCommand):
+    """
+    Documents the `Command` boundary for this module.
+
+    The class belongs to the file role described above: Source module for the orders area.
+    It keeps related behavior grouped so the ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     help = "Seed demo users and marketplace data for orders/geo/content flows."
 
     def add_arguments(self, parser):

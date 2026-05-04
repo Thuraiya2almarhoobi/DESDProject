@@ -1,3 +1,20 @@
+"""
+DESD Marketplace documentation.
+
+File role:
+    Source module for the catalog area.
+
+Domain context:
+    Catalog domain: public product browsing, producer/product data serialization, reviews, and marketplace-facing catalog APIs.
+
+Implementation notes:
+    This header is intentionally descriptive so future sprint contributors can
+    understand why the file exists before reading individual classes/functions.
+    Inline comments below are reserved for business rules, permission checks,
+    external-service calls, or data transformations that are not obvious from
+    the code itself.
+"""
+
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -9,6 +26,13 @@ from apps.community.models import ProductReview
 
 
 class Command(BaseCommand):
+    """
+    Documents the `Command` boundary for this module.
+
+    The class belongs to the file role described above: Source module for the catalog area.
+    It keeps related behavior grouped so the catalog domain: public product browsing, producer/product data serialization, reviews, and marketplace-facing catalog apis.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     help = "Seed demo catalog, compliance, and review data for Sprint 1."
 
     def handle(self, *args, **options):

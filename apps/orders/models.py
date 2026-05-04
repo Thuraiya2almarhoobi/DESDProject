@@ -1,3 +1,20 @@
+"""
+DESD Marketplace documentation.
+
+File role:
+    Defines persistent database models, relationships, and domain methods for this app.
+
+Domain context:
+    Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+
+Implementation notes:
+    This header is intentionally descriptive so future sprint contributors can
+    understand why the file exists before reading individual classes/functions.
+    Inline comments below are reserved for business rules, permission checks,
+    external-service calls, or data transformations that are not obvious from
+    the code itself.
+"""
+
 from decimal import Decimal
 from uuid import uuid4
 
@@ -10,10 +27,24 @@ from bristol_marketplace.seasonality import format_month_range, is_current_month
 
 
 def _generate_order_number() -> str:
+    """
+    Helper for the file role: Defines persistent database models, relationships, and domain methods for this app.
+
+    `_generate_order_number` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
     return f"ORD-{uuid4().hex[:10].upper()}"
 
 
 class Producer(models.Model):
+    """
+    Documents the `Producer` boundary for this module.
+
+    The class belongs to the file role described above: Defines persistent database models, relationships, and domain methods for this app.
+    It keeps related behavior grouped so the ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -38,6 +69,13 @@ class Producer(models.Model):
 
 
 class CustomerProfile(models.Model):
+    """
+    Documents the `CustomerProfile` boundary for this module.
+
+    The class belongs to the file role described above: Defines persistent database models, relationships, and domain methods for this app.
+    It keeps related behavior grouped so the ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="orders_customer_profile"
     )
@@ -52,6 +90,13 @@ class CustomerProfile(models.Model):
 
 
 class Product(models.Model):
+    """
+    Documents the `Product` boundary for this module.
+
+    The class belongs to the file role described above: Defines persistent database models, relationships, and domain methods for this app.
+    It keeps related behavior grouped so the ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     producer = models.ForeignKey(Producer, on_delete=models.CASCADE, related_name="products")
     name = models.CharField(max_length=255)
     category = models.CharField(max_length=120, blank=True)
@@ -109,6 +154,13 @@ class Product(models.Model):
 
 
 class Cart(models.Model):
+    """
+    Documents the `Cart` boundary for this module.
+
+    The class belongs to the file role described above: Defines persistent database models, relationships, and domain methods for this app.
+    It keeps related behavior grouped so the ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     customer = models.OneToOneField(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="cart"
     )
@@ -120,6 +172,13 @@ class Cart(models.Model):
 
 
 class CartItem(models.Model):
+    """
+    Documents the `CartItem` boundary for this module.
+
+    The class belongs to the file role described above: Defines persistent database models, relationships, and domain methods for this app.
+    It keeps related behavior grouped so the ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     cart = models.ForeignKey(Cart, on_delete=models.CASCADE, related_name="items")
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="cart_items")
     quantity = models.DecimalField(
@@ -147,6 +206,13 @@ class CartItem(models.Model):
 
 
 class Order(models.Model):
+    """
+    Documents the `Order` boundary for this module.
+
+    The class belongs to the file role described above: Defines persistent database models, relationships, and domain methods for this app.
+    It keeps related behavior grouped so the ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"
         CONFIRMED = "confirmed", "Confirmed"
@@ -197,6 +263,13 @@ class Order(models.Model):
 
 
 class ProducerSubOrder(models.Model):
+    """
+    Documents the `ProducerSubOrder` boundary for this module.
+
+    The class belongs to the file role described above: Defines persistent database models, relationships, and domain methods for this app.
+    It keeps related behavior grouped so the ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="sub_orders")
     producer = models.ForeignKey(Producer, on_delete=models.CASCADE, related_name="sub_orders")
     status = models.CharField(
@@ -222,6 +295,13 @@ class ProducerSubOrder(models.Model):
 
 
 class OrderItem(models.Model):
+    """
+    Documents the `OrderItem` boundary for this module.
+
+    The class belongs to the file role described above: Defines persistent database models, relationships, and domain methods for this app.
+    It keeps related behavior grouped so the ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="items")
     sub_order = models.ForeignKey(ProducerSubOrder, on_delete=models.CASCADE, related_name="items")
     product = models.ForeignKey(
@@ -243,6 +323,13 @@ class OrderItem(models.Model):
 
 
 class RecurringOrderTemplate(models.Model):
+    """
+    Documents the `RecurringOrderTemplate` boundary for this module.
+
+    The class belongs to the file role described above: Defines persistent database models, relationships, and domain methods for this app.
+    It keeps related behavior grouped so the ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     class Frequency(models.TextChoices):
         WEEKLY = "weekly", "Weekly"
         FORTNIGHTLY = "fortnightly", "Fortnightly"
@@ -281,6 +368,13 @@ class RecurringOrderTemplate(models.Model):
 
 
 class RecurringOrderTemplateItem(models.Model):
+    """
+    Documents the `RecurringOrderTemplateItem` boundary for this module.
+
+    The class belongs to the file role described above: Defines persistent database models, relationships, and domain methods for this app.
+    It keeps related behavior grouped so the ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     template = models.ForeignKey(
         RecurringOrderTemplate,
         on_delete=models.CASCADE,
@@ -306,6 +400,13 @@ class RecurringOrderTemplateItem(models.Model):
 
 
 class RecurringOrderInstanceOverride(models.Model):
+    """
+    Documents the `RecurringOrderInstanceOverride` boundary for this module.
+
+    The class belongs to the file role described above: Defines persistent database models, relationships, and domain methods for this app.
+    It keeps related behavior grouped so the ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     template = models.ForeignKey(
         RecurringOrderTemplate,
         on_delete=models.CASCADE,
@@ -335,6 +436,13 @@ class RecurringOrderInstanceOverride(models.Model):
 
 
 class RecurringOrderInstanceOverrideItem(models.Model):
+    """
+    Documents the `RecurringOrderInstanceOverrideItem` boundary for this module.
+
+    The class belongs to the file role described above: Defines persistent database models, relationships, and domain methods for this app.
+    It keeps related behavior grouped so the ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     override = models.ForeignKey(
         RecurringOrderInstanceOverride,
         on_delete=models.CASCADE,
@@ -360,6 +468,13 @@ class RecurringOrderInstanceOverrideItem(models.Model):
 
 
 class PaymentTransaction(models.Model):
+    """
+    Documents the `PaymentTransaction` boundary for this module.
+
+    The class belongs to the file role described above: Defines persistent database models, relationships, and domain methods for this app.
+    It keeps related behavior grouped so the ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     order = models.OneToOneField(Order, on_delete=models.CASCADE, related_name="payment")
     provider = models.CharField(max_length=50, default="mock")
     provider_reference = models.CharField(max_length=120)
@@ -375,6 +490,13 @@ class PaymentTransaction(models.Model):
 
 
 class ProducerNotification(models.Model):
+    """
+    Documents the `ProducerNotification` boundary for this module.
+
+    The class belongs to the file role described above: Defines persistent database models, relationships, and domain methods for this app.
+    It keeps related behavior grouped so the ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     producer = models.ForeignKey(Producer, on_delete=models.CASCADE, related_name="notifications")
     sub_order = models.ForeignKey(
         ProducerSubOrder, on_delete=models.CASCADE, related_name="notifications"
@@ -391,6 +513,13 @@ class ProducerNotification(models.Model):
 
 
 class UserNotification(models.Model):
+    """
+    Documents the `UserNotification` boundary for this module.
+
+    The class belongs to the file role described above: Defines persistent database models, relationships, and domain methods for this app.
+    It keeps related behavior grouped so the ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="user_notifications"
     )

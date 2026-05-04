@@ -1,3 +1,20 @@
+"""
+DESD Marketplace documentation.
+
+File role:
+    Documents expected behavior through automated tests for this app's public contract.
+
+Domain context:
+    Payments domain: Stripe checkout, settlement records, commission capture, and payment-service integration.
+
+Implementation notes:
+    This header is intentionally descriptive so future sprint contributors can
+    understand why the file exists before reading individual classes/functions.
+    Inline comments below are reserved for business rules, permission checks,
+    external-service calls, or data transformations that are not obvious from
+    the code itself.
+"""
+
 from __future__ import annotations
 
 import hashlib
@@ -28,6 +45,13 @@ User = get_user_model()
 
 
 class MockPaymentServiceResponse:
+    """
+    Documents the `MockPaymentServiceResponse` boundary for this module.
+
+    The class belongs to the file role described above: Documents expected behavior through automated tests for this app's public contract.
+    It keeps related behavior grouped so the payments domain: stripe checkout, settlement records, commission capture, and payment-service integration.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     def __init__(self, status_code: int, payload: dict):
         self.status_code = status_code
         self._payload = payload
@@ -41,6 +65,13 @@ class MockPaymentServiceResponse:
 
 
 class PaymentsCriticalTestCases(APITestCase):
+    """
+    Documents the `PaymentsCriticalTestCases` boundary for this module.
+
+    The class belongs to the file role described above: Documents expected behavior through automated tests for this app's public contract.
+    It keeps related behavior grouped so the payments domain: stripe checkout, settlement records, commission capture, and payment-service integration.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     def setUp(self):
         self.producer = User.objects.create_user(
             email="producer-settlement@example.com",

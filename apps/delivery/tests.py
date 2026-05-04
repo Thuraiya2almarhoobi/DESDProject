@@ -1,3 +1,20 @@
+"""
+DESD Marketplace documentation.
+
+File role:
+    Documents expected behavior through automated tests for this app's public contract.
+
+Domain context:
+    Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
+
+Implementation notes:
+    This header is intentionally descriptive so future sprint contributors can
+    understand why the file exists before reading individual classes/functions.
+    Inline comments below are reserved for business rules, permission checks,
+    external-service calls, or data transformations that are not obvious from
+    the code itself.
+"""
+
 from datetime import timedelta
 from decimal import Decimal
 from unittest.mock import patch
@@ -23,6 +40,13 @@ User = get_user_model()
     STUART_WEBHOOK_SECRET="stuart-webhook-secret",
 )
 class StuartDeliveryIntegrationTests(APITestCase):
+    """
+    Documents the `StuartDeliveryIntegrationTests` boundary for this module.
+
+    The class belongs to the file role described above: Documents expected behavior through automated tests for this app's public contract.
+    It keeps related behavior grouped so the delivery domain: delivery jobs, tracking snapshots, stuart/simulation integration, and delivery api endpoints.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     def setUp(self):
         self.customer = User.objects.create_user(
             email="customer-delivery@example.com",

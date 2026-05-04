@@ -1,3 +1,18 @@
+/**
+ * DESD Marketplace documentation.
+ *
+ * File role:
+ *   Provides the AuthContext React context/provider and exposes shared state to child components.
+ *
+ * Frontend context:
+ *   React context layer: owns cross-page state such as authentication and cart contents.
+ *
+ * Implementation notes:
+ *   Keep comments focused on state ownership, role-specific routing, API calls,
+ *   and non-obvious UI decisions. Styling-only class names are left uncommented
+ *   unless they communicate an important layout or accessibility choice.
+ */
+
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { User, UserRole } from '../types';
 import {
@@ -56,6 +71,14 @@ interface AuthContextType {
   stopCustomerPreview: () => void;
 }
 
+/**
+ * USER_STORAGE_KEY boundary.
+ *
+ * This exported unit supports the file role: Provides the AuthContext React context/provider and exposes shared state to child components.
+ * It belongs to: React context layer: owns cross-page state such as authentication and cart contents.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 const USER_STORAGE_KEY = 'desd_user';
 const CUSTOMER_PREVIEW_STORAGE_KEY = 'desd_customer_preview';
 const CUSTOMER_PREVIEW_RETURN_PATH_STORAGE_KEY = 'desd_customer_preview_return_path';
@@ -175,6 +198,14 @@ function errorMessageFromUnknown(error: unknown): string {
   return 'Request failed';
 }
 
+/**
+ * AuthProvider boundary.
+ *
+ * This exported unit supports the file role: Provides the AuthContext React context/provider and exposes shared state to child components.
+ * It belongs to: React context layer: owns cross-page state such as authentication and cart contents.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Persisted auth state is restored on refresh so protected routes and shared
   // navigation can react immediately without forcing a new login.
@@ -214,6 +245,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       authAction: () => Promise<{ user: { id: number; email: string; role: UserRole }; detail?: string }>
     ): Promise<AuthResult> => {
       try {
+        // Login and all four registration flows share the same post-auth shape:
+        // fetch `/me`, save the role/profile/address payload, and let route
+        // guards decide the dashboard from the returned role.
         const authPayload = await authAction();
         const me = await getMeRequest().catch(() => null);
         const nextUser = me
@@ -243,6 +277,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async (email: string, password: string, rememberMe: boolean): Promise<AuthResult> => {
       const result = await runAuthFlow(() => loginRequest(email, password, rememberMe));
       if (result.success) {
+        // Some legacy endpoints still support Basic auth, so the frontend keeps
+        // this compatibility token alongside the JWT stored by authService.
         setBasicAuthToken(btoa(`${email}:${password}`));
       }
       return result;
@@ -295,6 +331,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const logout = useCallback(() => {
+    // Logout clears every browser-side auth surface, including producer preview
+    // mode, so the next session cannot inherit another role's state.
     clearAuthStorage();
     setBasicAuthToken(null);
     persistUser(null);
@@ -308,6 +346,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const hasRole = useCallback((role: UserRole) => user?.role === role, [user]);
   const startCustomerPreview = useCallback((returnPath?: string | null) => {
+    // Producer preview mode is intentionally frontend-only. It lets producers
+    // inspect customer-facing pages while preserving their actual backend role.
     setCustomerPreview(true);
     saveCustomerPreview(true);
     const nextReturnPath = returnPath && returnPath.trim() ? returnPath : null;
@@ -322,6 +362,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
+    // Preview mode should disappear as soon as the signed-in user is not a
+    // producer, otherwise customers/restaurants could see confusing navigation.
     if (user?.role === 'PRODUCER' || user === null) {
       return;
     }
@@ -332,6 +374,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   useEffect(() => {
+    // On refresh, the access token is the source of truth. A stale localStorage
+    // user is discarded if `/api/accounts/me/` cannot validate the session.
     const bootstrap = async () => {
       try {
         if (!getAccessToken()) {
@@ -390,6 +434,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
+/**
+ * useAuth boundary.
+ *
+ * This exported unit supports the file role: Provides the AuthContext React context/provider and exposes shared state to child components.
+ * It belongs to: React context layer: owns cross-page state such as authentication and cart contents.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) {

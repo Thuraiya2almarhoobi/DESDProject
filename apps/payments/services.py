@@ -1,3 +1,20 @@
+"""
+DESD Marketplace documentation.
+
+File role:
+    Holds domain/service logic that should stay outside thin HTTP view classes.
+
+Domain context:
+    Payments domain: Stripe checkout, settlement records, commission capture, and payment-service integration.
+
+Implementation notes:
+    This header is intentionally descriptive so future sprint contributors can
+    understand why the file exists before reading individual classes/functions.
+    Inline comments below are reserved for business rules, permission checks,
+    external-service calls, or data transformations that are not obvious from
+    the code itself.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -20,6 +37,9 @@ from apps.producer_portal.models import OrderStatus, ProducerOrder
 
 from .models import SettlementOrderLine, SettlementStatus, WeeklySettlement
 
+# Must match `apps.orders.services.COMMISSION_RATE`. The checkout service stores
+# commission snapshots on orders, and this payment service later uses the same
+# rate when building settlement lines for producer payout reporting.
 COMMISSION_RATE = Decimal("0.05")
 STRIPE_SUCCESS_EVENT_TYPES = {
     "checkout.session.completed",
@@ -33,12 +53,26 @@ STRIPE_FAILURE_EVENT_TYPES = {
 
 @dataclass(frozen=True)
 class SettlementWeekRange:
+    """
+    Documents the `SettlementWeekRange` boundary for this module.
+
+    The class belongs to the file role described above: Holds domain/service logic that should stay outside thin HTTP view classes.
+    It keeps related behavior grouped so the payments domain: stripe checkout, settlement records, commission capture, and payment-service integration.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     start: date
     end: date
 
 
 @dataclass(frozen=True)
 class StripeCheckoutSessionResult:
+    """
+    Documents the `StripeCheckoutSessionResult` boundary for this module.
+
+    The class belongs to the file role described above: Holds domain/service logic that should stay outside thin HTTP view classes.
+    It keeps related behavior grouped so the payments domain: stripe checkout, settlement records, commission capture, and payment-service integration.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     session_id: str
     checkout_url: str
     publishable_key: str
@@ -47,6 +81,13 @@ class StripeCheckoutSessionResult:
 
 @dataclass(frozen=True)
 class StripeCheckoutSessionStatus:
+    """
+    Documents the `StripeCheckoutSessionStatus` boundary for this module.
+
+    The class belongs to the file role described above: Holds domain/service logic that should stay outside thin HTTP view classes.
+    It keeps related behavior grouped so the payments domain: stripe checkout, settlement records, commission capture, and payment-service integration.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     session_id: str
     payment_status: str
     checkout_status: str
@@ -55,6 +96,13 @@ class StripeCheckoutSessionStatus:
 
 
 def get_previous_week_range(reference_date: date | None = None) -> SettlementWeekRange:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `get_previous_week_range` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Payments domain: Stripe checkout, settlement records, commission capture, and payment-service integration.
+    """
     reference_date = reference_date or timezone.localdate()
     current_week_monday = reference_date - timedelta(days=reference_date.weekday())
     previous_week_start = current_week_monday - timedelta(days=7)
@@ -63,20 +111,48 @@ def get_previous_week_range(reference_date: date | None = None) -> SettlementWee
 
 
 def _money(value: Decimal) -> Decimal:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_money` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Payments domain: Stripe checkout, settlement records, commission capture, and payment-service integration.
+    """
     return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
 def _money_to_minor_units(value: Decimal) -> int:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_money_to_minor_units` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Payments domain: Stripe checkout, settlement records, commission capture, and payment-service integration.
+    """
     return int((_money(value) * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
 def _payment_value(obj: Any, key: str, default: Any = None) -> Any:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_payment_value` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Payments domain: Stripe checkout, settlement records, commission capture, and payment-service integration.
+    """
     if isinstance(obj, dict):
         return obj.get(key, default)
     return getattr(obj, key, default)
 
 
 def _payment_service_base_url() -> str:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_payment_service_base_url` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Payments domain: Stripe checkout, settlement records, commission capture, and payment-service integration.
+    """
     base_url = (getattr(settings, "PAYMENT_SERVICE_BASE_URL", "") or "").strip().rstrip("/")
     if not base_url:
         raise ValueError("Stripe payment service is not configured.")
@@ -84,6 +160,13 @@ def _payment_service_base_url() -> str:
 
 
 def _payment_service_headers() -> dict[str, str]:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_payment_service_headers` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Payments domain: Stripe checkout, settlement records, commission capture, and payment-service integration.
+    """
     headers = {"Content-Type": "application/json"}
     shared_secret = (getattr(settings, "PAYMENT_SERVICE_SHARED_SECRET", "") or "").strip()
     if shared_secret:
@@ -92,10 +175,27 @@ def _payment_service_headers() -> dict[str, str]:
 
 
 def _payment_service_timeout() -> int:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_payment_service_timeout` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Payments domain: Stripe checkout, settlement records, commission capture, and payment-service integration.
+    """
     return int(getattr(settings, "PAYMENT_SERVICE_TIMEOUT_SECONDS", 15))
 
 
 def _payment_service_request(path: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_payment_service_request` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Payments domain: Stripe checkout, settlement records, commission capture, and payment-service integration.
+    """
+    # Stripe secrets stay inside the separate payment service. Django sends only
+    # a signed internal request, which keeps the marketplace app from directly
+    # handling secret-key Stripe SDK calls.
     url = f"{_payment_service_base_url()}{path}"
     try:
         response = requests.post(
@@ -124,6 +224,16 @@ def _payment_service_request(path: str, payload: dict[str, Any]) -> dict[str, An
 
 
 def _build_stripe_line_items(order: Order) -> list[dict[str, Any]]:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_build_stripe_line_items` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Payments domain: Stripe checkout, settlement records, commission capture, and payment-service integration.
+    """
+    # Each order item is sent to Stripe as quantity=1 with the already-rounded
+    # line total. That preserves decimal unit orders such as kg/litre and avoids
+    # Stripe re-rounding quantities differently from our audited order totals.
     line_items: list[dict[str, Any]] = []
     for item in order.items.all():
         description = f"{item.quantity} {item.unit}"
@@ -151,6 +261,15 @@ def _build_stripe_line_items(order: Order) -> list[dict[str, Any]]:
 
 @transaction.atomic
 def create_stripe_checkout_session_for_order(order: Order) -> StripeCheckoutSessionResult:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `create_stripe_checkout_session_for_order` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Payments domain: Stripe checkout, settlement records, commission capture, and payment-service integration.
+    """
+    # The order already exists before Stripe redirect so stock can be reserved
+    # and later reconciled by webhook/session confirmation.
     if order.payment_status == Order.PaymentStatus.PAID:
         raise ValueError("Order is already paid.")
 
@@ -179,6 +298,9 @@ def create_stripe_checkout_session_for_order(order: Order) -> StripeCheckoutSess
     if livemode:
         raise ValueError("Stripe Checkout must run in test mode only.")
 
+    # PaymentTransaction is the audit/reconciliation record. The raw payload also
+    # stores idempotency flags so duplicate Stripe webhooks do not duplicate cart
+    # cleanup, notifications, or stock release work.
     transaction_record, _ = PaymentTransaction.objects.get_or_create(
         order=order,
         defaults={
@@ -233,6 +355,15 @@ def create_stripe_checkout_session_for_order(order: Order) -> StripeCheckoutSess
 
 
 def verify_and_construct_stripe_event(payload: bytes, signature: str) -> dict[str, Any]:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `verify_and_construct_stripe_event` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Payments domain: Stripe checkout, settlement records, commission capture, and payment-service integration.
+    """
+    # Signature verification is delegated to the payment service because it owns
+    # STRIPE_WEBHOOK_SECRET. This app only handles the verified event payload.
     payload_text = payload.decode("utf-8")
     response_payload = _payment_service_request(
         "/stripe/webhooks/verify",
@@ -248,6 +379,13 @@ def verify_and_construct_stripe_event(payload: bytes, signature: str) -> dict[st
 
 
 def retrieve_stripe_checkout_session(session_id: str) -> StripeCheckoutSessionStatus:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `retrieve_stripe_checkout_session` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Payments domain: Stripe checkout, settlement records, commission capture, and payment-service integration.
+    """
     response_payload = _payment_service_request(
         "/stripe/checkout-sessions/retrieve",
         {"session_id": session_id},
@@ -264,6 +402,15 @@ def retrieve_stripe_checkout_session(session_id: str) -> StripeCheckoutSessionSt
 
 @transaction.atomic
 def handle_stripe_webhook_event(event: dict[str, Any]) -> dict[str, Any]:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `handle_stripe_webhook_event` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Payments domain: Stripe checkout, settlement records, commission capture, and payment-service integration.
+    """
+    # This coursework environment uses Stripe test mode only; live events are
+    # rejected so demo/test financial records cannot mix with real payments.
     if bool(event.get("livemode", False)):
         raise ValueError("Live mode Stripe events are not allowed.")
 
@@ -298,6 +445,9 @@ def _get_order_and_transaction(
     order_id: str | int | None = None,
     session_id: str = "",
 ) -> tuple[Order, PaymentTransaction]:
+    # Webhooks can arrive with either an explicit order id or only a Checkout
+    # Session id. Lock both records while resolving them so concurrent webhook
+    # retries cannot race each other.
     transaction_record = None
     order = None
 
@@ -334,6 +484,16 @@ def _get_order_and_transaction(
 
 
 def _clear_reserved_cart_items_if_needed(order: Order, raw_payload: dict[str, Any]) -> dict[str, Any]:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `_clear_reserved_cart_items_if_needed` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Payments domain: Stripe checkout, settlement records, commission capture, and payment-service integration.
+    """
+    # Cart deletion is delayed until Stripe succeeds. The idempotency flag lets
+    # the same success event be replayed without removing unrelated new cart
+    # items the buyer may have added afterwards.
     if raw_payload.get("cart_items_cleared"):
         return raw_payload
 
@@ -360,6 +520,9 @@ def _apply_payment_result(
     event_id: str = "",
     checkout_status: str = "",
 ) -> dict[str, Any]:
+    # This is the single reconciliation point for Stripe success/failure. It
+    # updates the order, transaction audit row, stock reservation, cart cleanup,
+    # and producer notifications inside one atomic webhook transaction.
     raw_payload = dict(transaction_record.raw_payload or {})
     processed_event_ids = [str(value) for value in raw_payload.get("processed_event_ids", []) if value]
     if event_id and event_id in processed_event_ids:
@@ -451,6 +614,15 @@ def _apply_payment_result(
 
 @transaction.atomic
 def confirm_stripe_checkout_session(session_id: str) -> dict[str, Any]:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `confirm_stripe_checkout_session` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Payments domain: Stripe checkout, settlement records, commission capture, and payment-service integration.
+    """
+    # The success return URL confirms the session immediately so the browser can
+    # show an order confirmation even if Stripe's webhook retry arrives later.
     session = retrieve_stripe_checkout_session(session_id)
     if session.livemode:
         raise ValueError("Stripe Checkout must run in test mode only.")
@@ -494,6 +666,15 @@ def confirm_stripe_checkout_session(session_id: str) -> dict[str, Any]:
 
 @transaction.atomic
 def cancel_stripe_checkout_order(order: Order) -> dict[str, Any]:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `cancel_stripe_checkout_order` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Payments domain: Stripe checkout, settlement records, commission capture, and payment-service integration.
+    """
+    # Cancelling from the return path uses the same failure reconciliation as a
+    # Stripe expiry webhook, which keeps stock release and audit fields identical.
     locked_order = Order.objects.select_for_update().get(pk=order.pk)
     transaction_record = PaymentTransaction.objects.select_for_update().filter(order=locked_order).first()
     if transaction_record is None:
@@ -517,6 +698,16 @@ def cancel_stripe_checkout_order(order: Order) -> dict[str, Any]:
 
 @transaction.atomic
 def process_weekly_settlements(reference_date: date | None = None) -> list[WeeklySettlement]:
+    """
+    Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
+
+    `process_weekly_settlements` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Payments domain: Stripe checkout, settlement records, commission capture, and payment-service integration.
+    """
+    # Settlement processing is producer-oriented: delivered producer orders are
+    # grouped by supplier, a 5% platform commission is retained, and the net 95%
+    # becomes the producer payout for that weekly settlement.
     week_range = get_previous_week_range(reference_date)
     candidate_orders = (
         ProducerOrder.objects.select_related("producer")

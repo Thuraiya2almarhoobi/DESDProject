@@ -1,13 +1,44 @@
+/**
+ * DESD Marketplace documentation.
+ *
+ * File role:
+ *   Wraps backend API access for catalog data and normalizes responses for the UI.
+ *
+ * Frontend context:
+ *   Frontend API adapter layer: converts backend JSON into UI-friendly TypeScript objects and centralizes endpoint calls.
+ *
+ * Implementation notes:
+ *   Keep comments focused on state ownership, role-specific routing, API calls,
+ *   and non-obvious UI decisions. Styling-only class names are left uncommented
+ *   unless they communicate an important layout or accessibility choice.
+ */
+
 import { mockProducts } from "../data/mockData";
 import { resolveApiPathBase } from "../lib/apiBase";
 import { getBasicAuthToken } from "../lib/api";
 import { getAccessToken } from "../lib/tokenStorage";
 import { AvailabilityType, Product, ProductReview, ProductUnit, ReviewEligibility } from "../types";
 
+/**
+ * API_BASE_URL boundary.
+ *
+ * This exported unit supports the file role: Wraps backend API access for catalog data and normalizes responses for the UI.
+ * It belongs to: Frontend API adapter layer: converts backend JSON into UI-friendly TypeScript objects and centralizes endpoint calls.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 const API_BASE_URL = resolveApiPathBase(import.meta.env.VITE_API_BASE_URL as string | undefined, "/api");
 const ORDERS_API_BASE_URL = `${API_BASE_URL}/orders`;
 const USE_MOCK_PRODUCTS =
   ((import.meta.env.VITE_USE_MOCK_PRODUCTS as string | undefined) || "").toLowerCase() === "true";
+/**
+ * DEFAULT_IMAGE_URL boundary.
+ *
+ * This exported unit supports the file role: Wraps backend API access for catalog data and normalizes responses for the UI.
+ * It belongs to: Frontend API adapter layer: converts backend JSON into UI-friendly TypeScript objects and centralizes endpoint calls.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 const DEFAULT_IMAGE_URL =
   "https://images.unsplash.com/photo-1542838132-92c53300491e?w=800";
 

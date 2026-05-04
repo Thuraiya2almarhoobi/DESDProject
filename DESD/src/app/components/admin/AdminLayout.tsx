@@ -1,3 +1,18 @@
+/**
+ * DESD Marketplace documentation.
+ *
+ * File role:
+ *   Provides the reusable AdminLayout component used by pages or layout shells.
+ *
+ * Frontend context:
+ *   Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ *
+ * Implementation notes:
+ *   Keep comments focused on state ownership, role-specific routing, API calls,
+ *   and non-obvious UI decisions. Styling-only class names are left uncommented
+ *   unless they communicate an important layout or accessibility choice.
+ */
+
 import { Activity, ChartColumnBig, LayoutDashboard, LogOut, ShieldCheck } from 'lucide-react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 
@@ -51,6 +66,14 @@ function getSectionSubtitle(pathname: string): string {
   return 'Monitor commission health, track recent orders, and action moderation from one workspace.';
 }
 
+/**
+ * AdminLayout boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable AdminLayout component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 export function AdminLayout() {
   const { user, logout } = useAuth();
   const location = useLocation();
@@ -96,6 +119,14 @@ export function AdminLayout() {
 
         <nav className="mt-8 space-y-3">
           {navigationItems.map((item) => {
+/**
+ * Icon boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable AdminLayout component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
             const Icon = item.icon;
 
             return (
@@ -186,4 +217,3 @@ export function AdminLayout() {
     </div>
   );
 }
-

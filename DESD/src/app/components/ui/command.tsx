@@ -1,3 +1,18 @@
+/**
+ * DESD Marketplace documentation.
+ *
+ * File role:
+ *   Provides the reusable command component used by pages or layout shells.
+ *
+ * Frontend context:
+ *   Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ *
+ * Implementation notes:
+ *   Keep comments focused on state ownership, role-specific routing, API calls,
+ *   and non-obvious UI decisions. Styling-only class names are left uncommented
+ *   unless they communicate an important layout or accessibility choice.
+ */
+
 "use client";
 
 import * as React from "react";
@@ -13,6 +28,14 @@ import {
   DialogTitle,
 } from "./dialog";
 
+/**
+ * Command boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable command component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function Command({
   className,
   ...props
@@ -29,6 +52,14 @@ function Command({
   );
 }
 
+/**
+ * CommandDialog boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable command component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function CommandDialog({
   title = "Command Palette",
   description = "Search for a command to run...",
@@ -53,6 +84,14 @@ function CommandDialog({
   );
 }
 
+/**
+ * CommandInput boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable command component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function CommandInput({
   className,
   ...props
@@ -75,6 +114,14 @@ function CommandInput({
   );
 }
 
+/**
+ * CommandList boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable command component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function CommandList({
   className,
   ...props
@@ -91,6 +138,14 @@ function CommandList({
   );
 }
 
+/**
+ * CommandEmpty boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable command component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function CommandEmpty({
   ...props
 }: React.ComponentProps<typeof CommandPrimitive.Empty>) {
@@ -103,6 +158,14 @@ function CommandEmpty({
   );
 }
 
+/**
+ * CommandGroup boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable command component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function CommandGroup({
   className,
   ...props
@@ -119,6 +182,14 @@ function CommandGroup({
   );
 }
 
+/**
+ * CommandSeparator boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable command component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function CommandSeparator({
   className,
   ...props
@@ -132,6 +203,14 @@ function CommandSeparator({
   );
 }
 
+/**
+ * CommandItem boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable command component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function CommandItem({
   className,
   ...props
@@ -148,6 +227,14 @@ function CommandItem({
   );
 }
 
+/**
+ * CommandShortcut boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable command component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function CommandShortcut({
   className,
   ...props

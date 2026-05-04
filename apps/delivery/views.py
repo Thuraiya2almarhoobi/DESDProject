@@ -1,3 +1,20 @@
+"""
+DESD Marketplace documentation.
+
+File role:
+    Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+Domain context:
+    Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
+
+Implementation notes:
+    This header is intentionally descriptive so future sprint contributors can
+    understand why the file exists before reading individual classes/functions.
+    Inline comments below are reserved for business rules, permission checks,
+    external-service calls, or data transformations that are not obvious from
+    the code itself.
+"""
+
 from django.conf import settings
 from django.shortcuts import get_object_or_404
 from rest_framework import permissions, response, status
@@ -19,6 +36,13 @@ from .services import (
 
 
 def _producer_owned_sub_order(user, sub_order_id: int) -> ProducerSubOrder:
+    """
+    Helper for the file role: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+    `_producer_owned_sub_order` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
+    """
     producer = get_object_or_404(Producer, user=user, is_active=True)
     return get_object_or_404(
         ProducerSubOrder.objects.select_related("order", "producer").prefetch_related("items"),

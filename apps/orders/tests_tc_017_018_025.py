@@ -1,3 +1,20 @@
+"""
+DESD Marketplace documentation.
+
+File role:
+    Source module for the orders area.
+
+Domain context:
+    Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+
+Implementation notes:
+    This header is intentionally descriptive so future sprint contributors can
+    understand why the file exists before reading individual classes/functions.
+    Inline comments below are reserved for business rules, permission checks,
+    external-service calls, or data transformations that are not obvious from
+    the code itself.
+"""
+
 from datetime import datetime, timedelta
 from decimal import Decimal
 from unittest.mock import patch
@@ -25,6 +42,13 @@ User = get_user_model()
 
 
 class CommunityBulkOrderTests(APITestCase):
+    """
+    Documents the `CommunityBulkOrderTests` boundary for this module.
+
+    The class belongs to the file role described above: Source module for the orders area.
+    It keeps related behavior grouped so the ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     def setUp(self):
         self.community_user = User.objects.create_user(
             email="community.bulk@example.com",
@@ -227,6 +251,13 @@ class CommunityBulkOrderTests(APITestCase):
 
 
 class RestaurantRecurringOrderTests(APITestCase):
+    """
+    Documents the `RestaurantRecurringOrderTests` boundary for this module.
+
+    The class belongs to the file role described above: Source module for the orders area.
+    It keeps related behavior grouped so the ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     def setUp(self):
         self.restaurant_user = User.objects.create_user(
             email="restaurant@example.com",
@@ -582,6 +613,13 @@ class RestaurantRecurringOrderTests(APITestCase):
 
 
 class AdminCommissionReportTests(APITestCase):
+    """
+    Documents the `AdminCommissionReportTests` boundary for this module.
+
+    The class belongs to the file role described above: Source module for the orders area.
+    It keeps related behavior grouped so the ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     def setUp(self):
         self.admin_user = User.objects.create_user(
             email="admin.financial@example.com",

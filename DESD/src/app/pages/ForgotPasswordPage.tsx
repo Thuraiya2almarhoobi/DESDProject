@@ -1,3 +1,18 @@
+/**
+ * DESD Marketplace documentation.
+ *
+ * File role:
+ *   Implements the ForgotPasswordPage browser route and coordinates the UI state for that screen.
+ *
+ * Frontend context:
+ *   Route-level React page layer: one component per main browser page or role-specific workspace.
+ *
+ * Implementation notes:
+ *   Keep comments focused on state ownership, role-specific routing, API calls,
+ *   and non-obvious UI decisions. Styling-only class names are left uncommented
+ *   unless they communicate an important layout or accessibility choice.
+ */
+
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 
@@ -9,6 +24,14 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { requestPasswordReset } from '../services/authService';
 
+/**
+ * GENERIC_RESET_MESSAGE boundary.
+ *
+ * This exported unit supports the file role: Implements the ForgotPasswordPage browser route and coordinates the UI state for that screen.
+ * It belongs to: Route-level React page layer: one component per main browser page or role-specific workspace.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 const GENERIC_RESET_MESSAGE = 'If the email exists, a reset link has been sent.';
 
 export function ForgotPasswordPage() {

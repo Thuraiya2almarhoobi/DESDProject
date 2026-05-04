@@ -1,3 +1,18 @@
+/**
+ * DESD Marketplace documentation.
+ *
+ * File role:
+ *   Implements the AccessDeniedPage browser route and coordinates the UI state for that screen.
+ *
+ * Frontend context:
+ *   Route-level React page layer: one component per main browser page or role-specific workspace.
+ *
+ * Implementation notes:
+ *   Keep comments focused on state ownership, role-specific routing, API calls,
+ *   and non-obvious UI decisions. Styling-only class names are left uncommented
+ *   unless they communicate an important layout or accessibility choice.
+ */
+
 import { useNavigate } from 'react-router';
 import { ShieldAlert } from 'lucide-react';
 import { Button } from '../components/ui/button';
@@ -5,6 +20,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { useAuth } from '../contexts/AuthContext';
 import { getDashboardPathForRole } from '../lib/roleRouting';
 
+/**
+ * AccessDeniedPage boundary.
+ *
+ * This exported unit supports the file role: Implements the AccessDeniedPage browser route and coordinates the UI state for that screen.
+ * It belongs to: Route-level React page layer: one component per main browser page or role-specific workspace.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 export function AccessDeniedPage() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
@@ -33,7 +56,7 @@ export function AccessDeniedPage() {
           <p className="text-sm text-center text-gray-600">
             Your account ({user?.role}) doesn't have the required permissions to view this resource.
           </p>
-          
+
           <div className="flex flex-col gap-2">
             <Button onClick={handleGoBack} className="w-full">
               Go to Dashboard

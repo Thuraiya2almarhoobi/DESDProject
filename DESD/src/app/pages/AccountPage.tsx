@@ -1,3 +1,18 @@
+/**
+ * DESD Marketplace documentation.
+ *
+ * File role:
+ *   Implements the AccountPage browser route and coordinates the UI state for that screen.
+ *
+ * Frontend context:
+ *   Route-level React page layer: one component per main browser page or role-specific workspace.
+ *
+ * Implementation notes:
+ *   Keep comments focused on state ownership, role-specific routing, API calls,
+ *   and non-obvious UI decisions. Styling-only class names are left uncommented
+ *   unless they communicate an important layout or accessibility choice.
+ */
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { ArrowLeft, Building2, Save, ShieldCheck, Store, UserRound, Users } from 'lucide-react';
@@ -55,6 +70,14 @@ interface AddressDraft {
   isDefault: boolean;
 }
 
+/**
+ * EMPTY_ADDRESS_DRAFT boundary.
+ *
+ * This exported unit supports the file role: Implements the AccountPage browser route and coordinates the UI state for that screen.
+ * It belongs to: Route-level React page layer: one component per main browser page or role-specific workspace.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 const EMPTY_ADDRESS_DRAFT: AddressDraft = {
   id: null,
   label: '',
@@ -164,6 +187,14 @@ function iconForRole(role: UserRole) {
   }
 }
 
+/**
+ * AccountPage boundary.
+ *
+ * This exported unit supports the file role: Implements the AccountPage browser route and coordinates the UI state for that screen.
+ * It belongs to: Route-level React page layer: one component per main browser page or role-specific workspace.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 export function AccountPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -172,6 +203,14 @@ export function AccountPage() {
   const role = (user?.role || 'CUSTOMER') as UserRole;
   const backPath = role === 'CUSTOMER' ? '/marketplace' : getDashboardPathForRole(role);
   const backLabel = role === 'CUSTOMER' ? 'Back to Marketplace' : 'Back to Dashboard';
+/**
+ * TitleIcon boundary.
+ *
+ * This exported unit supports the file role: Implements the AccountPage browser route and coordinates the UI state for that screen.
+ * It belongs to: Route-level React page layer: one component per main browser page or role-specific workspace.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
   const TitleIcon = iconForRole(role);
 
   const deliveryProfileRef = useRef<HTMLDivElement | null>(null);

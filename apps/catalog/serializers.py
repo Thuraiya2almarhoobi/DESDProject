@@ -1,3 +1,20 @@
+"""
+DESD Marketplace documentation.
+
+File role:
+    Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+
+Domain context:
+    Catalog domain: public product browsing, producer/product data serialization, reviews, and marketplace-facing catalog APIs.
+
+Implementation notes:
+    This header is intentionally descriptive so future sprint contributors can
+    understand why the file exists before reading individual classes/functions.
+    Inline comments below are reserved for business rules, permission checks,
+    external-service calls, or data transformations that are not obvious from
+    the code itself.
+"""
+
 from django.utils import timezone
 from rest_framework import serializers
 
@@ -12,12 +29,26 @@ from .models import Category, Product
 
 
 class CategorySerializer(serializers.ModelSerializer):
+    """
+    Documents the `CategorySerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the catalog domain: public product browsing, producer/product data serialization, reviews, and marketplace-facing catalog apis.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     class Meta:
         model = Category
         fields = ["id", "name", "slug"]
 
 
 class ProductSerializer(serializers.ModelSerializer):
+    """
+    Documents the `ProductSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the catalog domain: public product browsing, producer/product data serialization, reviews, and marketplace-facing catalog apis.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     category = serializers.CharField(source="category.name", read_only=True)
     category_id = serializers.IntegerField(source="category.id", read_only=True)
     category_slug = serializers.CharField(source="category.slug", read_only=True)
@@ -85,6 +116,13 @@ class ProductSerializer(serializers.ModelSerializer):
 
 
 class ProductReviewSerializer(serializers.ModelSerializer):
+    """
+    Documents the `ProductReviewSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the catalog domain: public product browsing, producer/product data serialization, reviews, and marketplace-facing catalog apis.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     user_id = serializers.IntegerField(source="user.id", read_only=True)
 
     class Meta:
@@ -107,6 +145,13 @@ class ProductReviewSerializer(serializers.ModelSerializer):
 
 
 class ProductReviewCreateSerializer(serializers.ModelSerializer):
+    """
+    Documents the `ProductReviewCreateSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the catalog domain: public product browsing, producer/product data serialization, reviews, and marketplace-facing catalog apis.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     class Meta:
         model = ProductReview
         fields = ["rating", "title", "comment", "is_anonymous"]
@@ -186,6 +231,13 @@ class ProductReviewCreateSerializer(serializers.ModelSerializer):
 
 
 class ProductReviewProducerResponseSerializer(serializers.ModelSerializer):
+    """
+    Documents the `ProductReviewProducerResponseSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the catalog domain: public product browsing, producer/product data serialization, reviews, and marketplace-facing catalog apis.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     producer_response = serializers.CharField(max_length=1000)
 
     class Meta:
@@ -206,6 +258,13 @@ class ProductReviewProducerResponseSerializer(serializers.ModelSerializer):
 
 
 class ProductReviewModerationSerializer(serializers.ModelSerializer):
+    """
+    Documents the `ProductReviewModerationSerializer` boundary for this module.
+
+    The class belongs to the file role described above: Validates API payloads and converts Django model instances into JSON-friendly response shapes.
+    It keeps related behavior grouped so the catalog domain: public product browsing, producer/product data serialization, reviews, and marketplace-facing catalog apis.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     moderation_status = serializers.ChoiceField(
         choices=[
             ProductReview.ModerationStatus.PUBLISHED,

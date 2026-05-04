@@ -1,3 +1,20 @@
+"""
+DESD Marketplace documentation.
+
+File role:
+    Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+
+Domain context:
+    Community domain: community feedback, review policy, and URLs/views used by shared buyer-community workflows.
+
+Implementation notes:
+    This header is intentionally descriptive so future sprint contributors can
+    understand why the file exists before reading individual classes/functions.
+    Inline comments below are reserved for business rules, permission checks,
+    external-service calls, or data transformations that are not obvious from
+    the code itself.
+"""
+
 from __future__ import annotations
 
 from django.shortcuts import get_object_or_404
@@ -13,6 +30,13 @@ from apps.orders.services import checkout_cart, checkout_cart_with_stripe_reserv
 
 
 class CommunityBulkCheckoutAPIView(APIView):
+    """
+    Documents the `CommunityBulkCheckoutAPIView` boundary for this module.
+
+    The class belongs to the file role described above: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+    It keeps related behavior grouped so the community domain: community feedback, review policy, and urls/views used by shared buyer-community workflows.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     permission_classes = [IsAuthenticated, IsCommunity]
 
     def post(self, request):
@@ -64,6 +88,13 @@ class CommunityBulkCheckoutAPIView(APIView):
 
 
 class CommunityOrderConfirmationAPIView(APIView):
+    """
+    Documents the `CommunityOrderConfirmationAPIView` boundary for this module.
+
+    The class belongs to the file role described above: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
+    It keeps related behavior grouped so the community domain: community feedback, review policy, and urls/views used by shared buyer-community workflows.
+    can be changed without spreading the same responsibility across unrelated files.
+    """
     permission_classes = [IsAuthenticated, IsCommunity]
 
     def get(self, request, order_id: int):

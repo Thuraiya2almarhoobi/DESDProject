@@ -1,3 +1,18 @@
+/**
+ * DESD Marketplace documentation.
+ *
+ * File role:
+ *   Implements the ContentFeedPage browser route and coordinates the UI state for that screen.
+ *
+ * Frontend context:
+ *   Route-level React page layer: one component per main browser page or role-specific workspace.
+ *
+ * Implementation notes:
+ *   Keep comments focused on state ownership, role-specific routing, API calls,
+ *   and non-obvious UI decisions. Styling-only class names are left uncommented
+ *   unless they communicate an important layout or accessibility choice.
+ */
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
@@ -39,6 +54,14 @@ type ContentView = 'all' | 'recipes' | 'stories';
 
 type FeedDetail = ApiRecipe | ApiStory;
 
+/**
+ * ALL_PRODUCERS boundary.
+ *
+ * This exported unit supports the file role: Implements the ContentFeedPage browser route and coordinates the UI state for that screen.
+ * It belongs to: Route-level React page layer: one component per main browser page or role-specific workspace.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 const ALL_PRODUCERS = 'all-producers';
 const ALL_PRODUCTS = 'all-products';
 const ALL_SEASONS = 'all-seasons';
@@ -82,6 +105,14 @@ interface AiDraft {
   seasonal_tag: string;
 }
 
+/**
+ * INITIAL_RECIPE_DRAFT boundary.
+ *
+ * This exported unit supports the file role: Implements the ContentFeedPage browser route and coordinates the UI state for that screen.
+ * It belongs to: Route-level React page layer: one component per main browser page or role-specific workspace.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 const INITIAL_RECIPE_DRAFT: RecipeDraft = {
   title: '',
   description: '',
@@ -101,6 +132,14 @@ const INITIAL_STORY_DRAFT: StoryDraft = {
   is_ai_generated: false,
 };
 
+/**
+ * INITIAL_AI_DRAFT boundary.
+ *
+ * This exported unit supports the file role: Implements the ContentFeedPage browser route and coordinates the UI state for that screen.
+ * It belongs to: Route-level React page layer: one component per main browser page or role-specific workspace.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 const INITIAL_AI_DRAFT: AiDraft = {
   content_type: 'recipe',
   product_ids: [],
@@ -150,6 +189,14 @@ interface ContentFeedPageProps {
   contentView?: ContentView;
 }
 
+/**
+ * ContentFeedPage boundary.
+ *
+ * This exported unit supports the file role: Implements the ContentFeedPage browser route and coordinates the UI state for that screen.
+ * It belongs to: Route-level React page layer: one component per main browser page or role-specific workspace.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentFeedPageProps) {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -554,6 +601,14 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
     }
   };
 
+/**
+ * useAiSuggestion boundary.
+ *
+ * This exported unit supports the file role: Implements the ContentFeedPage browser route and coordinates the UI state for that screen.
+ * It belongs to: Route-level React page layer: one component per main browser page or role-specific workspace.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
   const useAiSuggestion = (suggestion: ApiGeneratedContentSuggestion) => {
     const productIds = suggestion.products.map((product) => product.id);
     if (suggestion.content_type === 'recipe') {

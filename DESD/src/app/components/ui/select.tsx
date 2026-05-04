@@ -1,3 +1,18 @@
+/**
+ * DESD Marketplace documentation.
+ *
+ * File role:
+ *   Provides the reusable select component used by pages or layout shells.
+ *
+ * Frontend context:
+ *   Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ *
+ * Implementation notes:
+ *   Keep comments focused on state ownership, role-specific routing, API calls,
+ *   and non-obvious UI decisions. Styling-only class names are left uncommented
+ *   unless they communicate an important layout or accessibility choice.
+ */
+
 "use client";
 
 import * as React from "react";
@@ -10,24 +25,56 @@ import {
 
 import { cn } from "./utils";
 
+/**
+ * Select boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable select component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function Select({
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Root>) {
   return <SelectPrimitive.Root data-slot="select" {...props} />;
 }
 
+/**
+ * SelectGroup boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable select component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function SelectGroup({
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Group>) {
   return <SelectPrimitive.Group data-slot="select-group" {...props} />;
 }
 
+/**
+ * SelectValue boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable select component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function SelectValue({
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Value>) {
   return <SelectPrimitive.Value data-slot="select-value" {...props} />;
 }
 
+/**
+ * SelectTrigger boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable select component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function SelectTrigger({
   className,
   size = "default",
@@ -54,6 +101,14 @@ function SelectTrigger({
   );
 }
 
+/**
+ * SelectContent boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable select component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function SelectContent({
   className,
   children,
@@ -89,6 +144,14 @@ function SelectContent({
   );
 }
 
+/**
+ * SelectLabel boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable select component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function SelectLabel({
   className,
   ...props
@@ -102,6 +165,14 @@ function SelectLabel({
   );
 }
 
+/**
+ * SelectItem boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable select component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function SelectItem({
   className,
   children,
@@ -126,6 +197,14 @@ function SelectItem({
   );
 }
 
+/**
+ * SelectSeparator boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable select component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function SelectSeparator({
   className,
   ...props
@@ -139,6 +218,14 @@ function SelectSeparator({
   );
 }
 
+/**
+ * SelectScrollUpButton boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable select component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function SelectScrollUpButton({
   className,
   ...props
@@ -157,6 +244,14 @@ function SelectScrollUpButton({
   );
 }
 
+/**
+ * SelectScrollDownButton boundary.
+ *
+ * This exported unit supports the file role: Provides the reusable select component used by pages or layout shells.
+ * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
+ * Keep role checks, API coordination, and cross-page side effects visible here
+ * so future contributors can trace behavior during sprint reviews.
+ */
 function SelectScrollDownButton({
   className,
   ...props

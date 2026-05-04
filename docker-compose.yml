@@ -9,7 +9,7 @@ services:
         VITE_DELIVERY_SIMULATION_POLL_SECONDS: "${VITE_DELIVERY_SIMULATION_POLL_SECONDS:-15}"
     volumes:
       - media_data:/app/media
-      - ${HOME}/.config/gcloud/application_default_credentials.json:/app/credentials/application_default_credentials.json:ro
+      - ${GOOGLE_APPLICATION_CREDENTIALS_HOST:-./credentials/application_default_credentials.json}:/app/credentials/application_default_credentials.json:ro
     ports:
       - "8000:8000"
     depends_on:
@@ -55,6 +55,9 @@ services:
       VERTEX_AI_LOCATION: "${VERTEX_AI_LOCATION:-us-central1}"
       VERTEX_AI_MODEL: "${VERTEX_AI_MODEL:-gemini-2.5-flash}"
       VERTEX_AI_TIMEOUT_SECONDS: "${VERTEX_AI_TIMEOUT_SECONDS:-30}"
+      GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
+      GOOGLE_API_KEY: "${GOOGLE_API_KEY:-}"
+      VERTEX_AI_API_KEY: "${VERTEX_AI_API_KEY:-}"
       GOOGLE_APPLICATION_CREDENTIALS: "${GOOGLE_APPLICATION_CREDENTIALS:-/app/credentials/application_default_credentials.json}"
     command: >
       sh -c "
@@ -125,4 +128,3 @@ volumes:
   # rebuilds.
   postgres_data:
   media_data:
-

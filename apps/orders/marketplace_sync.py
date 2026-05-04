@@ -1,3 +1,20 @@
+"""
+DESD Marketplace documentation.
+
+File role:
+    Keeps catalog and order-facing product state aligned for marketplace display and checkout operations.
+
+Domain context:
+    Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+
+Implementation notes:
+    This header is intentionally descriptive so future sprint contributors can
+    understand why the file exists before reading individual classes/functions.
+    Inline comments below are reserved for business rules, permission checks,
+    external-service calls, or data transformations that are not obvious from
+    the code itself.
+"""
+
 from __future__ import annotations
 
 from decimal import Decimal
@@ -22,15 +39,36 @@ PRODUCT_IMAGE_LIBRARY = [
 
 
 def default_marketplace_image_url(product_id: int) -> str:
+    """
+    Helper for the file role: Keeps catalog and order-facing product state aligned for marketplace display and checkout operations.
+
+    `default_marketplace_image_url` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
     return PRODUCT_IMAGE_LIBRARY[product_id % len(PRODUCT_IMAGE_LIBRARY)]
 
 
 def product_is_organic(*, name: str, description: str) -> bool:
+    """
+    Helper for the file role: Keeps catalog and order-facing product state aligned for marketplace display and checkout operations.
+
+    `product_is_organic` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
     haystack = f"{name} {description}".lower()
     return "organic" in haystack
 
 
 def matching_producer_portal_product(order_product: Product):
+    """
+    Helper for the file role: Keeps catalog and order-facing product state aligned for marketplace display and checkout operations.
+
+    `matching_producer_portal_product` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
     from apps.producer_portal.models import ProducerProduct
 
     producer_user = getattr(order_product.producer, "user", None)
@@ -62,6 +100,13 @@ def matching_producer_portal_product(order_product: Product):
 
 
 def _default_business_name_for_user(user) -> str:
+    """
+    Helper for the file role: Keeps catalog and order-facing product state aligned for marketplace display and checkout operations.
+
+    `_default_business_name_for_user` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
     profile = getattr(user, "producer_profile", None)
     if profile and profile.business_name:
         return profile.business_name
@@ -74,6 +119,13 @@ def _default_business_name_for_user(user) -> str:
 
 
 def _available_orders_business_name(base_name: str, *, user=None, exclude_pk: int | None = None) -> str:
+    """
+    Helper for the file role: Keeps catalog and order-facing product state aligned for marketplace display and checkout operations.
+
+    `_available_orders_business_name` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
     from apps.orders.models import Producer as OrdersProducer
 
     business_name = base_name
@@ -91,6 +143,13 @@ def _available_orders_business_name(base_name: str, *, user=None, exclude_pk: in
 
 
 def _orders_producer_for_user(user):
+    """
+    Helper for the file role: Keeps catalog and order-facing product state aligned for marketplace display and checkout operations.
+
+    `_orders_producer_for_user` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
     from apps.orders.models import Producer as OrdersProducer
 
     orders_producer = OrdersProducer.objects.filter(user=user).first()
@@ -143,6 +202,13 @@ def _orders_producer_for_user(user):
 
 
 def _catalog_product_defaults(order_product: Product) -> dict:
+    """
+    Helper for the file role: Keeps catalog and order-facing product state aligned for marketplace display and checkout operations.
+
+    `_catalog_product_defaults` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
     producer_product = matching_producer_portal_product(order_product)
     producer = order_product.producer
     producer_user = getattr(producer, "user", None)
@@ -183,6 +249,13 @@ def _catalog_product_defaults(order_product: Product) -> dict:
 
 
 def _merge_catalog_product_reviews(*, canonical_product, duplicate_products) -> None:
+    """
+    Helper for the file role: Keeps catalog and order-facing product state aligned for marketplace display and checkout operations.
+
+    `_merge_catalog_product_reviews` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
     from apps.community.models import ProductReview
 
     for duplicate_product in duplicate_products:
@@ -229,6 +302,13 @@ def _merge_catalog_product_reviews(*, canonical_product, duplicate_products) -> 
 
 
 def _upsert_catalog_product(*, catalog_product_model, lookup: dict, defaults: dict):
+    """
+    Helper for the file role: Keeps catalog and order-facing product state aligned for marketplace display and checkout operations.
+
+    `_upsert_catalog_product` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
     matching_products = list(
         catalog_product_model.objects.filter(**lookup).order_by("-updated_at", "-id")
     )
@@ -252,6 +332,13 @@ def _upsert_catalog_product(*, catalog_product_model, lookup: dict, defaults: di
 
 
 def get_or_create_catalog_product_mirror(order_product: Product):
+    """
+    Helper for the file role: Keeps catalog and order-facing product state aligned for marketplace display and checkout operations.
+
+    `get_or_create_catalog_product_mirror` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
     from apps.catalog.models import Category, Producer as CatalogProducer, Product as CatalogProduct
 
     payload = _catalog_product_defaults(order_product)
@@ -330,10 +417,24 @@ def get_or_create_catalog_product_mirror(order_product: Product):
 
 
 def sync_catalog_product_from_orders_product(order_product: Product) -> None:
+    """
+    Helper for the file role: Keeps catalog and order-facing product state aligned for marketplace display and checkout operations.
+
+    `sync_catalog_product_from_orders_product` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
     get_or_create_catalog_product_mirror(order_product)
 
 
 def delete_catalog_product_for_orders_product(order_product: Product) -> None:
+    """
+    Helper for the file role: Keeps catalog and order-facing product state aligned for marketplace display and checkout operations.
+
+    `delete_catalog_product_for_orders_product` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
     from apps.catalog.models import Product as CatalogProduct
 
     CatalogProduct.objects.filter(
@@ -344,6 +445,13 @@ def delete_catalog_product_for_orders_product(order_product: Product) -> None:
 
 
 def sync_orders_product_from_producer_product(producer_product):
+    """
+    Helper for the file role: Keeps catalog and order-facing product state aligned for marketplace display and checkout operations.
+
+    `sync_orders_product_from_producer_product` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
     from apps.orders.models import Product as OrdersProduct
     from apps.producer_portal.models import ProductAvailability
 
@@ -375,6 +483,13 @@ def sync_orders_product_from_producer_product(producer_product):
 
 
 def delete_orders_and_catalog_products_for_producer_product(producer_product) -> None:
+    """
+    Helper for the file role: Keeps catalog and order-facing product state aligned for marketplace display and checkout operations.
+
+    `delete_orders_and_catalog_products_for_producer_product` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
     from apps.orders.models import Product as OrdersProduct
 
     orders_product = (
@@ -392,6 +507,13 @@ def delete_orders_and_catalog_products_for_producer_product(producer_product) ->
 
 
 def delete_orders_and_catalog_products_for_name(*, producer_user, product_name: str) -> None:
+    """
+    Helper for the file role: Keeps catalog and order-facing product state aligned for marketplace display and checkout operations.
+
+    `delete_orders_and_catalog_products_for_name` is kept at module level because it is reused by views/services
+    or isolates a business rule that should remain easy to test. The wider
+    context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
+    """
     from apps.orders.models import Product as OrdersProduct
 
     orders_products = OrdersProduct.objects.filter(
