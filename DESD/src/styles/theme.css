@@ -411,6 +411,42 @@ body.landing-snap-mode {
       0 0 0 1px color-mix(in srgb, var(--forest-green) 18%, transparent),
       0 0 0 4px color-mix(in srgb, var(--forest-green) 12%, transparent);
   }
+
+  .portal-register-form form > * {
+    animation: portal-field-rise 760ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .portal-register-form form > *:nth-child(1) {
+    animation-delay: 80ms;
+  }
+
+  .portal-register-form form > *:nth-child(2) {
+    animation-delay: 140ms;
+  }
+
+  .portal-register-form form > *:nth-child(3) {
+    animation-delay: 200ms;
+  }
+
+  .portal-register-form form > *:nth-child(4) {
+    animation-delay: 260ms;
+  }
+
+  .portal-register-form form > *:nth-child(n + 5) {
+    animation-delay: 320ms;
+  }
+}
+
+@keyframes portal-field-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.99);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 @media (min-width: 768px) {
@@ -466,5 +502,14 @@ body.landing-snap-mode {
   html.landing-snap-mode {
     scroll-behavior: auto;
     scroll-snap-type: y proximity;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.001ms !important;
   }
 }

@@ -22,7 +22,7 @@ from rest_framework import serializers
 
 from apps.community.models import ProductReview
 from apps.community.review_policy import find_matching_orders_product, resolve_verified_purchase_status
-from apps.geo.services import get_postcode_coordinates, haversine_miles
+from apps.geo.services import get_postcode_coordinates, get_user_default_postcode, haversine_miles
 
 from .marketplace_sync import (
     default_marketplace_image_url,
@@ -37,6 +37,7 @@ from .models import (
     OrderItem,
     Producer,
     ProducerSubOrder,
+    ProducerSubOrderStatusHistory,
     Product,
     RecurringOrderTemplate,
     RecurringOrderTemplateItem,
@@ -51,10 +52,13 @@ class ProducerSerializer(serializers.ModelSerializer):
     It keeps related behavior grouped so the ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
     can be changed without spreading the same responsibility across unrelated files.
     """
+    user_id = serializers.IntegerField(read_only=True)
+
     class Meta:
         model = Producer
         fields = [
             "id",
+            "user_id",
             "business_name",
             "contact_email",
             "phone",
@@ -106,6 +110,7 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
     can be changed without spreading the same responsibility across unrelated files.
     """
     producer_id = serializers.IntegerField(source="producer.id", read_only=True)
+    producer_user_id = serializers.IntegerField(source="producer.user.id", read_only=True, allow_null=True)
     producer_name = serializers.CharField(source="producer.business_name", read_only=True)
     producer_location = serializers.SerializerMethodField()
     producer_description = serializers.SerializerMethodField()
@@ -128,7 +133,9 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
     surplus_original_price = serializers.SerializerMethodField()
     surplus_expires_at = serializers.SerializerMethodField()
     surplus_best_before = serializers.SerializerMethodField()
+    surplus_note = serializers.SerializerMethodField()
     storage_tips = serializers.SerializerMethodField()
+    storage_tips_ai_generated = serializers.SerializerMethodField()
     recipe_ideas = serializers.SerializerMethodField()
     average_rating = serializers.SerializerMethodField()
     review_count = serializers.SerializerMethodField()
@@ -143,6 +150,7 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
             "price",
             "unit",
             "producer_id",
+            "producer_user_id",
             "producer_name",
             "producer_location",
             "producer_description",
@@ -167,7 +175,9 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
             "surplus_original_price",
             "surplus_expires_at",
             "surplus_best_before",
+            "surplus_note",
             "storage_tips",
+            "storage_tips_ai_generated",
             "recipe_ideas",
             "average_rating",
             "review_count",
@@ -236,13 +246,25 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
         return "Current season" if obj.in_season else "Year-round"
 
     def get_is_organic(self, obj: Product) -> bool:
-        return product_is_organic(name=obj.name, description=obj.description)
+        producer_product = self._producer_product(obj)
+        inferred_organic = product_is_organic(name=obj.name, description=obj.description)
+        if producer_product is not None:
+            return bool(getattr(producer_product, "is_organic", False)) or inferred_organic
+        return inferred_organic
 
     def get_organic_certification(self, obj: Product) -> str:
-        return ""
+        producer_product = self._producer_product(obj)
+        inferred_organic = product_is_organic(name=obj.name, description=obj.description)
+        if producer_product is None:
+            return "Organic" if inferred_organic else ""
+        certification = (getattr(producer_product, "organic_certification", "") or "").strip()
+        if certification:
+            return certification
+        return "Organic" if bool(getattr(producer_product, "is_organic", False)) or inferred_organic else ""
 
     def get_allergens(self, obj: Product) -> list[str]:
-        return [token.strip() for token in (obj.allergen_info or "").split(",") if token.strip()]
+        tokens = [token.strip() for token in (obj.allergen_info or "").split(",") if token.strip()]
+        return [token for token in tokens if token.lower() not in {"no common allergens", "none", "no allergens"}]
 
     def get_image_url(self, obj: Product) -> str:
         producer_product = self._producer_product(obj)
@@ -256,8 +278,7 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
     def get_food_miles(self, obj: Product) -> float:
         request = self.context.get("request")
         user = getattr(request, "user", None)
-        customer_profile = getattr(user, "orders_customer_profile", None) if user and user.is_authenticated else None
-        customer_postcode = customer_profile.postcode if customer_profile and customer_profile.postcode else ""
+        customer_postcode = get_user_default_postcode(user) if user and user.is_authenticated else ""
         if not customer_postcode or not obj.producer.postcode:
             return 0
 
@@ -290,13 +311,31 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
         )
 
     def get_surplus_expires_at(self, obj: Product):
-        return None
+        producer_product = self._producer_product(obj)
+        return getattr(producer_product, "surplus_expires_at", None)
 
     def get_surplus_best_before(self, obj: Product) -> str:
-        return ""
+        producer_product = self._producer_product(obj)
+        return getattr(producer_product, "surplus_best_before", "") or ""
+
+    def get_surplus_note(self, obj: Product) -> str:
+        producer_product = self._producer_product(obj)
+        return getattr(producer_product, "surplus_note", "") or ""
 
     def get_storage_tips(self, obj: Product) -> str:
-        return "Keep refrigerated where appropriate and consume while fresh."
+        producer_product = self._producer_product(obj)
+        if producer_product is None:
+            return ""
+        return (getattr(producer_product, "storage_tips", "") or "").strip()
+
+    def get_storage_tips_ai_generated(self, obj: Product) -> bool:
+        producer_product = self._producer_product(obj)
+        if producer_product is None:
+            return False
+        return bool(
+            (getattr(producer_product, "storage_tips", "") or "").strip()
+            and getattr(producer_product, "storage_tips_ai_generated", False)
+        )
 
     def get_recipe_ideas(self, obj: Product) -> list[str]:
         return list(
@@ -421,6 +460,8 @@ class CheckoutRequestSerializer(serializers.Serializer):
     special_instructions = serializers.CharField(required=False, allow_blank=True)
     payment_method = serializers.CharField(max_length=50, default="test_card")
     payment_token = serializers.CharField(max_length=120, required=False, allow_blank=True)
+    success_url = serializers.CharField(required=False, allow_blank=True, max_length=2048)
+    cancel_url = serializers.CharField(required=False, allow_blank=True, max_length=2048)
     selected_cart_item_ids = serializers.ListField(
         child=serializers.IntegerField(min_value=1),
         required=False,
@@ -430,6 +471,21 @@ class CheckoutRequestSerializer(serializers.Serializer):
     producer_delivery_dates = serializers.DictField(
         child=serializers.DateField(), required=False, help_text="Mapping producer_id -> YYYY-MM-DD"
     )
+
+
+class ProducerSubOrderStatusHistorySerializer(serializers.ModelSerializer):
+    actor_email = serializers.EmailField(source="actor.email", read_only=True)
+
+    class Meta:
+        model = ProducerSubOrderStatusHistory
+        fields = [
+            "id",
+            "previous_status",
+            "new_status",
+            "note",
+            "actor_email",
+            "created_at",
+        ]
 
 
 class ProducerSubOrderSerializer(serializers.ModelSerializer):
@@ -444,6 +500,7 @@ class ProducerSubOrderSerializer(serializers.ModelSerializer):
     producer_contact_email = serializers.CharField(source="producer.contact_email", read_only=True)
     producer_contact_phone = serializers.CharField(source="producer.phone", read_only=True)
     delivery = serializers.SerializerMethodField()
+    status_history = ProducerSubOrderStatusHistorySerializer(many=True, read_only=True)
 
     class Meta:
         model = ProducerSubOrder
@@ -459,6 +516,7 @@ class ProducerSubOrderSerializer(serializers.ModelSerializer):
             "payout_amount",
             "notes",
             "delivery",
+            "status_history",
         ]
 
     def get_delivery(self, obj: ProducerSubOrder):
@@ -506,6 +564,7 @@ class OrderSummarySerializer(serializers.ModelSerializer):
     producer_names = serializers.SerializerMethodField()
     delivery_date_from = serializers.SerializerMethodField()
     delivery_date_to = serializers.SerializerMethodField()
+    sub_orders = ProducerSubOrderSerializer(many=True, read_only=True)
 
     class Meta:
         model = Order
@@ -521,6 +580,7 @@ class OrderSummarySerializer(serializers.ModelSerializer):
             "producer_names",
             "delivery_date_from",
             "delivery_date_to",
+            "sub_orders",
         ]
 
     def get_producer_names(self, obj: Order) -> list[str]:
@@ -552,6 +612,8 @@ class OrderDetailSerializer(serializers.ModelSerializer):
     """
     sub_orders = ProducerSubOrderSerializer(many=True, read_only=True)
     items = OrderItemSerializer(many=True, read_only=True)
+    payment_reference = serializers.SerializerMethodField()
+    payment_reference_masked = serializers.SerializerMethodField()
 
     class Meta:
         model = Order
@@ -570,12 +632,24 @@ class OrderDetailSerializer(serializers.ModelSerializer):
             "total_amount",
             "payment_method",
             "payment_reference",
+            "payment_reference_masked",
             "is_recurring_instance",
             "recurring_scheduled_for",
             "created_at",
             "sub_orders",
             "items",
         ]
+
+    def get_payment_reference_masked(self, obj: Order) -> str:
+        reference = obj.payment_reference or ""
+        if not reference:
+            return ""
+        if len(reference) <= 7:
+            return f"{reference[:2]}***"
+        return f"{reference[:4]}***{reference[-3:]}"
+
+    def get_payment_reference(self, obj: Order) -> str:
+        return self.get_payment_reference_masked(obj)
 
 
 class RecurringOrderTemplateItemSerializer(serializers.ModelSerializer):
@@ -660,6 +734,8 @@ class RecurringOrderTemplateCreateSerializer(serializers.Serializer):
     special_instructions = serializers.CharField(required=False, allow_blank=True)
     payment_method = serializers.CharField(max_length=50, default="test_card")
     payment_token = serializers.CharField(max_length=120, required=False, allow_blank=True)
+    success_url = serializers.CharField(required=False, allow_blank=True, max_length=2048)
+    cancel_url = serializers.CharField(required=False, allow_blank=True, max_length=2048)
     selected_cart_item_ids = serializers.ListField(
         child=serializers.IntegerField(min_value=1),
         required=False,

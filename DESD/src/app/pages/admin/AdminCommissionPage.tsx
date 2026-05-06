@@ -13,7 +13,7 @@
  *   unless they communicate an important layout or accessibility choice.
  */
 
-import { Calendar, Download, FileSpreadsheet, Wallet } from 'lucide-react';
+import { Calendar, ChevronDown, Download, FileSpreadsheet, Loader2, Search, Wallet } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, XAxis, YAxis } from 'recharts';
 import { toast } from 'sonner';
@@ -29,6 +29,13 @@ import {
   ChartTooltipContent,
 } from '../../components/ui/chart';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../../components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from '../../components/ui/dropdown-menu';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
@@ -103,6 +110,23 @@ interface YTDSummary {
   total_producer_payouts: string;
 }
 
+type ExportFormat = 'csv' | 'pdf' | 'xlsx';
+
+const exportFormats: ExportFormat[] = ['csv', 'pdf', 'xlsx'];
+const exportFormatLabels: Record<ExportFormat, { title: string; description: string }> = {
+  csv: {
+    title: 'CSV',
+    description: 'Recommended for spreadsheet checks and audit reconciliation.',
+  },
+  pdf: {
+    title: 'PDF',
+    description: 'Best for sharing a fixed report snapshot.',
+  },
+  xlsx: {
+    title: 'XLSX',
+    description: 'Excel workbook for finance analysis.',
+  },
+};
 const defaultRange = getDefaultAdminDateRange();
 const panelClass = 'min-w-0 overflow-hidden rounded-3xl border border-[#d6ddd0] bg-[#fbfcf8] shadow-[0_10px_24px_rgba(18,31,21,0.06)]';
 const monthFormatter = new Intl.DateTimeFormat('en-GB', { month: 'short' });
@@ -147,6 +171,60 @@ function formatCurrencyValue(value: unknown): string {
   return formatAdminCurrency(String(value ?? 0));
 }
 
+interface ReportDownloadMenuProps {
+  disabled: boolean;
+  isDownloading: boolean;
+  onExport: (format: ExportFormat) => void;
+}
+
+function ReportDownloadMenu({ disabled, isDownloading, onExport }: ReportDownloadMenuProps) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          className="border-[#c7d0c1] bg-white text-[var(--forest-green)] hover:bg-[#edf2eb] hover:text-[var(--forest-green)]"
+          disabled={disabled}
+        >
+          {isDownloading ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Download className="mr-2 size-4" />}
+          {isDownloading ? 'Downloading' : 'Download report'}
+          {!isDownloading ? <ChevronDown className="ml-2 size-4" /> : null}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-80 rounded-2xl border-[#d7dfd2] p-2 shadow-xl">
+        <DropdownMenuLabel className="px-3 py-2 text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-[#667461]">
+          Choose export format
+        </DropdownMenuLabel>
+        {exportFormats.map((format) => {
+          const metadata = exportFormatLabels[format];
+          return (
+            <DropdownMenuItem
+              key={format}
+              className="items-start rounded-xl px-3 py-3"
+              onSelect={() => onExport(format)}
+            >
+              <div className="flex w-full items-start justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-[#1d2a20]">{metadata.title}</span>
+                    {format === 'csv' ? (
+                      <span className="rounded-full bg-[#e7f1e4] px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-[var(--forest-green)]">
+                        Recommended
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="mt-1 text-xs leading-5 text-[#687567]">{metadata.description}</p>
+                </div>
+              </div>
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 /**
  * AdminCommissionPage boundary.
  *
@@ -172,6 +250,8 @@ export function AdminCommissionPage() {
   const [selectedDetail, setSelectedDetail] = useState<CommissionOrderDetail | null>(null);
   const [detailCache, setDetailCache] = useState<Record<number, CommissionOrderDetail>>({});
   const [hiddenDetailOrderIds, setHiddenDetailOrderIds] = useState<number[]>([]);
+  const [reportSearch, setReportSearch] = useState('');
+  const [exportingFormat, setExportingFormat] = useState<ExportFormat | null>(null);
   const dateFromInputRef = useRef<HTMLInputElement | null>(null);
   const dateToInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -271,11 +351,13 @@ export function AdminCommissionPage() {
     }
   };
 
-  const handleExport = async () => {
+  const handleExport = async (format: ExportFormat) => {
+    setExportingFormat(format);
     try {
       const query = new URLSearchParams({
         start: dateFrom,
         end: dateTo,
+        format,
       });
       if (producerId) {
         query.set('producer_id', producerId);
@@ -288,14 +370,16 @@ export function AdminCommissionPage() {
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
-      anchor.download = `commission-report-${dateFrom}-${dateTo}.csv`;
+      anchor.download = `commission-report-${dateFrom}-${dateTo}.${format}`;
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
       URL.revokeObjectURL(url);
-      toast.success('Commission CSV exported.');
+      toast.success(`Commission ${format.toUpperCase()} exported.`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Unable to export CSV.');
+      toast.error(error instanceof Error ? error.message : `Unable to export ${format.toUpperCase()}.`);
+    } finally {
+      setExportingFormat(null);
     }
   };
 
@@ -305,6 +389,20 @@ export function AdminCommissionPage() {
   );
 
   const hasOrders = (report?.orders.length || 0) > 0;
+  const visibleReportOrders = useMemo(() => {
+    const normalizedSearch = reportSearch.trim().toLowerCase();
+    if (!normalizedSearch) {
+      return report?.orders || [];
+    }
+    return (report?.orders || []).filter((row) => {
+      return (
+        row.order_number.toLowerCase().includes(normalizedSearch) ||
+        row.status.toLowerCase().includes(normalizedSearch) ||
+        row.payment_status.toLowerCase().includes(normalizedSearch) ||
+        row.producer_breakdown.some((producer) => producer.producer_name.toLowerCase().includes(normalizedSearch))
+      );
+    });
+  }, [report, reportSearch]);
   const activeMonthlyRows = useMemo(
     () => monthlySummary.filter((row) => Number(row.number_of_orders) > 0),
     [monthlySummary],
@@ -373,7 +471,7 @@ export function AdminCommissionPage() {
             <p className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-[#6a786c]">Report builder</p>
             <h2 className="mt-2 text-2xl font-semibold tracking-tight text-[#182219]">Commission reporting workspace</h2>
             <p className="mt-2 text-sm leading-6 text-[#5f6d61]">
-              Filter by period, producer, and order status. Generate reports, review order drilldowns, and export CSV.
+              Filter by period, producer, and order status. Generate reports, review order drilldowns, and export CSV, PDF, or XLSX.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
@@ -385,15 +483,11 @@ export function AdminCommissionPage() {
             >
               {loading ? 'Loading...' : 'Generate report'}
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="border-[#c7d0c1] bg-white text-[var(--forest-green)] hover:bg-[#edf2eb] hover:text-[var(--forest-green)]"
-              onClick={() => void handleExport()}
-            >
-              <Download className="mr-2 size-4" />
-              Export CSV
-            </Button>
+            <ReportDownloadMenu
+              disabled={loading || exportingFormat !== null}
+              isDownloading={exportingFormat !== null}
+              onExport={(format) => void handleExport(format)}
+            />
           </div>
         </div>
 
@@ -531,28 +625,34 @@ export function AdminCommissionPage() {
                 No monthly activity has been recorded for the selected year.
               </div>
             ) : (
-              <ChartContainer config={monthlyChartConfig} className="h-[280px] w-full min-w-0 aspect-auto">
-                <AreaChart data={monthlyChartData} margin={{ left: 4, right: 8, top: 12, bottom: 0 }}>
-                  <CartesianGrid vertical={false} stroke="#dde5d7" />
-                  <XAxis axisLine={false} dataKey="label" tickLine={false} tickMargin={10} />
-                  <YAxis axisLine={false} tickLine={false} tickFormatter={(value) => `£${value}`} width={72} />
-                  <ChartTooltip
-                    content={
-                      <ChartTooltipContent
-                        formatter={(value, name) => (
-                          <div className="flex min-w-[10rem] items-center justify-between gap-6">
-                            <span className="text-[#5f6d61]">{name}</span>
-                            <span className="font-mono font-medium text-[#182219]">{formatCurrencyValue(value)}</span>
-                          </div>
-                        )}
-                      />
-                    }
-                  />
-                  <ChartLegend content={<ChartLegendContent />} />
-                  <Area dataKey="orderValue" fill="var(--color-orderValue)" fillOpacity={0.16} stroke="var(--color-orderValue)" strokeWidth={2.2} type="monotone" />
-                  <Area dataKey="commission" fill="var(--color-commission)" fillOpacity={0.2} stroke="var(--color-commission)" strokeWidth={2.2} type="monotone" />
-                </AreaChart>
-              </ChartContainer>
+              <div>
+                <div className="mb-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#6a786c]">Monthly order value and commission</p>
+                  <p className="mt-1 text-sm text-[#4f5f53]">Month-by-month comparison of gross order value against commission retained.</p>
+                </div>
+                <ChartContainer config={monthlyChartConfig} className="h-[280px] w-full min-w-0 aspect-auto">
+                  <AreaChart data={monthlyChartData} margin={{ left: 4, right: 8, top: 12, bottom: 0 }}>
+                    <CartesianGrid vertical={false} stroke="#dde5d7" />
+                    <XAxis axisLine={false} dataKey="label" tickLine={false} tickMargin={10} />
+                    <YAxis axisLine={false} tickLine={false} tickFormatter={(value) => `£${value}`} width={72} />
+                    <ChartTooltip
+                      content={
+                        <ChartTooltipContent
+                          formatter={(value, name) => (
+                            <div className="flex min-w-[10rem] items-center justify-between gap-6">
+                              <span className="text-[#5f6d61]">{name}</span>
+                              <span className="font-mono font-medium text-[#182219]">{formatCurrencyValue(value)}</span>
+                            </div>
+                          )}
+                        />
+                      }
+                    />
+                    <ChartLegend content={<ChartLegendContent />} />
+                    <Area dataKey="orderValue" fill="var(--color-orderValue)" fillOpacity={0.16} stroke="var(--color-orderValue)" strokeWidth={2.2} type="monotone" />
+                    <Area dataKey="commission" fill="var(--color-commission)" fillOpacity={0.2} stroke="var(--color-commission)" strokeWidth={2.2} type="monotone" />
+                  </AreaChart>
+                </ChartContainer>
+              </div>
             )}
           </div>
         </div>
@@ -574,26 +674,32 @@ export function AdminCommissionPage() {
                 Producer payout ranking will appear once the current filters return completed orders.
               </div>
             ) : (
-              <ChartContainer config={producerChartConfig} className="h-[280px] w-full min-w-0 aspect-auto">
-                <BarChart data={producerPayoutData} layout="vertical" margin={{ left: 8, right: 8, top: 12, bottom: 0 }}>
-                  <CartesianGrid horizontal={false} stroke="#e3e8de" />
-                  <XAxis axisLine={false} tickLine={false} type="number" tickFormatter={(value) => `£${value}`} />
-                  <YAxis axisLine={false} dataKey="producer" tickLine={false} type="category" width={100} />
-                  <ChartTooltip
-                    content={
-                      <ChartTooltipContent
-                        formatter={(value) => (
-                          <div className="flex min-w-[9rem] items-center justify-between gap-4">
-                            <span className="text-[#5f6d61]">Payout</span>
-                            <span className="font-mono font-medium text-[#182219]">{formatCurrencyValue(value)}</span>
-                          </div>
-                        )}
-                      />
-                    }
-                  />
-                  <Bar dataKey="payouts" fill="var(--color-payouts)" radius={[8, 8, 8, 8]} />
-                </BarChart>
-              </ChartContainer>
+              <div>
+                <div className="mb-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#6a786c]">Producer payout ranking</p>
+                  <p className="mt-1 text-sm text-[#4f5f53]">Producers ranked by payout value within the current report filters.</p>
+                </div>
+                <ChartContainer config={producerChartConfig} className="h-[280px] w-full min-w-0 aspect-auto">
+                  <BarChart data={producerPayoutData} layout="vertical" margin={{ left: 8, right: 8, top: 12, bottom: 0 }}>
+                    <CartesianGrid horizontal={false} stroke="#e3e8de" />
+                    <XAxis axisLine={false} tickLine={false} type="number" tickFormatter={(value) => `£${value}`} />
+                    <YAxis axisLine={false} dataKey="producer" tickLine={false} type="category" width={100} />
+                    <ChartTooltip
+                      content={
+                        <ChartTooltipContent
+                          formatter={(value) => (
+                            <div className="flex min-w-[9rem] items-center justify-between gap-4">
+                              <span className="text-[#5f6d61]">Payout</span>
+                              <span className="font-mono font-medium text-[#182219]">{formatCurrencyValue(value)}</span>
+                            </div>
+                          )}
+                        />
+                      }
+                    />
+                    <Bar dataKey="payouts" fill="var(--color-payouts)" radius={[8, 8, 8, 8]} />
+                  </BarChart>
+                </ChartContainer>
+              </div>
             )}
           </div>
         </div>
@@ -611,29 +717,35 @@ export function AdminCommissionPage() {
             </div>
             <div className="mt-5">
               {splitData.some((entry) => entry.value > 0) ? (
-                <ChartContainer config={splitChartConfig} className="h-[250px] w-full min-w-0 aspect-auto">
-                  <PieChart>
-                    <ChartTooltip
-                      content={
-                        <ChartTooltipContent
-                          hideIndicator
-                          formatter={(value, name) => (
-                            <div className="flex min-w-[9rem] items-center justify-between gap-4">
-                              <span className="text-[#5f6d61]">{name}</span>
-                              <span className="font-mono font-medium text-[#182219]">{formatCurrencyValue(value)}</span>
-                            </div>
-                          )}
-                        />
-                      }
-                    />
-                    <Pie data={splitData} dataKey="value" innerRadius={48} outerRadius={72} paddingAngle={3} stroke="none">
-                      {splitData.map((entry) => (
-                        <Cell key={entry.name} fill={entry.fill} />
-                      ))}
-                    </Pie>
-                    <ChartLegend content={<ChartLegendContent nameKey="name" className="flex-wrap gap-3 pt-4 text-center" />} />
-                  </PieChart>
-                </ChartContainer>
+                <div>
+                  <div className="mb-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#6a786c]">Commission share split</p>
+                    <p className="mt-1 text-sm text-[#4f5f53]">Current split between commission retained and payouts distributed to producers.</p>
+                  </div>
+                  <ChartContainer config={splitChartConfig} className="h-[250px] w-full min-w-0 aspect-auto">
+                    <PieChart>
+                      <ChartTooltip
+                        content={
+                          <ChartTooltipContent
+                            hideIndicator
+                            formatter={(value, name) => (
+                              <div className="flex min-w-[9rem] items-center justify-between gap-4">
+                                <span className="text-[#5f6d61]">{name}</span>
+                                <span className="font-mono font-medium text-[#182219]">{formatCurrencyValue(value)}</span>
+                              </div>
+                            )}
+                          />
+                        }
+                      />
+                      <Pie data={splitData} dataKey="value" innerRadius={48} outerRadius={72} paddingAngle={3} stroke="none">
+                        {splitData.map((entry) => (
+                          <Cell key={entry.name} fill={entry.fill} />
+                        ))}
+                      </Pie>
+                      <ChartLegend content={<ChartLegendContent nameKey="name" className="flex-wrap gap-3 pt-4 text-center" />} />
+                    </PieChart>
+                  </ChartContainer>
+                </div>
               ) : (
                 <div className="rounded-2xl border border-dashed border-[#d6ddd0] bg-[#f4f7f1] p-6 text-sm leading-6 text-[#5f6d61]">
                   No split data is available for the selected filters.
@@ -672,6 +784,22 @@ export function AdminCommissionPage() {
             ) : null}
           </div>
 
+          <div className="mt-4">
+            <Label htmlFor="commission-report-search" className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-[#6a786c]">
+              Search report rows
+            </Label>
+            <div className="relative mt-2">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#7a867d]" />
+              <Input
+                id="commission-report-search"
+                value={reportSearch}
+                onChange={(event) => setReportSearch(event.target.value)}
+                placeholder="Order number, producer, order status, payment status"
+                className="h-11 rounded-2xl border-[#ccd4c5] bg-white pl-10"
+              />
+            </div>
+          </div>
+
           <div className="mt-5 overflow-hidden rounded-2xl border border-[#dde4d7] bg-white">
             <div className="overflow-x-auto">
               <Table>
@@ -688,7 +816,7 @@ export function AdminCommissionPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {(report?.orders || []).map((row) => (
+                  {visibleReportOrders.map((row) => (
                     <TableRow key={row.order_id} className="border-[#eef1eb] hover:bg-[#fbfcf8]">
                       <TableCell className="font-medium text-[#182219]">{row.order_number}</TableCell>
                       <TableCell>
@@ -739,6 +867,11 @@ export function AdminCommissionPage() {
               </Table>
             </div>
           </div>
+          {hasOrders && visibleReportOrders.length === 0 ? (
+            <div className="mt-4 rounded-2xl border border-dashed border-[#d6ddd0] bg-[#f4f7f1] p-6 text-sm leading-6 text-[#5f6d61]">
+              No commission rows match the current search.
+            </div>
+          ) : null}
         </div>
 
         <div className="space-y-6">

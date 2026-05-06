@@ -106,7 +106,7 @@ class CustomerProfileAdmin(admin.ModelAdmin):
     can be changed without spreading the same responsibility across unrelated files.
     """
     list_display = ("id", "user", "full_name", "phone")
-    search_fields = ("user__email", "full_name", "phone")
+    search_fields = ("user__email", "full_name", "first_name", "last_name", "phone")
 
 
 @admin.register(ProducerProfile)

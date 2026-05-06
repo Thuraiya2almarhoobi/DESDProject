@@ -22,6 +22,7 @@ import { Product } from '../types';
 import { AvailabilityBadge, OrganicBadge, SurplusBadge } from '../components/ProductBadges';
 import { ProductMeta } from '../components/ProductMeta';
 import { SiteHeader } from '../components/SiteHeader';
+import { fuzzyIncludes } from '../lib/fuzzySearch';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
@@ -102,15 +103,7 @@ export function PublicBrowsePage() {
         return true;
       }
 
-      return [
-        product.name,
-        product.description,
-        product.producerName,
-        product.category,
-      ]
-        .join(' ')
-        .toLowerCase()
-        .includes(loweredQuery);
+      return fuzzyIncludes(loweredQuery, [product.name, product.description, product.producerName, product.category]);
     });
 
     switch (sortBy) {
@@ -323,6 +316,7 @@ function PublicBrowseCard({ product }: { product: Product }) {
             expiresAt={product.surplusExpiresAt}
             bestBefore={product.surplusBestBefore}
             unit={product.unit}
+            note={product.surplusNote}
           />
         ) : (
           <div className="flex items-baseline gap-1">

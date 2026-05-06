@@ -46,7 +46,7 @@ export function CommunityDashboardPage() {
     { label: 'Order Cart', icon: ClipboardList, path: '/cart', variant: 'outline' as const },
     { label: 'Orders', icon: ReceiptText, path: '/orders/history', variant: 'outline' as const },
     { label: 'Near Me', icon: MapPinned, path: '/map', variant: 'outline' as const },
-    { label: 'Recipes', icon: BookOpenText, path: '/content/recipes', variant: 'outline' as const },
+    { label: 'Content', icon: BookOpenText, path: '/content/recipes', variant: 'outline' as const },
   ];
   const workflowCards = [
     {

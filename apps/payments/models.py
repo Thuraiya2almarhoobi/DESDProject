@@ -85,7 +85,20 @@ class SettlementOrderLine(models.Model):
     can be changed without spreading the same responsibility across unrelated files.
     """
     settlement = models.ForeignKey(WeeklySettlement, on_delete=models.CASCADE, related_name="lines")
-    order = models.ForeignKey("producer_portal.ProducerOrder", on_delete=models.PROTECT, related_name="settlement_lines")
+    order = models.ForeignKey(
+        "producer_portal.ProducerOrder",
+        on_delete=models.PROTECT,
+        related_name="settlement_lines",
+        null=True,
+        blank=True,
+    )
+    sub_order = models.ForeignKey(
+        "orders.ProducerSubOrder",
+        on_delete=models.PROTECT,
+        related_name="settlement_lines",
+        null=True,
+        blank=True,
+    )
     customer_name = models.CharField(max_length=120)
     gross_amount = models.DecimalField(
         max_digits=12,
@@ -107,7 +120,8 @@ class SettlementOrderLine(models.Model):
         ordering = ["id"]
         constraints = [
             models.UniqueConstraint(fields=["settlement", "order"], name="unique_order_per_settlement"),
+            models.UniqueConstraint(fields=["settlement", "sub_order"], name="unique_sub_order_per_settlement"),
         ]
 
     def __str__(self) -> str:
-        return f"{self.settlement_id}:{self.order_id}"
+        return f"{self.settlement_id}:{self.order_id or self.sub_order_id}"

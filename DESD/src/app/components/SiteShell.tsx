@@ -13,8 +13,7 @@
  *   unless they communicate an important layout or accessibility choice.
  */
 
-import { Outlet } from 'react-router';
-
+import { AnimatedOutlet } from './motion/Motion';
 import { SiteFooter } from './SiteFooter';
 
 /**
@@ -28,7 +27,7 @@ import { SiteFooter } from './SiteFooter';
 export function SiteShell() {
   return (
     <>
-      <Outlet />
+      <AnimatedOutlet />
       <SiteFooter />
     </>
   );

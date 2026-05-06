@@ -14,7 +14,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { useParams, useNavigate } from 'react-router';
+import { Link, useParams, useNavigate } from 'react-router';
 import {
   ArrowLeft,
   ShoppingCart,
@@ -24,6 +24,7 @@ import {
   MapPin,
   Sprout,
   AlertCircle,
+  Flag,
   Star,
   User as UserIcon,
   CreditCard,
@@ -50,11 +51,13 @@ import {
   fetchProductReviewEligibility,
   fetchProductReviews,
   respondToProductReview,
+  updateProductReview,
 } from '../api/catalog';
 import { isBulkBuyerRole, isBuyerRole, MAX_ORDER_ITEM_QUANTITY } from '../lib/ordering';
 import { getDashboardPathForRole } from '../lib/roleRouting';
 import { useSafeBack } from '../lib/navigation';
 import { ApiRecipe, apiJson } from '../lib/api';
+import { fetchMyModerationReportStatus, ModerationTargetType, reportModerationTarget } from '../lib/moderation';
 
 function formatReviewDate(value: string): string {
   const parsed = new Date(value);
@@ -99,6 +102,12 @@ function formatUnit(unit: string, quantity: number): string {
   return unit;
 }
 
+function scrollToReviewForm(): void {
+  window.setTimeout(() => {
+    document.getElementById('review-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 0);
+}
+
 /**
  * ProductDetailPage boundary.
  *
@@ -134,6 +143,7 @@ export function ProductDetailPage() {
   const [reviewTitle, setReviewTitle] = useState('');
   const [reviewComment, setReviewComment] = useState('');
   const [reviewIsAnonymous, setReviewIsAnonymous] = useState(false);
+  const [editingReviewId, setEditingReviewId] = useState<string | null>(null);
   const [reviewFormError, setReviewFormError] = useState('');
   const [allergenConfirmationError, setAllergenConfirmationError] = useState('');
   const [pendingReviewNotice, setPendingReviewNotice] = useState('');
@@ -145,6 +155,8 @@ export function ProductDetailPage() {
   const [linkedRecipes, setLinkedRecipes] = useState<ApiRecipe[]>([]);
   const [linkedRecipesLoading, setLinkedRecipesLoading] = useState(false);
   const [expandedRecipeIds, setExpandedRecipeIds] = useState<number[]>([]);
+  const [activeReportKey, setActiveReportKey] = useState<string | null>(null);
+  const [reportedProductIds, setReportedProductIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!id) {
@@ -249,6 +261,28 @@ export function ProductDetailPage() {
   }, [id]);
 
   useEffect(() => {
+    if (!product || !user) {
+      return;
+    }
+
+    let mounted = true;
+    fetchMyModerationReportStatus('product', product.id)
+      .then((payload) => {
+        if (!mounted || !payload.reported) {
+          return;
+        }
+        setReportedProductIds((previous) => new Set(previous).add(String(product.id)));
+      })
+      .catch(() => {
+        // Reporting status is a progressive UI hint; product browsing should not fail if unavailable.
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [product, user]);
+
+  useEffect(() => {
     if (!id) {
       setReviewEligibility(null);
       setIsReviewEligibilityLoading(false);
@@ -290,7 +324,17 @@ export function ProductDetailPage() {
 
     setHasReviewedAllergens(product.allergens.length === 0);
     setAllergenConfirmationError('');
-  }, [product]);
+
+    if (product.allergens.length > 0 && user) {
+      apiJson<{ acknowledged: boolean }>(`/api/orders/products/${product.id}/allergen-acknowledgement/`)
+        .then((payload) => {
+          setHasReviewedAllergens(payload.acknowledged);
+        })
+        .catch(() => {
+          setHasReviewedAllergens(false);
+        });
+    }
+  }, [product, user]);
 
   useEffect(() => {
     setProducerReplyDrafts((currentDrafts) => {
@@ -322,6 +366,7 @@ export function ProductDetailPage() {
   const isBulkBuyer = isBulkBuyerRole(user?.role);
   const producerDeliveryLeadTime = product?.producerDeliveryLeadTime || 48;
   const hasExistingReview = Boolean(reviewEligibility?.hasExistingReview);
+  const existingReview = reviewEligibility?.existingReview;
   const canSubmitReview = Boolean(reviewEligibility?.canSubmit);
   const canRespondToReviews = Boolean(reviewEligibility?.canRespond);
   const reviewApprovalOutcomeLabel = 'Verified purchase';
@@ -446,6 +491,36 @@ export function ProductDetailPage() {
     navigate('/cart');
   };
 
+  const handleReport = async (targetType: ModerationTargetType, objectId: string | number, label: string) => {
+    if (!user) {
+      toast.error('Please sign in to report this item.');
+      return;
+    }
+
+    const key = `${targetType}:${objectId}`;
+    if (targetType === 'product' && reportedProductIds.has(String(objectId))) {
+      toast.info('Product already reported.');
+      return;
+    }
+
+    setActiveReportKey(key);
+    try {
+      await reportModerationTarget(targetType, objectId, `Reported from product detail page: ${label}`);
+      if (targetType === 'product') {
+        setReportedProductIds((previous) => new Set(previous).add(String(objectId)));
+      }
+      toast.success(`${label} reported to moderation.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : `Unable to report ${label.toLowerCase()}.`;
+      if (targetType === 'product' && message.toLowerCase().includes('already reported')) {
+        setReportedProductIds((previous) => new Set(previous).add(String(objectId)));
+      }
+      toast.error(message);
+    } finally {
+      setActiveReportKey(null);
+    }
+  };
+
   const backToMarketplaceButton = (
     <Button variant="ghost" onClick={goBack}>
       <ArrowLeft className="mr-2 size-4" />
@@ -486,11 +561,7 @@ export function ProductDetailPage() {
           <CreditCard className="size-5" />
           {activeCartAction === 'buy'
             ? 'Preparing Checkout...'
-            : isBulkBuyer
-              ? user?.role === 'COMMUNITY'
-                ? 'Review Community Checkout'
-                : 'Review Restaurant Checkout'
-              : 'Buy Now'}
+            : 'Buy Now'}
         </Button>
         <Button
           size="lg"
@@ -504,11 +575,7 @@ export function ProductDetailPage() {
             ? 'Adding to Cart...'
             : remainingAddToCartQuantity <= 0
               ? 'Max in Cart'
-              : isBulkBuyer
-                ? user?.role === 'COMMUNITY'
-                  ? 'Add to Community Order'
-                  : 'Add to Restaurant Cart'
-                : 'Add to Cart'}
+              : 'Add to Cart'}
         </Button>
       </div>
 
@@ -555,9 +622,20 @@ export function ProductDetailPage() {
     </Button>
   );
 
-  const handleAllergenReviewToggle = (checked: boolean) => {
+  const handleAllergenReviewToggle = async (checked: boolean) => {
     if (!product) {
       return;
+    }
+
+    if (checked && user) {
+      try {
+        await apiJson(`/api/orders/products/${product.id}/allergen-acknowledgement/`, {
+          method: 'POST',
+        });
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'Unable to save allergen acknowledgement.');
+        return;
+      }
     }
 
     setHasReviewedAllergens(checked);
@@ -594,6 +672,20 @@ export function ProductDetailPage() {
   };
 
   const openReviewForm = () => {
+    if (isReviewEligibilityLoading) {
+      toast.info('Checking whether this product can be reviewed.');
+      return;
+    }
+    if (existingReview) {
+      setEditingReviewId(existingReview.id);
+      setReviewRating(existingReview.rating);
+      setReviewTitle(existingReview.title || '');
+      setReviewComment(existingReview.comment || '');
+      setReviewIsAnonymous(Boolean(existingReview.isAnonymous));
+      setReviewFormError('');
+      scrollToReviewForm();
+      return;
+    }
     if (!canSubmitReview) {
       if (!user) {
         navigate('/login');
@@ -604,7 +696,7 @@ export function ProductDetailPage() {
       }
       return;
     }
-    document.getElementById('review-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    scrollToReviewForm();
   };
 
   const handleReviewSubmit = async () => {
@@ -622,7 +714,7 @@ export function ProductDetailPage() {
       return;
     }
 
-    if (!canSubmitReview) {
+    if (!canSubmitReview && !editingReviewId) {
       const reason = reviewEligibility?.reason || 'You cannot review this product yet.';
       setReviewFormError(reason);
       return;
@@ -642,24 +734,31 @@ export function ProductDetailPage() {
     setIsSubmittingReview(true);
 
     try {
-      const createdReview = await createProductReview(id, {
+      const reviewPayload = {
         rating: reviewRating,
         title: reviewTitle.trim(),
         comment: reviewComment.trim(),
         isAnonymous: reviewIsAnonymous,
-      });
-      if (createdReview.moderationStatus === 'pending') {
+      };
+      const savedReview = editingReviewId
+        ? await updateProductReview(id, editingReviewId, reviewPayload)
+        : await createProductReview(id, reviewPayload);
+      if (savedReview.moderationStatus === 'pending') {
         setPendingReviewNotice('Your review was submitted and is waiting for approval.');
         toast.success('Your review was submitted and is waiting for approval.');
       } else {
         setPendingReviewNotice('');
-        setReviews((currentReviews) => [createdReview, ...currentReviews]);
-        toast.success('Your review is now live on this product.');
+        setReviews((currentReviews) => {
+          const withoutSavedReview = currentReviews.filter((review) => review.id !== savedReview.id);
+          return [savedReview, ...withoutSavedReview];
+        });
+        toast.success(editingReviewId ? 'Your review was updated.' : 'Your review is now live on this product.');
       }
       setReviewRating(0);
       setReviewTitle('');
       setReviewComment('');
       setReviewIsAnonymous(false);
+      setEditingReviewId(null);
       setHasReviewsError(false);
       await refreshReviewEligibility();
     } catch (error) {
@@ -759,6 +858,7 @@ export function ProductDetailPage() {
     reviews.filter((review) => review.verifiedPurchase).length || product.verifiedReviewCount || 0;
   const firstReview = reviews[0];
   const recipeCount = linkedRecipes.length || product.recipeIdeas?.length || 0;
+  const isProductReported = reportedProductIds.has(String(product.id));
 
   return (
     <div className="min-h-screen bg-[#f3fbf1]">
@@ -812,32 +912,53 @@ export function ProductDetailPage() {
                   </div>
                   <div>
                     <h1 className="text-3xl font-semibold tracking-tight text-[var(--rich-soil)] sm:text-4xl">{product.name}</h1>
-                    <p className="mt-2 text-lg text-[var(--warm-earth)]">{product.producerName}</p>
+                    <Link
+                      to={`/producers/${product.producerId}`}
+                      className="mt-2 inline-flex text-lg font-medium text-[var(--forest-green)] hover:underline"
+                    >
+                      {product.producerName}
+                    </Link>
                     <p className="mt-3 hidden max-w-2xl text-sm leading-6 text-[var(--warm-earth)] sm:block">{product.description}</p>
                   </div>
 
-                  <a
-                    href="#reviews"
-                    className="inline-flex flex-wrap items-center gap-2 rounded-full border border-[#d6cab8] bg-[#fbfaf4] px-4 py-2 text-sm transition hover:border-[var(--forest-green)]"
-                  >
-                    {displayedAverageRating !== null ? (
-                      <>
-                        <ReviewStars rating={Math.round(displayedAverageRating)} />
-                        <span className="font-semibold text-[var(--rich-soil)]">{displayedAverageRating.toFixed(1)}</span>
-                        <span className="text-[var(--warm-earth)]">
-                          {displayedReviewCount} review{displayedReviewCount === 1 ? '' : 's'}
-                        </span>
-                        {displayedVerifiedReviewCount > 0 && (
-                          <span className="text-[var(--earth-accent)]">{displayedVerifiedReviewCount} verified</span>
-                        )}
-                      </>
-                    ) : (
-                      <>
-                        <ReviewStars rating={0} />
-                        <span className="font-semibold text-[var(--rich-soil)]">No customer ratings yet</span>
-                      </>
-                    )}
-                  </a>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <a
+                      href="#reviews"
+                      className="inline-flex flex-wrap items-center gap-2 rounded-full border border-[#d6cab8] bg-[#fbfaf4] px-4 py-2 text-sm transition hover:border-[var(--forest-green)]"
+                    >
+                      {displayedAverageRating !== null ? (
+                        <>
+                          <ReviewStars rating={Math.round(displayedAverageRating)} />
+                          <span className="font-semibold text-[var(--rich-soil)]">{displayedAverageRating.toFixed(1)}</span>
+                          <span className="text-[var(--warm-earth)]">
+                            {displayedReviewCount} review{displayedReviewCount === 1 ? '' : 's'}
+                          </span>
+                          {displayedVerifiedReviewCount > 0 && (
+                            <span className="text-[var(--earth-accent)]">{displayedVerifiedReviewCount} verified</span>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <ReviewStars rating={0} />
+                          <span className="font-semibold text-[var(--rich-soil)]">No customer ratings yet</span>
+                        </>
+                      )}
+                    </a>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="rounded-full border-[#d6cab8] bg-[#fbfaf4] text-[#6a4f45] hover:bg-[#f3eee5] hover:text-[#4b382f]"
+                      disabled={activeReportKey === `product:${product.id}` || isProductReported}
+                      onClick={() => void handleReport('product', product.id, 'Product')}
+                    >
+                      <Flag className="mr-2 size-4" />
+                      {isProductReported
+                        ? 'Product reported'
+                        : activeReportKey === `product:${product.id}`
+                          ? 'Reporting...'
+                          : 'Report product'}
+                    </Button>
+                  </div>
 
                   {firstReview && (
                     <div className="max-w-2xl border-l-2 border-[#d6cab8] pl-4">
@@ -1024,18 +1145,18 @@ export function ProductDetailPage() {
                     <p className="text-sm text-gray-600">No reviews yet</p>
                   )}
                 </div>
-                {user?.role === 'CUSTOMER' && canSubmitReview ? (
+                {user?.role === 'CUSTOMER' ? (
                   <Button variant="outline" size="sm" onClick={openReviewForm}>
-                    Write a review
+                    {existingReview ? 'Edit your review' : 'Write a review'}
                   </Button>
                 ) : (
-                  <Button variant="outline" size="sm" disabled={isReviewEligibilityLoading}>
+                  <Button variant="outline" size="sm" onClick={openReviewForm} disabled={isReviewEligibilityLoading}>
                     {user?.role === 'PRODUCER' && canRespondToReviews ? 'Respond as producer below' : 'Write a review'}
                   </Button>
                 )}
               </div>
               <p className="text-xs text-gray-500">
-                Reviews use a clear 1 to 5 star scale. Only logged-in customers with a delivered purchase can submit a review. Verified purchases are labelled clearly, and suspicious reviews can still be held for approval.
+                Reviews use a clear 1 to 5 star scale. Only logged-in customers with a delivered purchase can submit a review. Verified purchases are labelled clearly, and reported reviews are sent to admin moderation.
               </p>
               {pendingReviewNotice && (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -1059,22 +1180,29 @@ export function ProductDetailPage() {
                     ? 'Customers review here, and you can reply beneath published reviews as the producer.'
                     : 'Reviews can only be posted from customer accounts.'}
                 </div>
-              ) : hasExistingReview ? (
+              ) : hasExistingReview && !editingReviewId ? (
                 <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-5 text-sm text-green-800">
-                  {reviewEligibility?.reason || 'You have already reviewed this product. Thanks for sharing your feedback.'}
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p>{reviewEligibility?.reason || 'You have already reviewed this product. Thanks for sharing your feedback.'}</p>
+                    {existingReview && (
+                      <Button variant="outline" size="sm" onClick={openReviewForm}>
+                        Edit review
+                      </Button>
+                    )}
+                  </div>
                 </div>
               ) : isReviewEligibilityLoading ? (
                 <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-5 text-sm text-gray-600">
                   Checking review eligibility...
                 </div>
-              ) : !canSubmitReview ? (
+              ) : !canSubmitReview && !editingReviewId ? (
                 <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-5 text-sm text-gray-600">
                   {reviewEligibility?.reason || 'You cannot review this product yet.'}
                 </div>
               ) : (
                 <div id="review-form" className="rounded-lg border bg-gray-50 p-4 space-y-4">
                   <div>
-                    <p className="font-medium text-gray-900">Write your review</p>
+                    <p className="font-medium text-gray-900">{editingReviewId ? 'Edit your review' : 'Write your review'}</p>
                     <p className="text-sm text-gray-500">
                       Rate the product from 1 to 5 stars, add a short title, and leave an optional comment. Because this review comes from a delivered order, it will show as {reviewApprovalOutcomeLabel}.
                     </p>
@@ -1158,7 +1286,13 @@ export function ProductDetailPage() {
                       onClick={handleReviewSubmit}
                       disabled={isSubmittingReview || reviewRating === 0 || !reviewTitle.trim()}
                     >
-                      {isSubmittingReview ? 'Posting review...' : 'Post review'}
+                      {isSubmittingReview
+                        ? editingReviewId
+                          ? 'Saving review...'
+                          : 'Posting review...'
+                        : editingReviewId
+                          ? 'Save review'
+                          : 'Post review'}
                     </Button>
                   </div>
                 </div>
@@ -1201,6 +1335,34 @@ export function ProductDetailPage() {
                           <div className="mb-2 flex flex-wrap items-center gap-2">
                             <ReviewStars rating={review.rating} />
                             <span className="text-sm text-gray-500">{formatReviewDate(review.createdAt)}</span>
+                            {user?.role === 'CUSTOMER' && review.userId && String(user.id) === review.userId && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 text-xs text-green-700 hover:bg-green-50 hover:text-green-800"
+                                onClick={() => {
+                                  setEditingReviewId(review.id);
+                                  setReviewRating(review.rating);
+                                  setReviewTitle(review.title || '');
+                                  setReviewComment(review.comment || '');
+                                  setReviewIsAnonymous(Boolean(review.isAnonymous));
+                                  setReviewFormError('');
+                                  scrollToReviewForm();
+                                }}
+                              >
+                                Edit
+                              </Button>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-xs text-[#6a4f45] hover:bg-[#f3eee5] hover:text-[#4b382f]"
+                              disabled={activeReportKey === `review:${review.id}`}
+                              onClick={() => void handleReport('review', review.id, 'Review')}
+                            >
+                              <Flag className="mr-1.5 size-3.5" />
+                              {activeReportKey === `review:${review.id}` ? 'Reporting...' : 'Report'}
+                            </Button>
                           </div>
                           <p className="text-sm text-gray-700">{review.comment || 'No written comment.'}</p>
                           {review.producerResponse && (
@@ -1274,9 +1436,24 @@ export function ProductDetailPage() {
                     Linked ideas and storage notes for cooking with this product.
                   </p>
                 </div>
-                <Badge variant="outline" className="border-[#d6cab8] bg-[#fbfaf4] text-[var(--rich-soil)]">
-                  {recipeCount} {recipeCount === 1 ? 'idea' : 'ideas'}
-                </Badge>
+                <div className="grid w-full gap-2 sm:w-auto sm:min-w-64">
+                  <Badge variant="outline" className="justify-center border-[#d6cab8] bg-[#fbfaf4] text-[var(--rich-soil)]">
+                    {recipeCount} {recipeCount === 1 ? 'idea' : 'ideas'}
+                  </Badge>
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-emerald-900">Storage</p>
+                      {product.storageTips && product.storageTipsAiGenerated && (
+                        <Badge variant="outline" className="border-emerald-300 bg-white text-emerald-800">
+                          AI
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="mt-1 line-clamp-3 text-xs leading-5 text-emerald-800">
+                      {product.storageTips || 'No storage information at the moment.'}
+                    </p>
+                  </div>
+                </div>
               </div>
 
               {linkedRecipesLoading ? (
@@ -1304,13 +1481,25 @@ export function ProductDetailPage() {
                               {recipe.description || `By ${recipe.producer_name}`}
                             </p>
                           </div>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => toggleLinkedRecipe(recipe.id)}
-                          >
-                            {isExpanded ? 'Hide Recipe' : 'View Full Recipe'}
-                          </Button>
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => toggleLinkedRecipe(recipe.id)}
+                            >
+                              {isExpanded ? 'Hide Recipe' : 'View Full Recipe'}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-[#6a4f45] hover:bg-[#f3eee5] hover:text-[#4b382f]"
+                              disabled={activeReportKey === `recipe:${recipe.id}`}
+                              onClick={() => void handleReport('recipe', recipe.id, 'Recipe')}
+                            >
+                              <Flag className="mr-2 size-4" />
+                              {activeReportKey === `recipe:${recipe.id}` ? 'Reporting...' : 'Report'}
+                            </Button>
+                          </div>
                         </div>
 
                         {isExpanded && (
@@ -1373,13 +1562,6 @@ export function ProductDetailPage() {
                   Recipe suggestions coming soon.
                 </p>
               )}
-
-              {product.storageTips && (
-                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-                  <p className="text-sm font-medium text-emerald-900">Storage Guidance</p>
-                  <p className="mt-1 text-sm text-emerald-800">{product.storageTips}</p>
-                </div>
-              )}
             </CardContent>
           </Card>
 
@@ -1410,7 +1592,12 @@ export function ProductDetailPage() {
                 <div>
                   <div className="flex items-center gap-2">
                     <Sprout className="size-5 text-[var(--forest-green)]" />
-                    <h3 className="text-xl font-semibold text-[var(--rich-soil)]">About {product.producerName}</h3>
+	                    <h3 className="text-xl font-semibold text-[var(--rich-soil)]">
+                      About{' '}
+                      <Link to={`/producers/${product.producerId}`} className="text-[var(--forest-green)] hover:underline">
+                        {product.producerName}
+                      </Link>
+                    </h3>
                   </div>
                   <p className="mt-3 text-sm leading-7 text-[var(--muted-foreground)]">
                     {product.producerDescription || 'Producer description coming soon.'}

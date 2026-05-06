@@ -23,6 +23,7 @@ from django.contrib.auth import get_user_model
 from django.db.models import F
 from django.db import transaction
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import generics, permissions, response, status
 from rest_framework.views import APIView
 
@@ -31,8 +32,16 @@ from apps.orders.marketplace_sync import (
     delete_orders_and_catalog_products_for_producer_product,
     sync_orders_product_from_producer_product,
 )
+from apps.orders.models import Producer as OrdersProducer
+from apps.orders.models import FavoriteProducer, ProducerNotification, UserNotification
 
-from .models import OrderStatus, ProducerOrder, ProducerProduct, ProductAvailability
+from .models import (
+    OrderStatus,
+    ProducerOrder,
+    ProducerProduct,
+    ProducerProductInventoryEvent,
+    ProductAvailability,
+)
 from .serializers import (
     ProducerOrderSerializer,
     ProducerOrderStatusUpdateSerializer,
@@ -40,6 +49,15 @@ from .serializers import (
 )
 
 User = get_user_model()
+
+
+class IsProducerUser(permissions.BasePermission):
+    def has_permission(self, request, view) -> bool:
+        return bool(
+            request.user
+            and request.user.is_authenticated
+            and request.user.role == User.Role.PRODUCER
+        )
 
 
 def _effective_customer_visible_ids(queryset):
@@ -84,10 +102,111 @@ def _resolve_actor_user(request):
     or isolates a business rule that should remain easy to test. The wider
     context is: Producer portal domain: producer inventory, dashboard summaries, order management, and producer-facing APIs.
     """
-    if request.user and request.user.is_authenticated:
-        return request.user
-    demo_email = request.headers.get("X-Demo-User") or request.query_params.get("demo_user") or "producer@example.com"
-    return _get_or_create_demo_user(demo_email)
+    return request.user
+
+
+def _orders_producer_for_user(user):
+    return OrdersProducer.objects.filter(user=user, is_active=True).first()
+
+
+def _record_inventory_event(product: ProducerProduct, *, actor, event_type: str, previous=None) -> None:
+    ProducerProductInventoryEvent.objects.create(
+        product=product,
+        actor=actor if getattr(actor, "is_authenticated", False) else None,
+        event_type=event_type,
+        previous_stock_quantity=getattr(previous, "stock_quantity", None),
+        new_stock_quantity=product.stock_quantity,
+        previous_availability=getattr(previous, "availability", "") or "",
+        new_availability=product.availability,
+    )
+
+
+def _sync_product_notifications(product: ProducerProduct) -> None:
+    orders_producer = _orders_producer_for_user(product.producer)
+    if orders_producer is None:
+        return
+
+    low_stock_reports = ProducerNotification.objects.filter(
+        producer=orders_producer,
+        category="low_stock",
+        metadata__product_id=product.id,
+        resolved_at__isnull=True,
+    )
+    if 0 < product.stock_quantity <= product.low_stock_threshold:
+        if not low_stock_reports.exists():
+            ProducerNotification.objects.create(
+                producer=orders_producer,
+                category="low_stock",
+                message=(
+                    f"Low Stock Alert: {product.name} - Only {product.stock_quantity} "
+                    f"{product.unit} remaining"
+                ),
+                metadata={
+                    "product_id": product.id,
+                    "product_name": product.name,
+                    "stock_quantity": product.stock_quantity,
+                    "threshold": product.low_stock_threshold,
+                },
+            )
+    else:
+        low_stock_reports.update(resolved_at=timezone.now())
+
+    seasonal_reports = ProducerNotification.objects.filter(
+        producer=orders_producer,
+        category="seasonal_reminder",
+        metadata__product_id=product.id,
+        resolved_at__isnull=True,
+    )
+    reminder = product.season_reminder_message
+    if reminder:
+        if not seasonal_reports.exists():
+            ProducerNotification.objects.create(
+                producer=orders_producer,
+                category="seasonal_reminder",
+                message=reminder,
+                metadata={
+                    "product_id": product.id,
+                    "product_name": product.name,
+                    "season_start_month": product.season_start_month,
+                    "season_end_month": product.season_end_month,
+                },
+            )
+    else:
+        seasonal_reports.update(resolved_at=timezone.now())
+
+
+def _notify_favorite_producer_surplus(product: ProducerProduct, *, previous: ProducerProduct | None = None) -> None:
+    if not product.is_surplus:
+        return
+    if previous is not None and previous.is_surplus:
+        return
+
+    orders_producer = _orders_producer_for_user(product.producer)
+    if orders_producer is None:
+        return
+
+    favorites = FavoriteProducer.objects.select_related("user").filter(producer=orders_producer)
+    for favorite in favorites:
+        UserNotification.objects.get_or_create(
+            user=favorite.user,
+            category="surplus_deal",
+            metadata={
+                "producer_id": orders_producer.id,
+                "producer_product_id": product.id,
+                "product_name": product.name,
+            },
+            defaults={
+                "message": (
+                    f"{orders_producer.business_name} added a surplus deal: "
+                    f"{product.name}"
+                    + (
+                        f" at {product.surplus_discount_percent}% off."
+                        if product.surplus_discount_percent
+                        else "."
+                    )
+                )
+            },
+        )
 
 
 def _producer_order_stock_units(quantity: Decimal) -> int:
@@ -188,7 +307,7 @@ class ProducerProductListCreateAPIView(generics.ListCreateAPIView):
     can be changed without spreading the same responsibility across unrelated files.
     """
     serializer_class = ProducerProductSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [permissions.IsAuthenticated, IsProducerUser]
 
     def get_queryset(self):
         actor = _resolve_actor_user(self.request)
@@ -208,7 +327,10 @@ class ProducerProductListCreateAPIView(generics.ListCreateAPIView):
 
     def perform_create(self, serializer):
         product = serializer.save(producer=_resolve_actor_user(self.request))
+        _record_inventory_event(product, actor=self.request.user, event_type="created")
         sync_orders_product_from_producer_product(product)
+        _sync_product_notifications(product)
+        _notify_favorite_producer_surplus(product)
 
 
 class ProducerProductDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
@@ -220,20 +342,24 @@ class ProducerProductDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
     can be changed without spreading the same responsibility across unrelated files.
     """
     serializer_class = ProducerProductSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [permissions.IsAuthenticated, IsProducerUser]
 
     def get_queryset(self):
         return ProducerProduct.objects.filter(producer=_resolve_actor_user(self.request))
 
     def perform_update(self, serializer):
         old_name = serializer.instance.name
+        previous = ProducerProduct.objects.get(pk=serializer.instance.pk)
         product = serializer.save()
+        _record_inventory_event(product, actor=self.request.user, event_type="updated", previous=previous)
         if old_name != product.name:
             delete_orders_and_catalog_products_for_name(
                 producer_user=product.producer,
                 product_name=old_name,
             )
         sync_orders_product_from_producer_product(product)
+        _sync_product_notifications(product)
+        _notify_favorite_producer_surplus(product, previous=previous)
 
     def perform_destroy(self, instance):
         delete_orders_and_catalog_products_for_producer_product(instance)
@@ -248,14 +374,18 @@ class ProducerSurplusDealAPIView(APIView):
     It keeps related behavior grouped so the producer portal domain: producer inventory, dashboard summaries, order management, and producer-facing apis.
     can be changed without spreading the same responsibility across unrelated files.
     """
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [permissions.IsAuthenticated, IsProducerUser]
 
     def patch(self, request, pk: int):
         product = get_object_or_404(ProducerProduct, pk=pk, producer=_resolve_actor_user(request))
         serializer = ProducerProductSerializer(product, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
+        previous = ProducerProduct.objects.get(pk=product.pk)
         updated = serializer.save()
+        _record_inventory_event(updated, actor=request.user, event_type="surplus_updated", previous=previous)
         sync_orders_product_from_producer_product(updated)
+        _sync_product_notifications(updated)
+        _notify_favorite_producer_surplus(updated, previous=previous)
         return response.Response(serializer.data)
 
 
@@ -267,7 +397,7 @@ class ProducerLowStockAlertsAPIView(APIView):
     It keeps related behavior grouped so the producer portal domain: producer inventory, dashboard summaries, order management, and producer-facing apis.
     can be changed without spreading the same responsibility across unrelated files.
     """
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [permissions.IsAuthenticated, IsProducerUser]
 
     def get(self, request):
         threshold_param = request.query_params.get("threshold")
@@ -282,6 +412,8 @@ class ProducerLowStockAlertsAPIView(APIView):
         else:
             products = products.filter(stock_quantity__gt=0, stock_quantity__lte=F("low_stock_threshold"))
         products = products.order_by("stock_quantity", "name")
+        for product in products:
+            _sync_product_notifications(product)
         serializer = ProducerProductSerializer(products, many=True)
         return response.Response({"threshold": threshold, "count": len(serializer.data), "results": serializer.data})
 

@@ -230,6 +230,61 @@ class ProductReviewCreateSerializer(serializers.ModelSerializer):
         )
 
 
+class ProductReviewUpdateSerializer(serializers.ModelSerializer):
+    """Validate customer edits to their own product review."""
+
+    class Meta:
+        model = ProductReview
+        fields = ["rating", "title", "comment", "is_anonymous"]
+
+    def validate_title(self, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise serializers.ValidationError("Review title is required.")
+        return cleaned
+
+    def update(self, instance: ProductReview, validated_data):
+        is_anonymous = bool(validated_data.get("is_anonymous", instance.is_anonymous))
+        instance.is_anonymous = is_anonymous
+        if is_anonymous:
+            instance.reviewer_name = "Anonymous"
+        else:
+            user = self.context["request"].user
+            customer_profile = getattr(user, "customer_profile", None)
+            reviewer_name = ""
+            if customer_profile and getattr(customer_profile, "full_name", ""):
+                reviewer_name = customer_profile.full_name.strip()
+            instance.reviewer_name = reviewer_name or user.email.split("@")[0]
+        instance.rating = validated_data.get("rating", instance.rating)
+        instance.title = validated_data.get("title", instance.title).strip()
+        instance.comment = validated_data.get("comment", instance.comment).strip()
+
+        moderation_input = " ".join(
+            part.strip()
+            for part in [instance.title, instance.comment]
+            if part and part.strip()
+        )
+        moderation = moderate_review_comment(moderation_input)
+        instance.moderation_status = moderation.status
+        instance.moderation_reason = (
+            "Waiting for approval."
+            if moderation.status == ProductReview.ModerationStatus.PENDING
+            else ""
+        )
+        instance.save(
+            update_fields=[
+                "is_anonymous",
+                "reviewer_name",
+                "rating",
+                "title",
+                "comment",
+                "moderation_status",
+                "moderation_reason",
+            ]
+        )
+        return instance
+
+
 class ProductReviewProducerResponseSerializer(serializers.ModelSerializer):
     """
     Documents the `ProductReviewProducerResponseSerializer` boundary for this module.

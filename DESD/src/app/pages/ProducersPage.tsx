@@ -30,6 +30,7 @@ import seedlingImage from '../../assets/producers/annie-spratt-JMjNnQ2xFoY-unspl
 import stockImage from '../../assets/producers/elaine-casap-qgHGDbbSNm8-unsplash.jpg';
 import producerFlowImage from '../../assets/producers/tim-mossholder-xDwEa2kaeJA-unsplash.jpg';
 import { MarketingImageCard } from '../components/MarketingImageCard';
+import { AnimatedText, Reveal, RevealGroup } from '../components/motion/Motion';
 import { SiteHeader } from '../components/SiteHeader';
 import { Button } from '../components/ui/button';
 import { getPortalDefinition } from '../lib/portalConfig';
@@ -177,17 +178,19 @@ export function ProducersPage() {
           </div>
 
           <div className="relative z-10 mx-auto max-w-7xl px-4 py-16 sm:py-20">
-            <div className="max-w-3xl space-y-6 lg:min-h-[30rem] lg:content-center lg:py-8">
-              <h1 className="market-section-title max-w-4xl text-[oklch(0.23_0.034_87)]">
-                A selling workflow for food that changes by season, stock, and route.
-              </h1>
+            <RevealGroup className="max-w-3xl space-y-6 lg:min-h-[30rem] lg:content-center lg:py-8" stagger={0.12}>
+              <AnimatedText
+                as="h1"
+                text="A selling workflow for food that changes by season, stock, and route."
+                className="market-section-title max-w-4xl text-[oklch(0.23_0.034_87)]"
+              />
               <p className="market-copy max-w-2xl">
                 {producerDefinition.portalDescription} This page explains the producer flow before entering the portal.
               </p>
               <div className="flex flex-wrap gap-3">
                 <Button asChild size="lg" className="market-button-primary min-h-11 px-7">
                   <Link to={producerDefinition.portalPath}>
-                    Producer portal
+                    Sign in
                     <ArrowRight className="size-4" />
                   </Link>
                 </Button>
@@ -197,23 +200,25 @@ export function ProducersPage() {
                   </Link>
                 </Button>
               </div>
-            </div>
+            </RevealGroup>
           </div>
         </section>
 
         <section className="market-section market-section-white">
           <div className="mx-auto max-w-7xl px-4 py-16 sm:py-20">
-            <div className="max-w-3xl space-y-5">
-              <h2 className="market-section-title max-w-4xl text-[oklch(0.23_0.034_87)]">
-                The producer tools are practical first.
-              </h2>
+            <Reveal className="max-w-3xl space-y-5">
+              <AnimatedText
+                as="h2"
+                text="The producer tools are practical first."
+                className="market-section-title max-w-4xl text-[oklch(0.23_0.034_87)]"
+              />
               <p className="market-copy max-w-2xl">
                 The portal is built for changing stock, visible fulfilment, and clear payment context rather than a
                 generic storefront profile.
               </p>
-            </div>
+            </Reveal>
 
-            <div className="mt-10 grid gap-6 md:grid-cols-2">
+            <RevealGroup className="mt-10 grid gap-6 md:grid-cols-2" stagger={0.1}>
               {producerTools.map((tool) => (
                 <ProducerToolCard
                   key={tool.title}
@@ -226,7 +231,7 @@ export function ProducersPage() {
                   imagePosition={tool.imagePosition}
                 />
               ))}
-            </div>
+            </RevealGroup>
           </div>
         </section>
 
@@ -243,20 +248,22 @@ export function ProducersPage() {
 
           <div className="relative z-10 mx-auto max-w-7xl px-4 py-16 sm:py-20">
             <div className="grid gap-8 lg:grid-cols-[0.95fr_1.05fr] lg:items-center">
-              <div className="space-y-5">
+              <Reveal className="space-y-5">
                 <span className="inline-flex rounded-full bg-white/10 px-3 py-1 text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-white/92 backdrop-blur-sm">
                   Producer flow
                 </span>
-                <h2 className="market-section-title max-w-3xl text-white">
-                  Sell locally without losing control of the details.
-                </h2>
+                <AnimatedText
+                  as="h2"
+                  text="Sell locally without losing control of the details."
+                  className="market-section-title max-w-3xl text-white"
+                />
                 <p className="market-copy max-w-xl text-white/86">{producerDefinition.highlight}</p>
                 <Button asChild size="lg" className="market-button-primary min-h-11 px-7">
                   <Link to="/browse">See the public marketplace</Link>
                 </Button>
-              </div>
+              </Reveal>
 
-              <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-1">
+              <RevealGroup className="grid gap-4 sm:grid-cols-3 lg:grid-cols-1" stagger={0.1}>
                 {producerChecks.map((item) => (
                   <div
                     key={item}
@@ -266,7 +273,7 @@ export function ProducersPage() {
                     <p className="text-sm leading-7 text-white/92">{item}</p>
                   </div>
                 ))}
-              </div>
+              </RevealGroup>
             </div>
           </div>
         </section>

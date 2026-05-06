@@ -48,6 +48,7 @@ interface ProductQueryParams {
   organic?: boolean;
   minPrice?: number;
   maxPrice?: number;
+  producerId?: string;
 }
 
 interface ApiCategory {
@@ -93,6 +94,7 @@ interface ApiReviewEligibility {
   is_authenticated?: boolean;
   can_respond?: boolean;
   response_reason?: string;
+  existing_review?: ApiReview | null;
 }
 
 interface ApiProduct {
@@ -102,6 +104,7 @@ interface ApiProduct {
   price?: number | string;
   unit?: string;
   producer_id?: number;
+  producer_user_id?: number | null;
   producer_name?: string;
   producer_location?: string;
   producer_description?: string;
@@ -125,7 +128,9 @@ interface ApiProduct {
   surplus_original_price?: number | string | null;
   surplus_expires_at?: string | null;
   surplus_best_before?: string;
+  surplus_note?: string;
   storage_tips?: string;
+  storage_tips_ai_generated?: boolean;
   recipe_ideas?: unknown;
   average_rating?: number | string | null;
   review_count?: number | string;
@@ -196,6 +201,10 @@ function mapProduct(apiProduct: ApiProduct): Product {
     price: parsedPrice,
     unit: normalizeUnit(apiProduct.unit),
     producerId: String(apiProduct.producer_id || ""),
+    producerUserId:
+      apiProduct.producer_user_id === null || apiProduct.producer_user_id === undefined
+        ? undefined
+        : String(apiProduct.producer_user_id),
     producerName: apiProduct.producer_name || "Unknown Producer",
     producerLocation: apiProduct.producer_location || "Unknown location",
     producerDescription: apiProduct.producer_description || undefined,
@@ -220,7 +229,9 @@ function mapProduct(apiProduct: ApiProduct): Product {
     surplusOriginalPrice: parsedOriginalPrice ?? undefined,
     surplusExpiresAt: apiProduct.surplus_expires_at || undefined,
     surplusBestBefore: apiProduct.surplus_best_before || undefined,
+    surplusNote: apiProduct.surplus_note || undefined,
     storageTips: apiProduct.storage_tips || undefined,
+    storageTipsAiGenerated: Boolean(apiProduct.storage_tips_ai_generated && apiProduct.storage_tips),
     recipeIdeas: normalizeRecipeIdeas(apiProduct.recipe_ideas),
     averageRating: toNumber(apiProduct.average_rating) ?? undefined,
     reviewCount: toNumber(apiProduct.review_count) ?? undefined,
@@ -257,6 +268,7 @@ function mapReviewEligibility(payload: ApiReviewEligibility): ReviewEligibility 
     isAuthenticated: Boolean(payload.is_authenticated),
     canRespond: Boolean(payload.can_respond),
     responseReason: payload.response_reason || "",
+    existingReview: payload.existing_review ? mapReview(payload.existing_review) : undefined,
   };
 }
 
@@ -377,6 +389,9 @@ function buildProductsQueryString(params: ProductQueryParams): string {
   if (params.maxPrice !== undefined) {
     query.set("max_price", String(params.maxPrice));
   }
+  if (params.producerId) {
+    query.set("producer_id", params.producerId);
+  }
   return query.toString();
 }
 
@@ -440,6 +455,30 @@ export async function createProductReview(
       is_anonymous: Boolean(payload.isAnonymous),
     }),
   });
+  return mapReview(review);
+}
+
+export async function updateProductReview(
+  productId: string,
+  reviewId: string,
+  payload: CreateReviewPayload,
+): Promise<ProductReview> {
+  if (USE_MOCK_PRODUCTS) {
+    throw new Error("Review editing is unavailable while mock catalog data is enabled.");
+  }
+
+  const review = await requestJson<ApiReview>(
+    `${ORDERS_API_BASE_URL}/products/${productId}/reviews/${reviewId}/`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        rating: payload.rating,
+        title: payload.title,
+        comment: payload.comment,
+        is_anonymous: Boolean(payload.isAnonymous),
+      }),
+    },
+  );
   return mapReview(review);
 }
 

@@ -18,8 +18,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
 
+import { AddressLookupFields, formatAddressLines } from '../components/AddressLookupFields';
 import { MarketingAuthNav } from '../components/MarketingAuthNav';
 import { useAuth } from '../contexts/AuthContext';
+import { isValidEmail, isValidPhone, validateRequiredText } from '../lib/formValidation';
 import { UserRole } from '../types';
 import '../../styles/marketing-auth.css';
 
@@ -49,6 +51,12 @@ function isRegisterRole(value: string): value is RegisterRole {
 }
 
 type PasswordStrength = 'Weak' | 'Medium' | 'Strong';
+type DraftAddress = { line1: string; line2: string; city: string; postcode: string };
+const EMPTY_ADDRESS: DraftAddress = { line1: '', line2: '', city: '', postcode: '' };
+
+function composeName(firstName: string, middleName: string, lastName: string): string {
+  return [firstName, middleName, lastName].map((part) => part.trim()).filter(Boolean).join(' ');
+}
 
 /**
  * RegisterPage boundary.
@@ -69,22 +77,29 @@ export function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [fullName, setFullName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [middleName, setMiddleName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
-  const [customerDeliveryAddress, setCustomerDeliveryAddress] = useState('');
-  const [customerPostcode, setCustomerPostcode] = useState('');
+  const [customerAddress, setCustomerAddress] = useState<DraftAddress>(EMPTY_ADDRESS);
   const [acceptTerms, setAcceptTerms] = useState(false);
   const [businessName, setBusinessName] = useState('');
-  const [producerContactName, setProducerContactName] = useState('');
+  const [producerContactFirstName, setProducerContactFirstName] = useState('');
+  const [producerContactMiddleName, setProducerContactMiddleName] = useState('');
+  const [producerContactLastName, setProducerContactLastName] = useState('');
   const [producerPhone, setProducerPhone] = useState('');
-  const [producerBusinessAddress, setProducerBusinessAddress] = useState('');
-  const [producerPostcode, setProducerPostcode] = useState('');
+  const [producerAddress, setProducerAddress] = useState<DraftAddress>(EMPTY_ADDRESS);
   const [organisationName, setOrganisationName] = useState('');
   const [orgType, setOrgType] = useState('');
-  const [contactName, setContactName] = useState('');
+  const [communityContactFirstName, setCommunityContactFirstName] = useState('');
+  const [communityContactMiddleName, setCommunityContactMiddleName] = useState('');
+  const [communityContactLastName, setCommunityContactLastName] = useState('');
+  const [restaurantContactFirstName, setRestaurantContactFirstName] = useState('');
+  const [restaurantContactMiddleName, setRestaurantContactMiddleName] = useState('');
+  const [restaurantContactLastName, setRestaurantContactLastName] = useState('');
   const [sharedPhone, setSharedPhone] = useState('');
-  const [sharedDeliveryAddress, setSharedDeliveryAddress] = useState('');
-  const [sharedPostcode, setSharedPostcode] = useState('');
+  const [communityAddress, setCommunityAddress] = useState<DraftAddress>(EMPTY_ADDRESS);
+  const [restaurantAddress, setRestaurantAddress] = useState<DraftAddress>(EMPTY_ADDRESS);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [registrationComplete, setRegistrationComplete] = useState(false);
@@ -121,7 +136,18 @@ export function RegisterPage() {
 
   const isPasswordValid = Object.values(passwordChecks).every(Boolean);
   const passwordMatch = password.length > 0 && password === confirmPassword;
-  const canSubmit = isPasswordValid && passwordMatch && (role !== 'CUSTOMER' || acceptTerms) && !loading && !registrationComplete;
+  const activePhone = role === 'CUSTOMER' ? customerPhone : role === 'PRODUCER' ? producerPhone : sharedPhone;
+  const emailValid = !email.trim() || isValidEmail(email);
+  const phoneValid = !activePhone.trim() || isValidPhone(activePhone);
+  const canSubmit =
+    isPasswordValid &&
+    passwordMatch &&
+    emailValid &&
+    phoneValid &&
+    (role !== 'CUSTOMER' || acceptTerms) &&
+    !loading &&
+    !registrationComplete;
+  const passwordFeedbackVisible = password.length > 0;
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -133,8 +159,38 @@ export function RegisterPage() {
       return;
     }
 
+    if (!isValidEmail(email)) {
+      setError('Enter a valid email address, for example name@example.com.');
+      return;
+    }
+
+    if (!isValidPhone(activePhone)) {
+      setError('Enter a valid UK phone number, for example 07123 456789 or +44 7123 456789.');
+      return;
+    }
+
     if (!passwordMatch) {
       setError('Password confirmation does not match.');
+      return;
+    }
+
+    const nameError =
+      role === 'CUSTOMER'
+        ? validateRequiredText(firstName, 'First name') || validateRequiredText(lastName, 'Last name')
+        : role === 'PRODUCER'
+          ? validateRequiredText(businessName, 'Business name') ||
+            validateRequiredText(producerContactFirstName, 'Contact first name') ||
+            validateRequiredText(producerContactLastName, 'Contact last name')
+          : role === 'COMMUNITY'
+            ? validateRequiredText(organisationName, 'Organisation name') ||
+              validateRequiredText(orgType, 'Organisation type') ||
+              validateRequiredText(communityContactFirstName, 'Contact first name') ||
+              validateRequiredText(communityContactLastName, 'Contact last name')
+            : validateRequiredText(businessName, 'Business name') ||
+              validateRequiredText(restaurantContactFirstName, 'Contact first name') ||
+              validateRequiredText(restaurantContactLastName, 'Contact last name');
+    if (nameError) {
+      setError(nameError);
       return;
     }
 
@@ -152,10 +208,14 @@ export function RegisterPage() {
         email,
         password,
         confirm_password: confirmPassword,
-        full_name: fullName,
+        first_name: firstName,
+        middle_name: middleName,
+        last_name: lastName,
         phone: customerPhone,
-        delivery_address: customerDeliveryAddress,
-        postcode: customerPostcode,
+        delivery_address: formatAddressLines(customerAddress.line1, customerAddress.line2),
+        delivery_address_line1: customerAddress.line1,
+        delivery_address_line2: customerAddress.line2,
+        postcode: customerAddress.postcode,
         accept_terms: acceptTerms,
       });
     } else if (role === 'PRODUCER') {
@@ -164,10 +224,15 @@ export function RegisterPage() {
         password,
         confirm_password: confirmPassword,
         business_name: businessName,
-        contact_name: producerContactName,
+        contact_name: composeName(producerContactFirstName, producerContactMiddleName, producerContactLastName),
+        contact_first_name: producerContactFirstName,
+        contact_middle_name: producerContactMiddleName,
+        contact_last_name: producerContactLastName,
         phone: producerPhone,
-        business_address: producerBusinessAddress,
-        postcode: producerPostcode,
+        business_address: formatAddressLines(producerAddress.line1, producerAddress.line2),
+        business_address_line1: producerAddress.line1,
+        business_address_line2: producerAddress.line2,
+        postcode: producerAddress.postcode,
       });
     } else if (role === 'COMMUNITY') {
       result = await registerCommunity({
@@ -176,10 +241,15 @@ export function RegisterPage() {
         confirm_password: confirmPassword,
         organisation_name: organisationName,
         org_type: orgType,
-        contact_name: contactName,
+        contact_name: composeName(communityContactFirstName, communityContactMiddleName, communityContactLastName),
+        contact_first_name: communityContactFirstName,
+        contact_middle_name: communityContactMiddleName,
+        contact_last_name: communityContactLastName,
         phone: sharedPhone,
-        delivery_address: sharedDeliveryAddress,
-        postcode: sharedPostcode,
+        delivery_address: formatAddressLines(communityAddress.line1, communityAddress.line2),
+        delivery_address_line1: communityAddress.line1,
+        delivery_address_line2: communityAddress.line2,
+        postcode: communityAddress.postcode,
       });
     } else {
       result = await registerRestaurant({
@@ -187,10 +257,15 @@ export function RegisterPage() {
         password,
         confirm_password: confirmPassword,
         business_name: businessName,
-        contact_name: contactName,
+        contact_name: composeName(restaurantContactFirstName, restaurantContactMiddleName, restaurantContactLastName),
+        contact_first_name: restaurantContactFirstName,
+        contact_middle_name: restaurantContactMiddleName,
+        contact_last_name: restaurantContactLastName,
         phone: sharedPhone,
-        delivery_address: sharedDeliveryAddress,
-        postcode: sharedPostcode,
+        delivery_address: formatAddressLines(restaurantAddress.line1, restaurantAddress.line2),
+        delivery_address_line1: restaurantAddress.line1,
+        delivery_address_line2: restaurantAddress.line2,
+        postcode: restaurantAddress.postcode,
       });
     }
 
@@ -260,11 +335,16 @@ export function RegisterPage() {
                 <input
                   id="email"
                   type="email"
+                  inputMode="email"
                   placeholder="you@example.com"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
+                  aria-invalid={email.length > 0 && !emailValid}
                   required
                 />
+                {email.length > 0 && !emailValid && (
+                  <span className="lfm-password-rule-miss">Enter a valid email address.</span>
+                )}
               </div>
 
               <div className="lfm-form-group">
@@ -287,14 +367,20 @@ export function RegisterPage() {
                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
-                <p className={strengthClassName}>Strength: {passwordStrength}</p>
-                <div className="lfm-password-rules">
-                  {renderPasswordRule(`At least ${PASSWORD_MIN_LENGTH} characters`, passwordChecks.minLength)}
-                  {renderPasswordRule('One uppercase letter', passwordChecks.uppercase)}
-                  {renderPasswordRule('One lowercase letter', passwordChecks.lowercase)}
-                  {renderPasswordRule('One number', passwordChecks.number)}
-                  {renderPasswordRule('One special character', passwordChecks.special)}
-                </div>
+                {passwordFeedbackVisible ? (
+                  <>
+                    <p className={strengthClassName}>Strength: {passwordStrength}</p>
+                    <div className="lfm-password-rules">
+                      {renderPasswordRule(`At least ${PASSWORD_MIN_LENGTH} characters`, passwordChecks.minLength)}
+                      {renderPasswordRule('One uppercase letter', passwordChecks.uppercase)}
+                      {renderPasswordRule('One lowercase letter', passwordChecks.lowercase)}
+                      {renderPasswordRule('One number', passwordChecks.number)}
+                      {renderPasswordRule('One special character', passwordChecks.special)}
+                    </div>
+                  </>
+                ) : (
+                  <p className="lfm-form-help">Start typing to see password strength guidance.</p>
+                )}
               </div>
 
               <div className="lfm-form-group full">
@@ -323,11 +409,28 @@ export function RegisterPage() {
               {role === 'CUSTOMER' && (
                 <>
                   <div className="lfm-form-group">
-                    <label htmlFor="full-name">Full Name</label>
+                    <label htmlFor="first-name">First Name</label>
                     <input
-                      id="full-name"
-                      value={fullName}
-                      onChange={(event) => setFullName(event.target.value)}
+                      id="first-name"
+                      value={firstName}
+                      onChange={(event) => setFirstName(event.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="lfm-form-group">
+                    <label htmlFor="middle-name">Middle Name (Optional)</label>
+                    <input
+                      id="middle-name"
+                      value={middleName}
+                      onChange={(event) => setMiddleName(event.target.value)}
+                    />
+                  </div>
+                  <div className="lfm-form-group">
+                    <label htmlFor="last-name">Last Name</label>
+                    <input
+                      id="last-name"
+                      value={lastName}
+                      onChange={(event) => setLastName(event.target.value)}
                       required
                     />
                   </div>
@@ -335,26 +438,26 @@ export function RegisterPage() {
                     <label htmlFor="customer-phone">Phone</label>
                     <input
                       id="customer-phone"
+                      type="tel"
+                      inputMode="tel"
                       value={customerPhone}
                       onChange={(event) => setCustomerPhone(event.target.value)}
+                      aria-invalid={customerPhone.length > 0 && !phoneValid}
                       required
                     />
+                    {customerPhone.length > 0 && !phoneValid && (
+                      <span className="lfm-password-rule-miss">Enter a valid UK phone number.</span>
+                    )}
                   </div>
                   <div className="lfm-form-group full">
-                    <label htmlFor="delivery-address">Delivery Address</label>
-                    <input
-                      id="delivery-address"
-                      value={customerDeliveryAddress}
-                      onChange={(event) => setCustomerDeliveryAddress(event.target.value)}
-                      required
-                    />
-                  </div>
-                  <div className="lfm-form-group">
-                    <label htmlFor="customer-postcode">Postcode</label>
-                    <input
-                      id="customer-postcode"
-                      value={customerPostcode}
-                      onChange={(event) => setCustomerPostcode(event.target.value)}
+                    <AddressLookupFields
+                      idPrefix="register-customer-address"
+                      line1={customerAddress.line1}
+                      line2={customerAddress.line2}
+                      city={customerAddress.city}
+                      postcode={customerAddress.postcode}
+                      onChange={(field, value) => setCustomerAddress((previous) => ({ ...previous, [field]: value }))}
+                      lookupLabel="Find delivery address or postcode"
                       required
                     />
                   </div>
@@ -367,7 +470,7 @@ export function RegisterPage() {
                         onChange={(event) => setAcceptTerms(event.target.checked)}
                         required
                       />
-                      <span>I accept the terms and conditions.</span>
+                      <span>I accept the terms and conditions and privacy policy.</span>
                     </label>
                   </div>
                 </>
@@ -385,11 +488,28 @@ export function RegisterPage() {
                     />
                   </div>
                   <div className="lfm-form-group">
-                    <label htmlFor="producer-contact-name">Contact Name</label>
+                    <label htmlFor="producer-contact-first-name">Contact First Name</label>
                     <input
-                      id="producer-contact-name"
-                      value={producerContactName}
-                      onChange={(event) => setProducerContactName(event.target.value)}
+                      id="producer-contact-first-name"
+                      value={producerContactFirstName}
+                      onChange={(event) => setProducerContactFirstName(event.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="lfm-form-group">
+                    <label htmlFor="producer-contact-middle-name">Contact Middle Name (Optional)</label>
+                    <input
+                      id="producer-contact-middle-name"
+                      value={producerContactMiddleName}
+                      onChange={(event) => setProducerContactMiddleName(event.target.value)}
+                    />
+                  </div>
+                  <div className="lfm-form-group">
+                    <label htmlFor="producer-contact-last-name">Contact Last Name</label>
+                    <input
+                      id="producer-contact-last-name"
+                      value={producerContactLastName}
+                      onChange={(event) => setProducerContactLastName(event.target.value)}
                       required
                     />
                   </div>
@@ -397,26 +517,26 @@ export function RegisterPage() {
                     <label htmlFor="producer-phone">Phone</label>
                     <input
                       id="producer-phone"
+                      type="tel"
+                      inputMode="tel"
                       value={producerPhone}
                       onChange={(event) => setProducerPhone(event.target.value)}
+                      aria-invalid={producerPhone.length > 0 && !phoneValid}
                       required
                     />
-                  </div>
-                  <div className="lfm-form-group">
-                    <label htmlFor="producer-postcode">Postcode</label>
-                    <input
-                      id="producer-postcode"
-                      value={producerPostcode}
-                      onChange={(event) => setProducerPostcode(event.target.value)}
-                      required
-                    />
+                    {producerPhone.length > 0 && !phoneValid && (
+                      <span className="lfm-password-rule-miss">Enter a valid UK phone number.</span>
+                    )}
                   </div>
                   <div className="lfm-form-group full">
-                    <label htmlFor="producer-business-address">Business Address</label>
-                    <input
-                      id="producer-business-address"
-                      value={producerBusinessAddress}
-                      onChange={(event) => setProducerBusinessAddress(event.target.value)}
+                    <AddressLookupFields
+                      idPrefix="register-producer-address"
+                      line1={producerAddress.line1}
+                      line2={producerAddress.line2}
+                      city={producerAddress.city}
+                      postcode={producerAddress.postcode}
+                      onChange={(field, value) => setProducerAddress((previous) => ({ ...previous, [field]: value }))}
+                      lookupLabel="Find business address or postcode"
                       required
                     />
                   </div>
@@ -444,11 +564,28 @@ export function RegisterPage() {
                     />
                   </div>
                   <div className="lfm-form-group">
-                    <label htmlFor="community-contact-name">Contact Name</label>
+                    <label htmlFor="community-contact-first-name">Contact First Name</label>
                     <input
-                      id="community-contact-name"
-                      value={contactName}
-                      onChange={(event) => setContactName(event.target.value)}
+                      id="community-contact-first-name"
+                      value={communityContactFirstName}
+                      onChange={(event) => setCommunityContactFirstName(event.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="lfm-form-group">
+                    <label htmlFor="community-contact-middle-name">Contact Middle Name (Optional)</label>
+                    <input
+                      id="community-contact-middle-name"
+                      value={communityContactMiddleName}
+                      onChange={(event) => setCommunityContactMiddleName(event.target.value)}
+                    />
+                  </div>
+                  <div className="lfm-form-group">
+                    <label htmlFor="community-contact-last-name">Contact Last Name</label>
+                    <input
+                      id="community-contact-last-name"
+                      value={communityContactLastName}
+                      onChange={(event) => setCommunityContactLastName(event.target.value)}
                       required
                     />
                   </div>
@@ -456,26 +593,26 @@ export function RegisterPage() {
                     <label htmlFor="community-phone">Phone</label>
                     <input
                       id="community-phone"
+                      type="tel"
+                      inputMode="tel"
                       value={sharedPhone}
                       onChange={(event) => setSharedPhone(event.target.value)}
+                      aria-invalid={sharedPhone.length > 0 && !phoneValid}
                       required
                     />
+                    {sharedPhone.length > 0 && !phoneValid && (
+                      <span className="lfm-password-rule-miss">Enter a valid UK phone number.</span>
+                    )}
                   </div>
                   <div className="lfm-form-group full">
-                    <label htmlFor="community-delivery-address">Delivery Address</label>
-                    <input
-                      id="community-delivery-address"
-                      value={sharedDeliveryAddress}
-                      onChange={(event) => setSharedDeliveryAddress(event.target.value)}
-                      required
-                    />
-                  </div>
-                  <div className="lfm-form-group">
-                    <label htmlFor="community-postcode">Postcode</label>
-                    <input
-                      id="community-postcode"
-                      value={sharedPostcode}
-                      onChange={(event) => setSharedPostcode(event.target.value)}
+                    <AddressLookupFields
+                      idPrefix="register-community-address"
+                      line1={communityAddress.line1}
+                      line2={communityAddress.line2}
+                      city={communityAddress.city}
+                      postcode={communityAddress.postcode}
+                      onChange={(field, value) => setCommunityAddress((previous) => ({ ...previous, [field]: value }))}
+                      lookupLabel="Find delivery address or postcode"
                       required
                     />
                   </div>
@@ -494,11 +631,28 @@ export function RegisterPage() {
                     />
                   </div>
                   <div className="lfm-form-group">
-                    <label htmlFor="restaurant-contact-name">Contact Name</label>
+                    <label htmlFor="restaurant-contact-first-name">Contact First Name</label>
                     <input
-                      id="restaurant-contact-name"
-                      value={contactName}
-                      onChange={(event) => setContactName(event.target.value)}
+                      id="restaurant-contact-first-name"
+                      value={restaurantContactFirstName}
+                      onChange={(event) => setRestaurantContactFirstName(event.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="lfm-form-group">
+                    <label htmlFor="restaurant-contact-middle-name">Contact Middle Name (Optional)</label>
+                    <input
+                      id="restaurant-contact-middle-name"
+                      value={restaurantContactMiddleName}
+                      onChange={(event) => setRestaurantContactMiddleName(event.target.value)}
+                    />
+                  </div>
+                  <div className="lfm-form-group">
+                    <label htmlFor="restaurant-contact-last-name">Contact Last Name</label>
+                    <input
+                      id="restaurant-contact-last-name"
+                      value={restaurantContactLastName}
+                      onChange={(event) => setRestaurantContactLastName(event.target.value)}
                       required
                     />
                   </div>
@@ -506,26 +660,26 @@ export function RegisterPage() {
                     <label htmlFor="restaurant-phone">Phone</label>
                     <input
                       id="restaurant-phone"
+                      type="tel"
+                      inputMode="tel"
                       value={sharedPhone}
                       onChange={(event) => setSharedPhone(event.target.value)}
+                      aria-invalid={sharedPhone.length > 0 && !phoneValid}
                       required
                     />
+                    {sharedPhone.length > 0 && !phoneValid && (
+                      <span className="lfm-password-rule-miss">Enter a valid UK phone number.</span>
+                    )}
                   </div>
                   <div className="lfm-form-group full">
-                    <label htmlFor="restaurant-delivery-address">Delivery Address</label>
-                    <input
-                      id="restaurant-delivery-address"
-                      value={sharedDeliveryAddress}
-                      onChange={(event) => setSharedDeliveryAddress(event.target.value)}
-                      required
-                    />
-                  </div>
-                  <div className="lfm-form-group">
-                    <label htmlFor="restaurant-postcode">Postcode</label>
-                    <input
-                      id="restaurant-postcode"
-                      value={sharedPostcode}
-                      onChange={(event) => setSharedPostcode(event.target.value)}
+                    <AddressLookupFields
+                      idPrefix="register-restaurant-address"
+                      line1={restaurantAddress.line1}
+                      line2={restaurantAddress.line2}
+                      city={restaurantAddress.city}
+                      postcode={restaurantAddress.postcode}
+                      onChange={(field, value) => setRestaurantAddress((previous) => ({ ...previous, [field]: value }))}
+                      lookupLabel="Find delivery address or postcode"
                       required
                     />
                   </div>

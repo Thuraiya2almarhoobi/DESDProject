@@ -9,7 +9,7 @@ services:
         VITE_DELIVERY_SIMULATION_POLL_SECONDS: "${VITE_DELIVERY_SIMULATION_POLL_SECONDS:-15}"
     volumes:
       - media_data:/app/media
-      - ${GOOGLE_APPLICATION_CREDENTIALS_HOST:-./credentials/application_default_credentials.json}:/app/credentials/application_default_credentials.json:ro
+      - ${GOOGLE_APPLICATION_CREDENTIALS_HOST:-./credentials/application_default_credentials.json}:${GOOGLE_APPLICATION_CREDENTIALS:-/app/credentials/application_default_credentials.json}:ro
     ports:
       - "8000:8000"
     depends_on:

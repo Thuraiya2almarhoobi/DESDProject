@@ -48,6 +48,7 @@ function getLocalStore(): Storage | null {
 function readFromSessionThenLocal(key: string): string | null {
   const sessionStore = getSessionStore();
   const localStore = getLocalStore();
+  // session value wins so non remembered login does not get mixed with old local login
   const sessionValue = sessionStore?.getItem(key) ?? null;
   if (sessionValue) {
     return sessionValue;
@@ -56,6 +57,7 @@ function readFromSessionThenLocal(key: string): string | null {
 }
 
 function clearKeyFromAllStores(key: string): void {
+  // clear both stores because the user can switch remember me on and off
   getLocalStore()?.removeItem(key);
   getSessionStore()?.removeItem(key);
 }
@@ -73,6 +75,7 @@ export function getStoredRole(): string | null {
 }
 
 function inferRememberPreference(): boolean {
+  // keep refreshed tokens in the same place as the current refresh token
   if (getSessionStore()?.getItem(REFRESH_TOKEN_KEY)) {
     return false;
   }
@@ -99,6 +102,7 @@ export function setAuthTokens(access: string, refresh: string, rememberMe = infe
 }
 
 export function setStoredRole(role: string, rememberMe = true): void {
+  // role is stored beside tokens so protected routes can recover after reload
   clearKeyFromAllStores(USER_ROLE_KEY);
   const sessionStore = getSessionStore();
   const localStore = getLocalStore();

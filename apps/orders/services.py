@@ -35,6 +35,7 @@ from .models import (
     Producer,
     ProducerNotification,
     ProducerSubOrder,
+    ProductAllergenAcknowledgement,
     UserNotification,
 )
 
@@ -68,6 +69,7 @@ def get_or_create_cart(user) -> Cart:
     or isolates a business rule that should remain easy to test. The wider
     context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
     """
+    # every buyer has one live cart so cart state can survive page changes
     cart, _ = Cart.objects.get_or_create(customer=user)
     return cart
 
@@ -223,6 +225,7 @@ def _selected_cart_item_ids(cart: Cart, payload: dict) -> list[int] | None:
     if selected_cart_item_ids is None:
         return None
 
+    # selected checkout must only remove the chosen cart items after order create
     unique_selected_ids = sorted({int(item_id) for item_id in selected_cart_item_ids})
     matching_count = cart.items.filter(id__in=unique_selected_ids).count()
     if matching_count != len(unique_selected_ids):
@@ -245,14 +248,25 @@ def _prepare_checkout_state(
 
     special_instructions = (payload.get("special_instructions") or "").strip()
 
-    # Stock is checked at the last possible point before order creation. This
-    # protects restaurant/community bulk buyers from ordering stale quantities
-    # after another buyer has already consumed the available stock.
+    # stock is checked late so stale cart quantities cannot slip into orders
     for group in groups:
         for item in group.items:
             if not item.product.is_orderable() or item.product.stock_quantity < item.quantity:
                 reason = "is out of season" if item.product.is_available and item.product.stock_quantity > 0 else "is unavailable"
                 raise ValueError(f"Product '{item.product.name}' {reason} in the requested quantity.")
+            allergens = [
+                token.strip()
+                for token in (item.product.allergen_info or "").split(",")
+                if token.strip() and token.strip().lower() not in {"no common allergens", "none", "no allergens"}
+            ]
+            # allergen acknowledgement lives server side so checkout is not just local storage
+            if allergens and not ProductAllergenAcknowledgement.objects.filter(
+                user=user,
+                product=item.product,
+            ).exists():
+                raise ValueError(
+                    f"Review allergen information for '{item.product.name}' before checkout."
+                )
 
     delivery_dates = _resolve_delivery_dates(groups, payload)
     return cart, unique_selected_ids, groups, special_instructions, delivery_dates
@@ -434,6 +448,17 @@ def _adjust_producer_portal_stock(order_item: OrderItem, quantity_delta: Decimal
 
     producer_product.stock_quantity = next_stock
     producer_product.save(update_fields=["stock_quantity", "updated_at"])
+    try:
+        from apps.producer_portal.views import _record_inventory_event, _sync_product_notifications
+
+        _record_inventory_event(
+            producer_product,
+            actor=None,
+            event_type="stock_reserved" if quantity_delta < Decimal("0.00") else "stock_released",
+        )
+        _sync_product_notifications(producer_product)
+    except Exception:
+        pass
 
 
 def reserve_stock_for_order(order: Order) -> None:
@@ -502,11 +527,13 @@ def create_order_notifications(order: Order) -> None:
         ProducerNotification.objects.get_or_create(
             producer=sub_order.producer,
             sub_order=sub_order,
+            category="order",
             defaults={
                 "message": (
                     f"New order {order.order_number} for {sub_order.producer.business_name} "
                     f"(delivery {sub_order.delivery_date}, lead time {sub_order.producer.lead_time_hours}h)"
-                )
+                ),
+                "metadata": {"order_id": order.id, "sub_order_id": sub_order.id},
             },
         )
         logger.info(

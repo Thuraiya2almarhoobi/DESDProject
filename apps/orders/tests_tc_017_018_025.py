@@ -831,6 +831,23 @@ class AdminCommissionReportTests(APITestCase):
         self.assertIn("ORD-COMM-150", csv_text)
         self.assertIn("7.50", csv_text)
 
+        pdf_res = client.get(
+            f"/api/admin/commission-report/export.csv?start={start_date}&end={end_date}&format=pdf"
+        )
+        self.assertEqual(pdf_res.status_code, status.HTTP_200_OK)
+        self.assertIn("application/pdf", pdf_res["Content-Type"])
+        self.assertTrue(pdf_res.content.startswith(b"%PDF"))
+
+        xlsx_res = client.get(
+            f"/api/admin/commission-report/export.csv?start={start_date}&end={end_date}&format=xlsx"
+        )
+        self.assertEqual(xlsx_res.status_code, status.HTTP_200_OK)
+        self.assertIn(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            xlsx_res["Content-Type"],
+        )
+        self.assertTrue(xlsx_res.content.startswith(b"PK"))
+
         monthly_res = client.get(
             f"/api/admin/commission-report/summary/monthly?year={timezone.now().year}"
         )

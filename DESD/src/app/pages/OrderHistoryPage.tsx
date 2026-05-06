@@ -14,7 +14,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import {
   ArrowLeft,
   CheckCircle2,
@@ -62,7 +62,17 @@ import { cn } from '../components/ui/utils';
  * Keep role checks, API coordination, and cross-page side effects visible here
  * so future contributors can trace behavior during sprint reviews.
  */
-const CURRENT_ORDER_STATUSES = new Set(['pending', 'confirmed', 'ready']);
+const CURRENT_ORDER_STATUSES = new Set([
+  'pending',
+  'confirmed',
+  'ready',
+  'created',
+  'assigned',
+  'waiting_pickup',
+  'picking_up',
+  'picked_up',
+  'delivering',
+]);
 const TRACKING_STEPS = [
   { key: 'pending', label: 'Placed' },
   { key: 'confirmed', label: 'Confirmed' },
@@ -285,6 +295,35 @@ function getOrderDisplayStatus(detail: ApiOrderDetail, nowMs: number): string {
   return detail.status;
 }
 
+function getOrderSummaryDisplayStatus(order: ApiOrderSummary, nowMs: number): string {
+  if (!order.sub_orders || order.sub_orders.length === 0) {
+    return order.status;
+  }
+
+  return getOrderDisplayStatus(
+    {
+      id: order.id,
+      order_number: order.order_number,
+      status: order.status,
+      payment_status: order.payment_status,
+      delivery_address: '',
+      customer_postcode: '',
+      special_instructions: '',
+      subtotal_amount: order.subtotal_amount,
+      commission_rate: '0',
+      commission_amount: order.commission_amount,
+      producer_payout_total: '0',
+      total_amount: order.total_amount,
+      payment_method: '',
+      payment_reference: '',
+      created_at: order.created_at,
+      sub_orders: order.sub_orders,
+      items: [],
+    },
+    nowMs,
+  );
+}
+
 function getDeliveryStatusBadgeClass(status?: string | null): string {
   switch (status) {
     case 'delivered':
@@ -314,9 +353,15 @@ function getDeliveryStatusBadgeClass(status?: string | null): string {
  * Keep role checks, API coordination, and cross-page side effects visible here
  * so future contributors can trace behavior during sprint reviews.
  */
-export function OrderHistoryPage() {
+interface OrderHistoryPageProps {
+  producerOrdersMode?: boolean;
+}
+
+export function OrderHistoryPage({ producerOrdersMode = false }: OrderHistoryPageProps = {}) {
   const navigate = useNavigate();
-  const goBack = useSafeBack('/marketplace');
+  const location = useLocation();
+  const goBack = useSafeBack(producerOrdersMode ? '/producer/dashboard' : '/marketplace');
+  const searchQuery = new URLSearchParams(location.search).get('q') || '';
   const [orders, setOrders] = useState<ApiOrderSummary[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<ApiOrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -333,11 +378,21 @@ export function OrderHistoryPage() {
   const backToMarketplaceButton = (
     <Button variant="ghost" onClick={goBack}>
       <ArrowLeft className="mr-2 size-4" />
-      Back to Marketplace
+      {producerOrdersMode ? 'Back to Dashboard' : 'Back to Marketplace'}
     </Button>
   );
+  const producerOrdersToggle = (
+    <div className="inline-flex rounded-xl border border-[#d7dfd0] bg-white p-1 shadow-sm">
+      <Button type="button" variant="ghost" size="sm" onClick={() => navigate('/producer/orders?view=sales')}>
+        Sales
+      </Button>
+      <Button type="button" variant="default" size="sm" onClick={() => navigate('/producer/orders?view=purchases')}>
+        Purchases
+      </Button>
+    </div>
+  );
 
-  const hasActiveFilters = producerNameFilter !== 'all' || Boolean(fromDateFilter) || Boolean(toDateFilter);
+  const hasActiveFilters = producerNameFilter !== 'all' || Boolean(fromDateFilter) || Boolean(toDateFilter) || Boolean(searchQuery.trim());
 
   const queryString = useMemo(() => {
     const query = new URLSearchParams();
@@ -409,6 +464,7 @@ export function OrderHistoryPage() {
             ? {
                 ...order,
                 status: detail.status,
+                sub_orders: detail.sub_orders,
               }
             : order,
         ),
@@ -556,14 +612,48 @@ export function OrderHistoryPage() {
     return `${format(new Date(order.delivery_date_from), 'MMM d')} - ${format(new Date(order.delivery_date_to), 'MMM d, yyyy')}`;
   };
 
+  const searchedOrders = useMemo(() => {
+    const normalizedSearch = searchQuery.trim().toLowerCase();
+    if (!normalizedSearch) {
+      return orders;
+    }
+    return orders.filter((order) => {
+      const searchableText = [
+        order.order_number,
+        order.status,
+        order.payment_status,
+        order.payment_method,
+        order.customer_postcode,
+        order.total_amount,
+        ...order.producer_names,
+        ...(order.sub_orders || []).map((subOrder) =>
+          [
+            subOrder.status,
+            getSubOrderDisplayStatus(subOrder, simulationNow),
+            subOrder.delivery?.status,
+            getEffectiveDeliveryStatus(subOrder.delivery, simulationNow),
+            subOrder.delivery?.provider_reference,
+            subOrder.delivery?.package_reference,
+          ]
+            .filter(Boolean)
+            .join(' '),
+        ),
+        ...order.items_preview.map((item) => `${item.product_name} ${item.producer_name} ${item.quantity} ${item.unit}`),
+      ]
+        .join(' ')
+        .toLowerCase();
+      return searchableText.includes(normalizedSearch);
+    });
+  }, [orders, searchQuery, simulationNow]);
+
   const currentOrders = useMemo(
-    () => orders.filter((order) => isCurrentOrderStatus(order.status)),
-    [orders],
+    () => searchedOrders.filter((order) => isCurrentOrderStatus(getOrderSummaryDisplayStatus(order, simulationNow))),
+    [searchedOrders, simulationNow],
   );
 
   const previousOrders = useMemo(
-    () => orders.filter((order) => !isCurrentOrderStatus(order.status)),
-    [orders],
+    () => searchedOrders.filter((order) => !isCurrentOrderStatus(getOrderSummaryDisplayStatus(order, simulationNow))),
+    [searchedOrders, simulationNow],
   );
 
   const renderTrackingMap = (order: ApiOrderDetail, subOrder: ApiOrderDetail['sub_orders'][number]) => {
@@ -715,7 +805,9 @@ export function OrderHistoryPage() {
 
   const renderOrderCard = (order: ApiOrderSummary, sectionLabel: 'current' | 'previous') => {
     const displayOrderStatus =
-      selectedOrder?.id === order.id ? getOrderDisplayStatus(selectedOrder, simulationNow) : order.status;
+      selectedOrder?.id === order.id
+        ? getOrderDisplayStatus(selectedOrder, simulationNow)
+        : getOrderSummaryDisplayStatus(order, simulationNow);
     const isCurrent = sectionLabel === 'current';
     const isDetailsOpen = activeOrderId === order.id && activeOrderView === 'details';
     const isTrackingOpen = activeOrderId === order.id && activeOrderView === 'tracking';
@@ -1033,14 +1125,61 @@ export function OrderHistoryPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[oklch(0.98_0.01_145)] to-[oklch(0.96_0.02_150)]">
-      <SiteHeader />
+      <SiteHeader searchPlaceholder={producerOrdersMode ? 'Search purchases by order, producer, product...' : 'Search orders by producer, product, status...'} />
 
-      <main className="max-w-6xl mx-auto px-4 py-8 space-y-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">{backToMarketplaceButton}</div>
-        <div>
-          <h1 className="text-3xl font-semibold">Order History</h1>
-          <p className="text-sm text-gray-600 mt-1">Review past purchases, download receipts, reorder favourites, and track current deliveries.</p>
+      <main
+        className={
+          producerOrdersMode
+            ? 'mx-auto w-full max-w-7xl px-4 py-5 sm:px-5 lg:min-h-[calc(100svh-60px)] lg:px-6'
+            : 'max-w-6xl mx-auto px-4 py-8 space-y-6'
+        }
+      >
+        <div className={producerOrdersMode ? 'mb-6 flex flex-wrap items-center justify-between gap-3' : 'flex flex-wrap items-center justify-between gap-3'}>
+          {backToMarketplaceButton}
+          {producerOrdersMode && producerOrdersToggle}
         </div>
+        {producerOrdersMode ? (
+          <div className="mb-6 flex flex-col gap-4 rounded-2xl border border-[#e4e1d8] bg-[#fffefa] p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--earth-accent)]">Producer purchases</p>
+              <h1 className="mt-1 text-3xl font-semibold tracking-tight">Purchases</h1>
+              <p className="mt-1 flex items-center gap-2 text-sm text-gray-700">
+                <ReceiptText className="size-4" />
+                Orders placed from your producer account
+              </p>
+              {searchQuery && (
+                <p className="mt-2 text-sm text-gray-600">
+                  Search: <span className="font-medium text-gray-900">{searchQuery}</span>
+                </p>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+              <div className="rounded-xl border border-[#eee8dc] bg-white/70 px-3 py-2">
+                <p className="text-gray-500">Current</p>
+                <p className="text-lg font-semibold">{currentOrders.length}</p>
+              </div>
+              <div className="rounded-xl border border-[#eee8dc] bg-white/70 px-3 py-2">
+                <p className="text-gray-500">Previous</p>
+                <p className="text-lg font-semibold">{previousOrders.length}</p>
+              </div>
+              <div className="rounded-xl border border-[#eee8dc] bg-white/70 px-3 py-2">
+                <p className="text-gray-500">Filters</p>
+                <p className="text-lg font-semibold">{hasActiveFilters ? 1 : 0}</p>
+              </div>
+              <div className="rounded-xl border border-[#eee8dc] bg-white/70 px-3 py-2">
+                <p className="text-gray-500">Total</p>
+                <p className="text-lg font-semibold">{searchedOrders.length}</p>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div>
+            <h1 className="text-3xl font-semibold">Order History</h1>
+            <p className="text-sm text-gray-600 mt-1">
+              Review past purchases, download receipts, reorder favourites, and track current deliveries.
+            </p>
+          </div>
+        )}
 
         <Card>
           <CardHeader className="pb-3">

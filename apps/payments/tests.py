@@ -232,6 +232,38 @@ class PaymentsCriticalTestCases(APITestCase):
         self.assertEqual(transaction_record.raw_payload["checkout_url"], "https://checkout.stripe.com/c/pay/cs_test_123")
 
     @patch("apps.payments.services.requests.post")
+    def test_checkout_session_uses_request_redirect_urls(self, mock_post):
+        order = self._create_checkout_order("ORD-STRIPE-DYNAMIC-URL", Decimal("20.00"))
+        mock_post.return_value = MockPaymentServiceResponse(
+            201,
+            {
+                "id": "cs_test_dynamic_url",
+                "url": "https://checkout.stripe.com/c/pay/cs_test_dynamic_url",
+                "livemode": False,
+                "publishable_key": "pk_test_checkout_key",
+            },
+        )
+
+        self.client.force_authenticate(self.customer)
+        response_ = self.client.post(
+            "/api/payments/stripe/checkout-session/",
+            {
+                "order_id": order.id,
+                "success_url": "https://market.example.test/checkout/success?session_id={CHECKOUT_SESSION_ID}",
+                "cancel_url": "https://market.example.test/checkout/cancel",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response_.status_code, status.HTTP_201_CREATED)
+        stripe_payload = mock_post.call_args.kwargs["json"]
+        self.assertEqual(
+            stripe_payload["success_url"],
+            "https://market.example.test/checkout/success?session_id={CHECKOUT_SESSION_ID}",
+        )
+        self.assertEqual(stripe_payload["cancel_url"], "https://market.example.test/checkout/cancel")
+
+    @patch("apps.payments.services.requests.post")
     def test_live_stripe_keys_are_rejected(self, mock_post):
         order = self._create_checkout_order("ORD-STRIPE-LIVE-REJECT", Decimal("20.00"))
         mock_post.return_value = MockPaymentServiceResponse(
@@ -362,6 +394,7 @@ class PaymentsCriticalTestCases(APITestCase):
                 "delivery_address": "99 Checkout Road, Bristol",
                 "customer_postcode": "BS1 2AB",
                 "delivery_date": (timezone.localdate() + timedelta(days=2)).isoformat(),
+                "payment_method": "stripe_checkout",
             },
             format="json",
         )
@@ -386,7 +419,8 @@ class PaymentsCriticalTestCases(APITestCase):
         )
         self.assertEqual(confirm_response.status_code, status.HTTP_200_OK)
         self.assertTrue(confirm_response.data["confirmed"])
-        self.assertEqual(confirm_response.data["order"]["payment_reference"], "pi_test_live_checkout_5")
+        self.assertEqual(confirm_response.data["order"]["payment_reference"], "pi_t***t_5")
+        self.assertEqual(confirm_response.data["order"]["payment_reference_masked"], "pi_t***t_5")
 
         order.refresh_from_db()
         transaction_record.refresh_from_db()
@@ -422,6 +456,15 @@ class PaymentsCriticalTestCases(APITestCase):
 
         delivered_1 = self._create_order("ORD-SET-1", delivery_1, Decimal("120.00"), status_value=OrderStatus.DELIVERED)
         delivered_2 = self._create_order("ORD-SET-2", delivery_2, Decimal("80.00"), status_value=OrderStatus.DELIVERED)
+        marketplace_order = self._create_checkout_order("ORD-MARKET-SET-1", Decimal("40.00"))
+        marketplace_order.status = Order.Status.DELIVERED
+        marketplace_order.payment_status = Order.PaymentStatus.PAID
+        marketplace_order.created_at = delivery_1
+        marketplace_order.save(update_fields=["status", "payment_status", "created_at", "updated_at"])
+        marketplace_sub_order = marketplace_order.sub_orders.get()
+        marketplace_sub_order.status = Order.Status.DELIVERED
+        marketplace_sub_order.delivery_date = week_range.start + timedelta(days=2)
+        marketplace_sub_order.save(update_fields=["status", "delivery_date", "updated_at"])
         pending_order = self._create_order(
             "ORD-SET-3",
             delivery_2,
@@ -441,34 +484,40 @@ class PaymentsCriticalTestCases(APITestCase):
         settlement = settlements[0]
         self.assertEqual(settlement.week_start, week_range.start)
         self.assertEqual(settlement.week_end, week_range.end)
-        self.assertEqual(settlement.gross_amount, Decimal("200.00"))
-        self.assertEqual(settlement.commission_amount, Decimal("10.00"))
-        self.assertEqual(settlement.net_amount, Decimal("190.00"))
-        self.assertEqual(settlement.lines.count(), 2)
+        self.assertEqual(settlement.gross_amount, Decimal("240.00"))
+        self.assertEqual(settlement.commission_amount, Decimal("12.00"))
+        self.assertEqual(settlement.net_amount, Decimal("228.00"))
+        self.assertEqual(settlement.lines.count(), 3)
         self.assertSetEqual(
-            {line.order.order_number for line in settlement.lines.all()},
+            {line.order.order_number for line in settlement.lines.filter(order__isnull=False)},
             {"ORD-SET-1", "ORD-SET-2"},
         )
+        self.assertTrue(settlement.lines.filter(sub_order=marketplace_sub_order).exists())
 
         delivered_1.refresh_from_db()
         delivered_2.refresh_from_db()
         pending_order.refresh_from_db()
+        marketplace_sub_order.refresh_from_db()
         self.assertTrue(delivered_1.settlement_processed)
         self.assertTrue(delivered_2.settlement_processed)
         self.assertFalse(pending_order.settlement_processed)
+        self.assertTrue(marketplace_sub_order.settlement_processed)
 
         self.client.force_authenticate(self.producer)
         list_response = self.client.get("/api/payments/settlements/")
         self.assertEqual(list_response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(list_response.data), 1)
         self.assertEqual(list_response.data[0]["transaction_reference"], settlement.transaction_reference)
-        self.assertEqual(Decimal(list_response.data[0]["running_tax_year_total"]), Decimal("190.00"))
-        self.assertEqual(Decimal(list_response.data[0]["commission_amount"]), Decimal("10.00"))
-        self.assertEqual(Decimal(list_response.data[0]["net_amount"]), Decimal("190.00"))
+        self.assertEqual(Decimal(list_response.data[0]["running_tax_year_total"]), Decimal("228.00"))
+        self.assertEqual(Decimal(list_response.data[0]["commission_amount"]), Decimal("12.00"))
+        self.assertEqual(Decimal(list_response.data[0]["net_amount"]), Decimal("228.00"))
 
         detail_response = self.client.get(f"/api/payments/settlements/{settlement.id}/")
         self.assertEqual(detail_response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(detail_response.data["lines"]), 2)
+        self.assertEqual(len(detail_response.data["lines"]), 3)
+        marketplace_line = next(line for line in detail_response.data["lines"] if line["sub_order_id"] == marketplace_sub_order.id)
+        self.assertEqual(marketplace_line["source_type"], "marketplace")
+        self.assertEqual(marketplace_line["order_number"], marketplace_order.order_number)
 
         csv_response = self.client.get(f"/api/payments/settlements/{settlement.id}/export/")
         self.assertEqual(csv_response.status_code, status.HTTP_200_OK)
@@ -476,4 +525,15 @@ class PaymentsCriticalTestCases(APITestCase):
         csv_body = csv_response.content.decode("utf-8")
         self.assertIn("ORD-SET-1", csv_body)
         self.assertIn("ORD-SET-2", csv_body)
+        self.assertIn(marketplace_order.order_number, csv_body)
         self.assertIn(settlement.transaction_reference, csv_body)
+
+        pdf_response = self.client.get(f"/api/payments/settlements/{settlement.id}/export/?format=pdf")
+        self.assertEqual(pdf_response.status_code, status.HTTP_200_OK)
+        self.assertIn("application/pdf", pdf_response["Content-Type"])
+        self.assertTrue(pdf_response.content.startswith(b"%PDF"))
+
+        xlsx_response = self.client.get(f"/api/payments/settlements/{settlement.id}/export/?format=xlsx")
+        self.assertEqual(xlsx_response.status_code, status.HTTP_200_OK)
+        self.assertIn("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", xlsx_response["Content-Type"])
+        self.assertTrue(xlsx_response.content.startswith(b"PK"))

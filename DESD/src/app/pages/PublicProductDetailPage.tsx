@@ -247,6 +247,7 @@ export function PublicProductDetailPage() {
                           expiresAt={product.surplusExpiresAt}
                           bestBefore={product.surplusBestBefore}
                           unit={product.unit}
+                          note={product.surplusNote}
                         />
                       </div>
                     ) : (
@@ -310,9 +311,17 @@ export function PublicProductDetailPage() {
             <section className="grid gap-6 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
               <Card id="recipes" className="border-[#e4e1d8] bg-[#fffdf8] shadow-sm">
                 <CardContent className="space-y-5 p-5 sm:p-6">
-                  <div className="flex items-center gap-2">
-                    <ChefHat className="size-5 text-[var(--forest-green)]" />
-                    <h3 className="text-xl font-semibold text-[var(--rich-soil)]">Recipe Suggestions</h3>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <ChefHat className="size-5 text-[var(--forest-green)]" />
+                      <h3 className="text-xl font-semibold text-[var(--rich-soil)]">Recipe Suggestions</h3>
+                    </div>
+                    <div className="w-full rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 sm:w-64">
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-emerald-900">Storage</p>
+                      <p className="mt-1 line-clamp-3 text-xs leading-5 text-emerald-800">
+                        {product.storageTips || 'No storage information at the moment.'}
+                      </p>
+                    </div>
                   </div>
                   {product.recipeIdeas && product.recipeIdeas.length > 0 ? (
                     <div className="space-y-2">
@@ -329,12 +338,6 @@ export function PublicProductDetailPage() {
                     <p className="rounded-2xl border border-dashed border-[#d6cab8] bg-[#fbfaf4] px-4 py-6 text-sm text-[var(--muted-foreground)]">
                       Recipe suggestions coming soon.
                     </p>
-                  )}
-                  {product.storageTips && (
-                    <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-                      <p className="text-sm font-medium text-emerald-900">Storage Guidance</p>
-                      <p className="mt-1 text-sm text-emerald-800">{product.storageTips}</p>
-                    </div>
                   )}
                 </CardContent>
               </Card>

@@ -24,6 +24,7 @@ from rest_framework.response import Response
 
 from apps.accounts.models import User
 from apps.community.models import ProductReview
+from bristol_marketplace.search_utils import filter_queryset_with_fuzzy_fallback
 from .models import Category, Product
 from .serializers import (
     CategorySerializer,
@@ -78,12 +79,19 @@ def _filter_queryset_by_effective_availability(queryset, allowed_availabilities:
     or isolates a business rule that should remain easy to test. The wider
     context is: Catalog domain: public product browsing, producer/product data serialization, reviews, and marketplace-facing catalog APIs.
     """
-    matching_ids = []
-    for product in queryset:
+    allowed_values = {str(value) for value in allowed_availabilities}
+    matching_ids = set()
+    if Product.Availability.YEAR_ROUND in allowed_values:
+        year_round_queryset = queryset.filter(availability=Product.Availability.YEAR_ROUND)
+        if require_stock:
+            year_round_queryset = year_round_queryset.filter(stock__gt=0)
+        matching_ids.update(year_round_queryset.values_list("id", flat=True))
+
+    for product in queryset.exclude(availability=Product.Availability.YEAR_ROUND):
         if require_stock and product.stock <= 0:
             continue
-        if product.effective_availability() in allowed_availabilities:
-            matching_ids.append(product.id)
+        if product.effective_availability() in allowed_values:
+            matching_ids.add(product.id)
     return queryset.filter(id__in=matching_ids)
 
 
@@ -127,12 +135,19 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
 
         search_query = self.request.query_params.get("search")
         if search_query:
-            queryset = queryset.filter(
-                Q(name__icontains=search_query)
-                | Q(description__icontains=search_query)
-                | Q(producer__name__icontains=search_query)
-                | Q(category__name__icontains=search_query)
-                | Q(allergens__icontains=search_query)
+            queryset = filter_queryset_with_fuzzy_fallback(
+                queryset,
+                search_query=search_query,
+                field_names=("name", "description", "producer__name", "category__name", "allergens"),
+                text_getter=lambda product: " ".join(
+                    [
+                        product.name or "",
+                        product.description or "",
+                        product.producer.name if product.producer_id else "",
+                        product.category.name if product.category_id else "",
+                        " ".join(product.allergens or []) if isinstance(product.allergens, list) else str(product.allergens or ""),
+                    ]
+                ),
             )
 
         organic_param = _parse_boolean(self.request.query_params.get("organic"))

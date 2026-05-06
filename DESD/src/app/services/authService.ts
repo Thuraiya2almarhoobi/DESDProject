@@ -65,9 +65,14 @@ export interface CustomerRegisterPayload {
   email: string;
   password: string;
   confirm_password: string;
-  full_name: string;
+  full_name?: string;
+  first_name?: string;
+  middle_name?: string;
+  last_name?: string;
   phone: string;
   delivery_address: string;
+  delivery_address_line1?: string;
+  delivery_address_line2?: string;
   postcode: string;
   accept_terms: boolean;
 }
@@ -78,8 +83,13 @@ export interface ProducerRegisterPayload {
   confirm_password: string;
   business_name: string;
   contact_name: string;
+  contact_first_name?: string;
+  contact_middle_name?: string;
+  contact_last_name?: string;
   phone: string;
   business_address: string;
+  business_address_line1?: string;
+  business_address_line2?: string;
   postcode: string;
 }
 
@@ -90,8 +100,13 @@ export interface CommunityRegisterPayload {
   organisation_name: string;
   org_type: string;
   contact_name: string;
+  contact_first_name?: string;
+  contact_middle_name?: string;
+  contact_last_name?: string;
   phone: string;
   delivery_address: string;
+  delivery_address_line1?: string;
+  delivery_address_line2?: string;
   postcode: string;
 }
 
@@ -101,8 +116,13 @@ export interface RestaurantRegisterPayload {
   confirm_password: string;
   business_name: string;
   contact_name: string;
+  contact_first_name?: string;
+  contact_middle_name?: string;
+  contact_last_name?: string;
   phone: string;
   delivery_address: string;
+  delivery_address_line1?: string;
+  delivery_address_line2?: string;
   postcode: string;
 }
 

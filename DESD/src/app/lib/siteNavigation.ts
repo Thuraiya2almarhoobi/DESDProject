@@ -52,8 +52,7 @@ export function getSiteNavItems(role?: UserRole | null): SiteNavItem[] {
         },
         { label: 'Orders', to: '/orders/history', matchPrefixes: ['/orders/history'] },
         { label: 'Near Me', to: '/map', matchPrefixes: ['/map'] },
-        { label: 'Recipes', to: '/content/recipes', matchPrefixes: ['/content/recipes'] },
-        { label: 'Farm Stories', to: '/content/stories', matchPrefixes: ['/content/stories'] },
+        { label: 'Content', to: '/content/recipes', matchPrefixes: ['/content/recipes', '/content/stories', '/content/feed'] },
       ];
     case 'COMMUNITY':
       return [
@@ -64,8 +63,7 @@ export function getSiteNavItems(role?: UserRole | null): SiteNavItem[] {
         },
         { label: 'Orders', to: '/orders/history', matchPrefixes: ['/orders/history'] },
         { label: 'Near Me', to: '/map', matchPrefixes: ['/map'] },
-        { label: 'Recipes', to: '/content/recipes', matchPrefixes: ['/content/recipes'] },
-        { label: 'Farm Stories', to: '/content/stories', matchPrefixes: ['/content/stories'] },
+        { label: 'Content', to: '/content/recipes', matchPrefixes: ['/content/recipes', '/content/stories', '/content/feed'] },
         { label: 'Dashboard', to: '/community/dashboard', matchPrefixes: ['/community/dashboard'] },
       ];
     case 'RESTAURANT':
@@ -77,8 +75,7 @@ export function getSiteNavItems(role?: UserRole | null): SiteNavItem[] {
         },
         { label: 'Orders', to: '/orders/history', matchPrefixes: ['/orders/history'] },
         { label: 'Near Me', to: '/map', matchPrefixes: ['/map'] },
-        { label: 'Recipes', to: '/content/recipes', matchPrefixes: ['/content/recipes'] },
-        { label: 'Farm Stories', to: '/content/stories', matchPrefixes: ['/content/stories'] },
+        { label: 'Content', to: '/content/recipes', matchPrefixes: ['/content/recipes', '/content/stories', '/content/feed'] },
         {
           label: 'Dashboard',
           to: '/restaurant/dashboard',
@@ -88,14 +85,16 @@ export function getSiteNavItems(role?: UserRole | null): SiteNavItem[] {
     case 'PRODUCER':
       return [
         { label: 'Dashboard', to: '/producer/dashboard', matchPrefixes: ['/producer/dashboard'] },
-        { label: 'Sales', to: '/producer/orders', matchPrefixes: ['/producer/orders'] },
+        { label: 'Orders', to: '/producer/orders', matchPrefixes: ['/producer/orders', '/orders/history'] },
         { label: 'Inventory', to: '/producer/inventory', matchPrefixes: ['/producer/inventory'] },
         { label: 'Payouts', to: '/producer/payments', matchPrefixes: ['/producer/payments'] },
-        { label: 'AI Recipes', to: '/producer/publish', matchPrefixes: ['/producer/publish'] },
-        { label: 'Recipes', to: '/content/recipes', matchPrefixes: ['/content/recipes'] },
-        { label: 'Farm Stories', to: '/content/stories', matchPrefixes: ['/content/stories'] },
+        {
+          label: 'Content',
+          to: '/producer/publish',
+          matchPrefixes: ['/producer/publish', '/producer/content', '/content/recipes', '/content/stories', '/content/feed'],
+        },
+        { label: 'Near Me', to: '/map', matchPrefixes: ['/map'] },
         { label: 'Marketplace', to: '/marketplace', matchPrefixes: ['/marketplace', '/product', '/cart', '/checkout'] },
-        { label: 'Purchases', to: '/orders/history', matchPrefixes: ['/orders/history'] },
       ];
     case 'ADMIN':
       return [

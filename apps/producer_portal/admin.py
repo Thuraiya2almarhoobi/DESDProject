@@ -38,10 +38,12 @@ class ProducerProductAdmin(admin.ModelAdmin):
         "unit",
         "availability",
         "stock_quantity",
+        "is_organic",
+        "storage_tips_ai_generated",
         "is_surplus",
     )
-    list_filter = ("availability", "is_surplus", "category", "producer")
-    search_fields = ("name", "category", "producer__email")
+    list_filter = ("availability", "is_organic", "storage_tips_ai_generated", "is_surplus", "category", "producer")
+    search_fields = ("name", "category", "organic_certification", "storage_tips", "producer__email")
 
 
 class ProducerOrderItemInline(admin.TabularInline):

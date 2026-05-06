@@ -1,41 +1,58 @@
-# Virtual environments
+# virtual environments
 venv/
 .venv/
 
-# Python cache
+# python cache
 __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
 
-# Django
+# python tooling
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# django
 *.log
 local_settings.py
 db.sqlite3
+*.sqlite3
 media/
 staticfiles/
 
-# Environment variables
+# environment variables
 .env
 .env.*
 
-# IDE / OS
+# frontend dependencies and generated builds
+DESD/node_modules/
+DESD/node_modules/.vite/
+DESD/.vite/
+DESD/dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# local working files
+dummy accounts.txt
+*.local
+*.bak
+*.tmp
+
+# ide and os files
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
 
-# Docker
+# docker and generated archives
 *.pid
+*.tar
 
-# Migrations (OPTIONAL: usually DO commit migrations once models are agreed)
-# **Do NOT ignore migrations unless your lecturer tells you to**
+# migrations should usually be committed because they define the schema
 # */migrations/*
 # !*/migrations/__init__.py
-desd-images.tar
-
-desd-images.tar
-DESD/dist/
-
-desd-images.tar
-DESD/dist/

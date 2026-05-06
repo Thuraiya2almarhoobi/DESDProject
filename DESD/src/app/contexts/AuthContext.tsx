@@ -148,7 +148,20 @@ function saveCustomerPreviewReturnPath(path: string | null): void {
 }
 
 function inferName(email: string, profile: Record<string, unknown> | null): string {
-  const candidateKeys = ['full_name', 'business_name', 'organisation_name', 'contact_name'];
+  const firstName = profile?.first_name;
+  if (typeof firstName === 'string' && firstName.trim()) {
+    return firstName.trim();
+  }
+
+  const fullName = profile?.full_name;
+  if (typeof fullName === 'string' && fullName.trim()) {
+    const [firstToken] = fullName.trim().split(/\s+/);
+    if (firstToken) {
+      return firstToken;
+    }
+  }
+
+  const candidateKeys = ['business_name', 'organisation_name', 'contact_name'];
   for (const key of candidateKeys) {
     const value = profile?.[key];
     if (typeof value === 'string' && value.trim()) {

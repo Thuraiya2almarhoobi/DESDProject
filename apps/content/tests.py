@@ -19,12 +19,13 @@ from decimal import Decimal
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.test import override_settings
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
 from apps.orders.models import Producer, Product
 
-from .ai_services import GeneratedSuggestion
+from .ai_services import GeneratedSuggestion, VertexAIUnavailable
 from .models import Recipe
 
 
@@ -81,9 +82,9 @@ class ContentApiTests(APITestCase):
             "/api/content/recipes/",
             {
                 "title": "Roasted Root Vegetable Medley",
-                "description": "Seasonal roast recipe",
-                "ingredients": "Carrots, Parsnips, Potatoes",
-                "instructions": "Roast at 200C for 35 minutes",
+                "description": "Seasonal roast recipe for winter root vegetables",
+                "ingredients": "Carrots, parsnips, potatoes, olive oil, salt",
+                "instructions": "Chop the vegetables, season with oil and salt, then roast at 200C for 35 minutes.",
                 "seasonal_tag": "Autumn/Winter",
                 "product_ids": [self.product.id],
             },
@@ -121,7 +122,7 @@ class ContentApiTests(APITestCase):
             "/api/content/stories/",
             {
                 "title": "Harvest Season Update",
-                "body": "We finished this week's carrot harvest and updated cold storage guidance.",
+                "body": "We finished this week's carrot harvest and updated cold storage guidance for customers who want the produce to stay fresh longer.",
                 "seasonal_tag": "Autumn",
                 "is_published": True,
             },
@@ -239,14 +240,24 @@ class ContentApiTests(APITestCase):
         )
         self.assertEqual(create_res.status_code, status.HTTP_403_FORBIDDEN)
 
-    def test_missing_vertex_config_returns_clear_unavailable_response(self):
+    @patch("apps.content.views.generate_content_suggestions")
+    @override_settings(
+        GOOGLE_GENERATIVE_AI_API_KEY="",
+        VERTEX_AI_PROJECT_ID="",
+        VERTEX_AI_LOCATION="",
+        VERTEX_AI_MODEL="gemini-1.5-flash",
+    )
+    def test_missing_vertex_config_returns_clear_unavailable_response(self, mock_generate):
+        mock_generate.side_effect = VertexAIUnavailable(
+            "Vertex AI credentials are not available. Add a Google service-account/ADC JSON file, or set GEMINI_API_KEY/GOOGLE_API_KEY in .env."
+        )
         create_res = self.producer_client.post(
             "/api/content/ai/suggestions/",
             {"content_type": "recipe", "product_ids": [self.product.id]},
             format="json",
         )
         self.assertEqual(create_res.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
-        self.assertIn("Vertex AI", create_res.data["detail"])
+        self.assertIn("credentials", create_res.data["detail"])
 
     @patch("apps.content.views.generate_content_suggestions")
     def test_producer_can_mark_ai_suggestion_used_and_delete_it(self, mock_generate):

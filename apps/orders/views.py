@@ -30,12 +30,25 @@ from rest_framework.views import APIView
 from apps.catalog.serializers import ProductReviewCreateSerializer, ProductReviewSerializer
 from apps.catalog.serializers import ProductReviewProducerResponseSerializer
 from apps.catalog.serializers import ProductReviewModerationSerializer
+from apps.catalog.serializers import ProductReviewUpdateSerializer
 from apps.accounts.models import User
 from apps.community.review_policy import get_review_eligibility
 from apps.community.models import ProductReview
+from bristol_marketplace.search_utils import filter_queryset_with_fuzzy_fallback
 
-from .marketplace_sync import get_or_create_catalog_product_mirror
-from .models import CartItem, CustomerProfile, Order, Producer, ProducerSubOrder, Product
+from .marketplace_sync import get_or_create_catalog_product_mirror, matching_producer_portal_product, product_is_organic
+from .models import (
+    CartItem,
+    CustomerProfile,
+    FavoriteProducer,
+    Order,
+    Producer,
+    ProducerSubOrder,
+    ProducerSubOrderStatusHistory,
+    Product,
+    ProductAllergenAcknowledgement,
+    UserNotification,
+)
 from .serializers import (
     CheckoutRequestSerializer,
     CustomerProfileSerializer,
@@ -248,6 +261,7 @@ def _deduct_producer_portal_stock_for_delivery(sub_order: ProducerSubOrder) -> N
     """
     payment_record = getattr(sub_order.order, "payment", None)
     if payment_record and bool((payment_record.raw_payload or {}).get("stock_reserved")):
+        # stripe reserved stock already got counted so do not deduct twice
         return
 
     producer_user = sub_order.producer.user
@@ -261,6 +275,7 @@ def _deduct_producer_portal_stock_for_delivery(sub_order: ProducerSubOrder) -> N
         if quantity_to_deduct <= 0:
             continue
 
+        # first match by name and unit because orders snapshot product data
         producer_product = (
             ProducerProduct.objects.select_for_update()
             .filter(
@@ -272,6 +287,7 @@ def _deduct_producer_portal_stock_for_delivery(sub_order: ProducerSubOrder) -> N
             .first()
         )
         if producer_product is None:
+            # fallback by name helps older orders that did not keep unit the same
             producer_product = (
                 ProducerProduct.objects.select_for_update()
                 .filter(
@@ -284,8 +300,22 @@ def _deduct_producer_portal_stock_for_delivery(sub_order: ProducerSubOrder) -> N
         if producer_product is None:
             continue
 
+        previous = ProducerProduct.objects.get(pk=producer_product.pk)
         producer_product.stock_quantity = max(0, producer_product.stock_quantity - quantity_to_deduct)
         producer_product.save(update_fields=["stock_quantity", "updated_at"])
+        try:
+            from apps.producer_portal.views import _record_inventory_event, _sync_product_notifications
+
+            # inventory event and notifications are best effort after stock save
+            _record_inventory_event(
+                producer_product,
+                actor=None,
+                event_type="delivered_stock_deducted",
+                previous=previous,
+            )
+            _sync_product_notifications(producer_product)
+        except Exception:
+            pass
 
 
 def _producer_sub_order_payload(sub_order: ProducerSubOrder) -> dict:
@@ -300,6 +330,7 @@ def _producer_sub_order_payload(sub_order: ProducerSubOrder) -> dict:
     from apps.delivery.services import latest_delivery_job
 
     order = sub_order.order
+    # sync for read keeps tracking status fresh before returning order detail
     delivery_job = latest_delivery_job(sub_order, sync_for_read=True)
     return {
         "id": sub_order.id,
@@ -319,6 +350,17 @@ def _producer_sub_order_payload(sub_order: ProducerSubOrder) -> dict:
         "notes": sub_order.notes,
         "order_created_at": order.created_at,
         "delivery": DeliveryJobSerializer(delivery_job).data if delivery_job else None,
+        "status_history": [
+            {
+                "id": row.id,
+                "previous_status": row.previous_status,
+                "new_status": row.new_status,
+                "note": row.note,
+                "actor_email": row.actor.email if row.actor else "",
+                "created_at": row.created_at,
+            }
+            for row in sub_order.status_history.select_related("actor").all()
+        ],
         "items": [
             {
                 "product_name": item.product_name,
@@ -353,6 +395,11 @@ class ProducerListCreateAPIView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    def get_permissions(self):
+        if self.request.method.lower() == "get":
+            return [permissions.AllowAny()]
+        return [IsAuthenticated()]
+
     def get(self, request):
         queryset = Producer.objects.filter(is_active=True)
         return Response(ProducerSerializer(queryset, many=True).data)
@@ -362,6 +409,52 @@ class ProducerListCreateAPIView(APIView):
         serializer.is_valid(raise_exception=True)
         producer = serializer.save()
         return Response(ProducerSerializer(producer).data, status=status.HTTP_201_CREATED)
+
+
+class FavoriteProducerListAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        producers = (
+            Producer.objects.filter(favorited_by__user=request.user, is_active=True)
+            .distinct()
+            .order_by("-favorited_by__created_at", "business_name")
+        )
+        return Response(ProducerSerializer(producers, many=True).data)
+
+
+class ProducerFavoriteAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, producer_id: int):
+        producer = get_object_or_404(Producer, pk=producer_id, is_active=True)
+        favorite = FavoriteProducer.objects.filter(user=request.user, producer=producer).first()
+        return Response(
+            {
+                "producer_id": producer.id,
+                "is_favorite": favorite is not None,
+                "is_favourite": favorite is not None,
+                "favorited_at": favorite.created_at if favorite else None,
+            }
+        )
+
+    def post(self, request, producer_id: int):
+        producer = get_object_or_404(Producer, pk=producer_id, is_active=True)
+        favorite, created = FavoriteProducer.objects.get_or_create(user=request.user, producer=producer)
+        return Response(
+            {
+                "producer_id": producer.id,
+                "is_favorite": True,
+                "is_favourite": True,
+                "favorited_at": favorite.created_at,
+            },
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
+
+    def delete(self, request, producer_id: int):
+        producer = get_object_or_404(Producer, pk=producer_id, is_active=True)
+        FavoriteProducer.objects.filter(user=request.user, producer=producer).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class ProductListCreateAPIView(APIView):
@@ -382,12 +475,19 @@ class ProductListCreateAPIView(APIView):
 
         search_query = request.query_params.get("search")
         if search_query:
-            queryset = queryset.filter(
-                Q(name__icontains=search_query)
-                | Q(description__icontains=search_query)
-                | Q(producer__business_name__icontains=search_query)
-                | Q(category__icontains=search_query)
-                | Q(allergen_info__icontains=search_query)
+            queryset = filter_queryset_with_fuzzy_fallback(
+                queryset,
+                search_query=search_query,
+                field_names=("name", "description", "producer__business_name", "category", "allergen_info"),
+                text_getter=lambda product: " ".join(
+                    [
+                        product.name or "",
+                        product.description or "",
+                        product.producer.business_name if product.producer_id else "",
+                        product.category or "",
+                        product.allergen_info or "",
+                    ]
+                ),
             )
 
         category_param = request.query_params.get("category")
@@ -401,10 +501,18 @@ class ProductListCreateAPIView(APIView):
 
         organic_param = _parse_boolean(request.query_params.get("organic"))
         if organic_param is not None:
-            if organic_param:
-                queryset = queryset.filter(Q(name__icontains="organic") | Q(description__icontains="organic"))
-            else:
-                queryset = queryset.exclude(Q(name__icontains="organic") | Q(description__icontains="organic"))
+            organic_ids = []
+            for product in queryset:
+                producer_product = matching_producer_portal_product(product)
+                inferred_organic = product_is_organic(name=product.name, description=product.description)
+                is_organic = (
+                    bool(getattr(producer_product, "is_organic", False)) or inferred_organic
+                    if producer_product is not None
+                    else inferred_organic
+                )
+                if is_organic == organic_param:
+                    organic_ids.append(product.id)
+            queryset = queryset.filter(id__in=organic_ids)
 
         min_price = _parse_decimal(request.query_params.get("min_price"))
         if min_price is not None:
@@ -441,6 +549,34 @@ class ProductDetailAPIView(generics.RetrieveAPIView):
         return [IsAuthenticated()]
     def get_queryset(self):
         return Product.objects.select_related("producer", "producer__user").all().order_by("name")
+
+
+class ProductAllergenAcknowledgementAPIView(APIView):
+    """Persist that the current buyer has reviewed a product's allergen details."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, product_id: int):
+        product = get_object_or_404(Product, id=product_id)
+        acknowledged = ProductAllergenAcknowledgement.objects.filter(
+            user=request.user,
+            product=product,
+        ).exists()
+        return Response({"acknowledged": acknowledged})
+
+    def post(self, request, product_id: int):
+        product = get_object_or_404(Product, id=product_id)
+        acknowledgement, _ = ProductAllergenAcknowledgement.objects.get_or_create(
+            user=request.user,
+            product=product,
+        )
+        return Response(
+            {
+                "acknowledged": True,
+                "acknowledged_at": acknowledgement.acknowledged_at,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class ProductReviewsAPIView(APIView):
@@ -491,6 +627,43 @@ class ProductReviewsAPIView(APIView):
         )
         return Response(ProductReviewSerializer(review).data, status=response_status)
 
+
+class ProductReviewDetailAPIView(APIView):
+    """Allow customers to update their own product review."""
+
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, product_id: int, review_id: int):
+        order_product = get_object_or_404(Product.objects.select_related("producer"), id=product_id)
+        catalog_product = get_or_create_catalog_product_mirror(order_product)
+        review = get_object_or_404(
+            ProductReview,
+            id=review_id,
+            product=catalog_product,
+            user=request.user,
+            moderation_status__in=[
+                ProductReview.ModerationStatus.PUBLISHED,
+                ProductReview.ModerationStatus.PENDING,
+            ],
+        )
+
+        if request.user.role != User.Role.CUSTOMER:
+            return Response(
+                {"detail": "Only customers can edit reviews."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        serializer = ProductReviewUpdateSerializer(
+            review,
+            data=request.data,
+            partial=True,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        review = serializer.save()
+        return Response(ProductReviewSerializer(review).data, status=status.HTTP_200_OK)
+
+
 class ProductReviewEligibilityAPIView(APIView):
     """Report whether the current user is eligible to review a product."""
 
@@ -505,6 +678,20 @@ class ProductReviewEligibilityAPIView(APIView):
             order_product=order_product,
             require_verified_purchase=True,
         )
+        existing_review = None
+        if request.user and request.user.is_authenticated:
+            existing_review = (
+                ProductReview.objects.filter(
+                    product=catalog_product,
+                    user=request.user,
+                    moderation_status__in=[
+                        ProductReview.ModerationStatus.PUBLISHED,
+                        ProductReview.ModerationStatus.PENDING,
+                    ],
+                )
+                .order_by("-created_at", "-id")
+                .first()
+            )
 
         can_respond = bool(
             request.user
@@ -529,6 +716,7 @@ class ProductReviewEligibilityAPIView(APIView):
                 "is_authenticated": eligibility.is_authenticated,
                 "can_respond": can_respond,
                 "response_reason": response_reason,
+                "existing_review": ProductReviewSerializer(existing_review).data if existing_review else None,
             }
         )
 
@@ -779,7 +967,11 @@ class CheckoutAPIView(APIView):
             order = checkout_cart_with_stripe_reservation(request.user, serializer.validated_data)
             from apps.payments.services import create_stripe_checkout_session_for_order
 
-            checkout_session = create_stripe_checkout_session_for_order(order)
+            checkout_session = create_stripe_checkout_session_for_order(
+                order,
+                success_url=serializer.validated_data.get("success_url"),
+                cancel_url=serializer.validated_data.get("cancel_url"),
+            )
         except ValueError as exc:
             if order is not None:
                 try:
@@ -812,7 +1004,10 @@ class OrderHistoryAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        queryset = Order.objects.filter(customer=request.user).prefetch_related("sub_orders__producer")
+        queryset = Order.objects.filter(customer=request.user).prefetch_related(
+            "sub_orders__producer",
+            "sub_orders__status_history__actor",
+        )
 
         producer_id = request.query_params.get("producer_id")
         if producer_id:
@@ -856,7 +1051,7 @@ class OrderDetailAPIView(APIView):
 
     def get(self, request, order_id: int):
         order = get_object_or_404(
-            Order.objects.prefetch_related("sub_orders__producer", "items"),
+            Order.objects.prefetch_related("sub_orders__producer", "sub_orders__status_history__actor", "items"),
             id=order_id,
             customer=request.user,
         )
@@ -928,7 +1123,7 @@ class ProducerSubOrderListAPIView(APIView):
         sub_orders = (
             ProducerSubOrder.objects.filter(producer=producer)
             .select_related("order", "producer")
-            .prefetch_related("items")
+            .prefetch_related("items", "status_history__actor")
             .order_by("-created_at")
         )
         payload = [_producer_sub_order_payload(sub_order) for sub_order in sub_orders]
@@ -954,6 +1149,7 @@ class ProducerSubOrderStatusUpdateAPIView(APIView):
         if next_status not in valid_choices:
             return Response({"detail": "Invalid status value."}, status=status.HTTP_400_BAD_REQUEST)
         if next_status != sub_order.status:
+            previous_status = sub_order.status
             allowed = PRODUCER_SUBORDER_ALLOWED_TRANSITIONS.get(sub_order.status, set())
             if next_status not in allowed:
                 return Response(
@@ -968,7 +1164,29 @@ class ProducerSubOrderStatusUpdateAPIView(APIView):
                 except ValueError as exc:
                     return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
             sub_order.status = next_status
-            sub_order.save(update_fields=["status", "updated_at"])
+            note = str(request.data.get("note", "") or "").strip()
+            if note:
+                sub_order.notes = note
+            sub_order.save(update_fields=["status", "notes", "updated_at"])
+            ProducerSubOrderStatusHistory.objects.create(
+                sub_order=sub_order,
+                actor=request.user,
+                previous_status=previous_status,
+                new_status=next_status,
+                note=note,
+            )
+            UserNotification.objects.create(
+                user=sub_order.order.customer,
+                category="order_status",
+                message=f"Order {sub_order.order.order_number} is now {next_status}.",
+                metadata={
+                    "order_id": sub_order.order_id,
+                    "sub_order_id": sub_order.id,
+                    "previous_status": previous_status,
+                    "new_status": next_status,
+                    "note": note,
+                },
+            )
             if next_status == Order.Status.DELIVERED:
                 _deduct_producer_portal_stock_for_delivery(sub_order)
             _sync_parent_order_status(sub_order.order)

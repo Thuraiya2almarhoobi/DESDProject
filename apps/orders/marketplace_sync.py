@@ -46,6 +46,7 @@ def default_marketplace_image_url(product_id: int) -> str:
     or isolates a business rule that should remain easy to test. The wider
     context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
     """
+    # modulo keeps fallback images deterministic without storing extra state
     return PRODUCT_IMAGE_LIBRARY[product_id % len(PRODUCT_IMAGE_LIBRARY)]
 
 
@@ -58,6 +59,7 @@ def product_is_organic(*, name: str, description: str) -> bool:
     context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
     """
     haystack = f"{name} {description}".lower()
+    # demo products infer organic from text when no explicit flag is present
     return "organic" in haystack
 
 
@@ -75,6 +77,7 @@ def matching_producer_portal_product(order_product: Product):
     if producer_user is None:
         return None
 
+    # unit match is preferred so eggs dozen and each do not collide
     producer_product = (
         ProducerProduct.objects.select_related("producer")
         .filter(
@@ -88,6 +91,7 @@ def matching_producer_portal_product(order_product: Product):
     if producer_product is not None:
         return producer_product
 
+    # old synced records may only match by name so keep a fallback path
     return (
         ProducerProduct.objects.select_related("producer")
         .filter(
@@ -109,6 +113,7 @@ def _default_business_name_for_user(user) -> str:
     """
     profile = getattr(user, "producer_profile", None)
     if profile and profile.business_name:
+        # real producer profile name should win over email derived fallback
         return profile.business_name
 
     local_part = (user.email or "producer").split("@")[0]
@@ -137,6 +142,7 @@ def _available_orders_business_name(base_name: str, *, user=None, exclude_pk: in
         queryset = queryset.exclude(pk=exclude_pk)
 
     while queryset.filter(business_name=business_name).exists():
+        # marketplace producer names must be unique for clean producer pages
         business_name = f"{base_name} {suffix}"
         suffix += 1
     return business_name
@@ -154,6 +160,7 @@ def _orders_producer_for_user(user):
 
     orders_producer = OrdersProducer.objects.filter(user=user).first()
     if orders_producer is not None:
+        # keep order side producer profile aligned with account profile edits
         updated_fields: list[str] = []
         profile = getattr(user, "producer_profile", None)
         address = getattr(profile, "address", None)
@@ -242,8 +249,14 @@ def _catalog_product_defaults(order_product: Product) -> dict:
         "category_name": category_name,
         "allergens": allergen_list,
         "image_url": producer_product.image_url if producer_product and producer_product.image_url else default_marketplace_image_url(order_product.id),
+        "is_organic": getattr(producer_product, "is_organic", None) if producer_product else None,
+        "organic_certification": getattr(producer_product, "organic_certification", "") if producer_product else "",
         "is_surplus": bool(getattr(producer_product, "is_surplus", False)),
         "surplus_discount": getattr(producer_product, "surplus_discount_percent", None),
+        "surplus_expires_at": getattr(producer_product, "surplus_expires_at", None) if producer_product else None,
+        "surplus_best_before": getattr(producer_product, "surplus_best_before", "") if producer_product else "",
+        "surplus_note": getattr(producer_product, "surplus_note", "") if producer_product else "",
+        "storage_tips": getattr(producer_product, "storage_tips", "") if producer_product else "",
         "availability": is_available,
     }
 
@@ -348,16 +361,18 @@ def get_or_create_catalog_product_mirror(order_product: Product):
     )
 
     category_name = payload["category_name"]
-    base_slug = slugify(category_name) or "uncategorised"
-    category_slug = base_slug
-    suffix = 2
-    while Category.objects.filter(slug=category_slug).exclude(name=category_name).exists():
-        category_slug = f"{base_slug}-{suffix}"
-        suffix += 1
-    category, _ = Category.objects.update_or_create(
-        slug=category_slug,
-        defaults={"name": category_name},
-    )
+    category = Category.objects.filter(name=category_name).first()
+    if category is None:
+        base_slug = slugify(category_name) or "uncategorised"
+        category_slug = base_slug
+        suffix = 2
+        while Category.objects.filter(slug=category_slug).exclude(name=category_name).exists():
+            category_slug = f"{base_slug}-{suffix}"
+            suffix += 1
+        category, _ = Category.objects.update_or_create(
+            slug=category_slug,
+            defaults={"name": category_name},
+        )
 
     if not order_product.is_available or order_product.stock_quantity <= Decimal("0.00"):
         availability = CatalogProduct.Availability.UNAVAILABLE
@@ -378,8 +393,8 @@ def get_or_create_catalog_product_mirror(order_product: Product):
         "harvest_date": order_product.harvest_date or timezone.localdate(),
         "availability": availability,
         "seasonal_dates": seasonal_dates or ("Current season" if order_product.in_season else ""),
-        "is_organic": product_is_organic(name=order_product.name, description=order_product.description),
-        "organic_certification": "",
+        "is_organic": payload["is_organic"] if payload["is_organic"] is not None else product_is_organic(name=order_product.name, description=order_product.description),
+        "organic_certification": payload["organic_certification"],
         "allergens": payload["allergens"],
         "image_url": payload["image_url"],
         "stock": int(order_product.stock_quantity),
@@ -387,9 +402,9 @@ def get_or_create_catalog_product_mirror(order_product: Product):
         "is_surplus": payload["is_surplus"],
         "surplus_discount": payload["surplus_discount"],
         "surplus_original_price": None,
-        "surplus_expires_at": None,
-        "surplus_best_before": "",
-        "storage_tips": "",
+        "surplus_expires_at": payload["surplus_expires_at"],
+        "surplus_best_before": payload["surplus_best_before"] or payload["surplus_note"],
+        "storage_tips": payload["storage_tips"],
         "recipe_ideas": list(
             order_product.product_recipes.select_related("recipe")
             .order_by("recipe__title")

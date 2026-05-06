@@ -22,6 +22,7 @@ import { apiJson } from '../lib/api';
 import { getPreferredAddress } from '../lib/accountLocation';
 import { getDashboardPathForRole } from '../lib/roleRouting';
 import { useSafeBack } from '../lib/navigation';
+import { AddressLookupFields, formatAddressLines } from '../components/AddressLookupFields';
 import { SiteHeader } from '../components/SiteHeader';
 import { PageLoadingSkeleton } from '../components/LoadingSkeletons';
 import { Button } from '../components/ui/button';
@@ -112,6 +113,35 @@ function inferCityFromAddress(line1: string): string {
     return parts[parts.length - 1];
   }
   return 'Bristol';
+}
+
+function splitFullName(fullName: string): { firstName: string; middleName: string; lastName: string } {
+  const tokens = fullName
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (tokens.length === 0) {
+    return { firstName: '', middleName: '', lastName: '' };
+  }
+  if (tokens.length === 1) {
+    return { firstName: tokens[0], middleName: '', lastName: '' };
+  }
+  if (tokens.length === 2) {
+    return { firstName: tokens[0], middleName: '', lastName: tokens[1] };
+  }
+  return {
+    firstName: tokens[0],
+    middleName: tokens.slice(1, -1).join(' '),
+    lastName: tokens[tokens.length - 1],
+  };
+}
+
+function composeFullName(firstName: string, middleName: string, lastName: string): string {
+  return [firstName, middleName, lastName]
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .join(' ');
 }
 
 function toAddressDraft(address: AddressRecord | undefined, fallbackLabel: string): AddressDraft {
@@ -220,22 +250,29 @@ export function AccountPage() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingDeliveryProfile, setSavingDeliveryProfile] = useState(false);
   const [highlightedSection, setHighlightedSection] = useState('');
 
   const [email, setEmail] = useState('');
   const [displayRole, setDisplayRole] = useState<UserRole>('CUSTOMER');
   const [addresses, setAddresses] = useState<AddressRecord[]>([]);
 
-  const [fullName, setFullName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [middleName, setMiddleName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('');
   const [allergiesText, setAllergiesText] = useState('');
   const [preferencesText, setPreferencesText] = useState('');
-  const [deliveryAddress, setDeliveryAddress] = useState('');
-  const [postcode, setPostcode] = useState('');
+  const [customerAddressDraft, setCustomerAddressDraft] = useState<AddressDraft>({
+    ...EMPTY_ADDRESS_DRAFT,
+    label: 'Delivery Address',
+  });
   const [defaultAddressId, setDefaultAddressId] = useState('none');
 
   const [producerBusinessName, setProducerBusinessName] = useState('');
-  const [producerContactName, setProducerContactName] = useState('');
+  const [producerContactFirstName, setProducerContactFirstName] = useState('');
+  const [producerContactMiddleName, setProducerContactMiddleName] = useState('');
+  const [producerContactLastName, setProducerContactLastName] = useState('');
   const [producerPhone, setProducerPhone] = useState('');
   const [farmOriginText, setFarmOriginText] = useState('');
   const [leadTimeHours, setLeadTimeHours] = useState('48');
@@ -243,12 +280,16 @@ export function AccountPage() {
 
   const [organisationName, setOrganisationName] = useState('');
   const [organisationType, setOrganisationType] = useState('');
-  const [communityContactName, setCommunityContactName] = useState('');
+  const [communityContactFirstName, setCommunityContactFirstName] = useState('');
+  const [communityContactMiddleName, setCommunityContactMiddleName] = useState('');
+  const [communityContactLastName, setCommunityContactLastName] = useState('');
   const [communityPhone, setCommunityPhone] = useState('');
   const [communityAddressDraft, setCommunityAddressDraft] = useState<AddressDraft>(EMPTY_ADDRESS_DRAFT);
 
   const [restaurantBusinessName, setRestaurantBusinessName] = useState('');
-  const [restaurantContactName, setRestaurantContactName] = useState('');
+  const [restaurantContactFirstName, setRestaurantContactFirstName] = useState('');
+  const [restaurantContactMiddleName, setRestaurantContactMiddleName] = useState('');
+  const [restaurantContactLastName, setRestaurantContactLastName] = useState('');
   const [restaurantPhone, setRestaurantPhone] = useState('');
   const [restaurantAddressDraft, setRestaurantAddressDraft] = useState<AddressDraft>(EMPTY_ADDRESS_DRAFT);
 
@@ -264,6 +305,10 @@ export function AccountPage() {
     setRestaurantAddressDraft((previous) => ({ ...previous, [field]: value }));
   };
 
+  const updateCustomerAddressDraft = (field: keyof AddressDraft, value: string | boolean | number | null) => {
+    setCustomerAddressDraft((previous) => ({ ...previous, [field]: value }));
+  };
+
   const syncCustomerDefaultAddress = useCallback(
     async (currentAddresses: AddressRecord[]) => {
       const existingAddress =
@@ -275,10 +320,10 @@ export function AccountPage() {
 
       const payload = {
         label: existingAddress?.label || 'Delivery Address',
-        line1: deliveryAddress.trim(),
-        line2: existingAddress?.line2 || '',
-        city: existingAddress?.city || inferCityFromAddress(deliveryAddress),
-        postcode: postcode.trim(),
+        line1: customerAddressDraft.line1.trim(),
+        line2: customerAddressDraft.line2.trim(),
+        city: customerAddressDraft.city.trim() || existingAddress?.city || inferCityFromAddress(customerAddressDraft.line1),
+        postcode: customerAddressDraft.postcode.trim(),
         is_default: true,
       };
 
@@ -296,7 +341,7 @@ export function AccountPage() {
       });
       return created.id;
     },
-    [defaultAddressId, deliveryAddress, postcode],
+    [customerAddressDraft, defaultAddressId],
   );
 
   const upsertAddress = useCallback(async (draft: AddressDraft, fallbackLabel: string) => {
@@ -345,20 +390,33 @@ export function AccountPage() {
       if (nextRole === 'CUSTOMER') {
         const orderProfile = await apiJson<OrdersProfilePayload>('/api/orders/profile/');
         const preferredAddress = getPreferredAddress(nextRole, profile, me.addresses);
-        setFullName(orderProfile.full_name || asString(profile.full_name));
+        const parsedName = splitFullName(orderProfile.full_name || asString(profile.full_name));
+        setFirstName(asString(profile.first_name) || parsedName.firstName);
+        setMiddleName(asString(profile.middle_name) || parsedName.middleName);
+        setLastName(asString(profile.last_name) || parsedName.lastName);
         setPhone(orderProfile.phone || asString(profile.phone));
         setAllergiesText(asString(profile.allergies_text));
         setPreferencesText(asString(profile.preferences_text));
-        setDeliveryAddress(preferredAddress?.line1 || orderProfile.delivery_address || '');
-        setPostcode(preferredAddress?.postcode || orderProfile.postcode || '');
+        setCustomerAddressDraft({
+          id: preferredAddress?.id || null,
+          label: preferredAddress?.label || 'Delivery Address',
+          line1: preferredAddress?.line1 || orderProfile.delivery_address || '',
+          line2: preferredAddress?.line2 || '',
+          city: preferredAddress?.city || inferCityFromAddress(preferredAddress?.line1 || orderProfile.delivery_address || ''),
+          postcode: preferredAddress?.postcode || orderProfile.postcode || '',
+          isDefault: preferredAddress?.is_default ?? true,
+        });
         setDefaultAddressId(preferredAddress ? String(preferredAddress.id) : 'none');
       }
 
       if (nextRole === 'PRODUCER') {
         const addressId = asNumber(profile.address);
         const address = findAddressById(me.addresses, addressId) || me.addresses[0];
+        const parsedContactName = splitFullName(asString(profile.contact_name));
         setProducerBusinessName(asString(profile.business_name));
-        setProducerContactName(asString(profile.contact_name));
+        setProducerContactFirstName(asString(profile.contact_first_name) || parsedContactName.firstName);
+        setProducerContactMiddleName(asString(profile.contact_middle_name) || parsedContactName.middleName);
+        setProducerContactLastName(asString(profile.contact_last_name) || parsedContactName.lastName);
         setProducerPhone(asString(profile.phone));
         setFarmOriginText(asString(profile.farm_origin_text));
         setLeadTimeHours(String(asNumber(profile.lead_time_hours) || 48));
@@ -368,9 +426,12 @@ export function AccountPage() {
       if (nextRole === 'COMMUNITY') {
         const addressId = asNumber(profile.delivery_address);
         const address = findAddressById(me.addresses, addressId) || me.addresses[0];
+        const parsedContactName = splitFullName(asString(profile.contact_name));
         setOrganisationName(asString(profile.organisation_name));
         setOrganisationType(asString(profile.org_type));
-        setCommunityContactName(asString(profile.contact_name));
+        setCommunityContactFirstName(asString(profile.contact_first_name) || parsedContactName.firstName);
+        setCommunityContactMiddleName(asString(profile.contact_middle_name) || parsedContactName.middleName);
+        setCommunityContactLastName(asString(profile.contact_last_name) || parsedContactName.lastName);
         setCommunityPhone(asString(profile.phone));
         setCommunityAddressDraft(toAddressDraft(address, 'Delivery Address'));
       }
@@ -378,8 +439,11 @@ export function AccountPage() {
       if (nextRole === 'RESTAURANT') {
         const addressId = asNumber(profile.delivery_address);
         const address = findAddressById(me.addresses, addressId) || me.addresses[0];
+        const parsedContactName = splitFullName(asString(profile.contact_name));
         setRestaurantBusinessName(asString(profile.business_name));
-        setRestaurantContactName(asString(profile.contact_name));
+        setRestaurantContactFirstName(asString(profile.contact_first_name) || parsedContactName.firstName);
+        setRestaurantContactMiddleName(asString(profile.contact_middle_name) || parsedContactName.middleName);
+        setRestaurantContactLastName(asString(profile.contact_last_name) || parsedContactName.lastName);
         setRestaurantPhone(asString(profile.phone));
         setRestaurantAddressDraft(toAddressDraft(address, 'Delivery Address'));
       }
@@ -430,13 +494,21 @@ export function AccountPage() {
     setSaving(true);
     try {
       if (displayRole === 'CUSTOMER') {
+        if (!firstName.trim() || !lastName.trim()) {
+          throw new Error('First name and last name are required.');
+        }
+        const fullName = composeFullName(firstName, middleName, lastName);
         const syncedDefaultAddressId = await syncCustomerDefaultAddress(addresses);
+        const deliveryAddress = formatAddressLines(customerAddressDraft.line1, customerAddressDraft.line2);
         await Promise.all([
           apiJson('/api/accounts/me/', {
             method: 'PATCH',
             body: JSON.stringify({
               profile: {
                 full_name: fullName,
+                first_name: firstName,
+                middle_name: middleName,
+                last_name: lastName,
                 phone,
                 allergies_text: allergiesText,
                 preferences_text: preferencesText,
@@ -450,11 +522,15 @@ export function AccountPage() {
               full_name: fullName,
               phone,
               delivery_address: deliveryAddress,
-              postcode,
+              postcode: customerAddressDraft.postcode,
             }),
           }),
         ]);
       } else if (displayRole === 'PRODUCER') {
+        if (!producerContactFirstName.trim() || !producerContactLastName.trim()) {
+          throw new Error('Contact first name and contact last name are required.');
+        }
+        const producerContactName = composeFullName(producerContactFirstName, producerContactMiddleName, producerContactLastName);
         const addressId = await upsertAddress(producerAddressDraft, 'Business Address');
         await apiJson('/api/accounts/me/', {
           method: 'PATCH',
@@ -462,6 +538,9 @@ export function AccountPage() {
             profile: {
               business_name: producerBusinessName,
               contact_name: producerContactName,
+              contact_first_name: producerContactFirstName,
+              contact_middle_name: producerContactMiddleName,
+              contact_last_name: producerContactLastName,
               phone: producerPhone,
               farm_origin_text: farmOriginText,
               lead_time_hours: Number(leadTimeHours) || 48,
@@ -470,6 +549,10 @@ export function AccountPage() {
           }),
         });
       } else if (displayRole === 'COMMUNITY') {
+        if (!communityContactFirstName.trim() || !communityContactLastName.trim()) {
+          throw new Error('Contact first name and contact last name are required.');
+        }
+        const communityContactName = composeFullName(communityContactFirstName, communityContactMiddleName, communityContactLastName);
         const addressId = await upsertAddress(communityAddressDraft, 'Delivery Address');
         await apiJson('/api/accounts/me/', {
           method: 'PATCH',
@@ -478,12 +561,19 @@ export function AccountPage() {
               organisation_name: organisationName,
               org_type: organisationType,
               contact_name: communityContactName,
+              contact_first_name: communityContactFirstName,
+              contact_middle_name: communityContactMiddleName,
+              contact_last_name: communityContactLastName,
               phone: communityPhone,
               delivery_address: addressId,
             },
           }),
         });
       } else if (displayRole === 'RESTAURANT') {
+        if (!restaurantContactFirstName.trim() || !restaurantContactLastName.trim()) {
+          throw new Error('Contact first name and contact last name are required.');
+        }
+        const restaurantContactName = composeFullName(restaurantContactFirstName, restaurantContactMiddleName, restaurantContactLastName);
         const addressId = await upsertAddress(restaurantAddressDraft, 'Delivery Address');
         await apiJson('/api/accounts/me/', {
           method: 'PATCH',
@@ -491,6 +581,9 @@ export function AccountPage() {
             profile: {
               business_name: restaurantBusinessName,
               contact_name: restaurantContactName,
+              contact_first_name: restaurantContactFirstName,
+              contact_middle_name: restaurantContactMiddleName,
+              contact_last_name: restaurantContactLastName,
               phone: restaurantPhone,
               delivery_address: addressId,
             },
@@ -508,6 +601,64 @@ export function AccountPage() {
       toast.error(error instanceof Error ? error.message : 'Unable to save account details.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const saveDeliveryProfile = async () => {
+    setSavingDeliveryProfile(true);
+    try {
+      if (displayRole === 'CUSTOMER') {
+        const syncedDefaultAddressId = await syncCustomerDefaultAddress(addresses);
+        const deliveryAddress = formatAddressLines(customerAddressDraft.line1, customerAddressDraft.line2);
+        await Promise.all([
+          apiJson('/api/accounts/me/', {
+            method: 'PATCH',
+            body: JSON.stringify({
+              profile: {
+                default_address: syncedDefaultAddressId,
+              },
+            }),
+          }),
+          apiJson('/api/orders/profile/', {
+            method: 'PUT',
+            body: JSON.stringify({
+              full_name: composeFullName(firstName, middleName, lastName),
+              phone,
+              delivery_address: deliveryAddress,
+              postcode: customerAddressDraft.postcode,
+            }),
+          }),
+        ]);
+      } else if (displayRole === 'PRODUCER') {
+        const addressId = await upsertAddress(producerAddressDraft, 'Business Address');
+        await apiJson('/api/accounts/me/', {
+          method: 'PATCH',
+          body: JSON.stringify({ profile: { address: addressId } }),
+        });
+      } else if (displayRole === 'COMMUNITY') {
+        const addressId = await upsertAddress(communityAddressDraft, 'Delivery Address');
+        await apiJson('/api/accounts/me/', {
+          method: 'PATCH',
+          body: JSON.stringify({ profile: { delivery_address: addressId } }),
+        });
+      } else if (displayRole === 'RESTAURANT') {
+        const addressId = await upsertAddress(restaurantAddressDraft, 'Delivery Address');
+        await apiJson('/api/accounts/me/', {
+          method: 'PATCH',
+          body: JSON.stringify({ profile: { delivery_address: addressId } }),
+        });
+      } else {
+        toast.info('Admin accounts do not have a delivery profile.');
+        return;
+      }
+
+      await getMe().catch(() => undefined);
+      await loadProfile();
+      toast.success('Delivery profile saved.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to save delivery profile.');
+    } finally {
+      setSavingDeliveryProfile(false);
     }
   };
 
@@ -536,6 +687,7 @@ export function AccountPage() {
     addressDraft: AddressDraft,
     updateAddress: (field: keyof AddressDraft, value: string | boolean | number | null) => void,
     heading: string,
+    options?: { useLookup?: boolean },
   ) => (
     <div className="grid gap-4 sm:grid-cols-2">
       <div className="sm:col-span-2">
@@ -547,38 +699,49 @@ export function AccountPage() {
         />
       </div>
       <div className="sm:col-span-2">
-        <Label htmlFor={`${heading}-line1`}>Address Line 1</Label>
-        <Input
-          id={`${heading}-line1`}
-          value={addressDraft.line1}
-          onChange={(event) => updateAddress('line1', event.target.value)}
-        />
-      </div>
-      <div className="sm:col-span-2">
-        <Label htmlFor={`${heading}-line2`}>Address Line 2</Label>
-        <Input
-          id={`${heading}-line2`}
-          value={addressDraft.line2}
-          onChange={(event) => updateAddress('line2', event.target.value)}
-        />
-      </div>
-      <div>
-        <Label htmlFor={`${heading}-city`}>City</Label>
-        <Input
-          id={`${heading}-city`}
-          value={addressDraft.city}
-          onChange={(event) => updateAddress('city', event.target.value)}
-        />
-      </div>
-      <div>
-        <Label htmlFor={`${heading}-postcode`}>Postcode</Label>
-        <Input
-          id={`${heading}-postcode`}
-          value={addressDraft.postcode}
-          onChange={(event) => updateAddress('postcode', event.target.value)}
+        <AddressLookupFields
+          idPrefix={heading}
+          line1={addressDraft.line1}
+          line2={addressDraft.line2}
+          city={addressDraft.city}
+          postcode={addressDraft.postcode}
+          onChange={(field, value) => updateAddress(field, value)}
+          lookupLabel={options?.useLookup ? 'Find address or postcode' : 'Address lookup'}
         />
       </div>
     </div>
+  );
+
+  const renderDeliveryProfileCard = (
+    addressDraft: AddressDraft,
+    updateAddress: (field: keyof AddressDraft, value: string | boolean | number | null) => void,
+    title = 'Delivery Profile',
+    idPrefix = 'delivery-profile',
+    options?: { useLookup?: boolean },
+  ) => (
+    <Card
+      ref={deliveryProfileRef}
+      className={cn(
+        'transition-colors duration-300',
+        highlightedSection === 'delivery-profile' && 'border-green-500 ring-2 ring-green-200',
+      )}
+    >
+      <CardHeader className="gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <CardTitle>{title}</CardTitle>
+          <p className="mt-1 text-sm text-gray-600">
+            Save address changes here without changing the rest of the account profile.
+          </p>
+        </div>
+        <Button onClick={saveDeliveryProfile} disabled={savingDeliveryProfile}>
+          <Save className="mr-2 size-4" />
+          {savingDeliveryProfile ? 'Saving...' : 'Save Delivery Profile'}
+        </Button>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {renderAddressFields(addressDraft, updateAddress, idPrefix, options)}
+      </CardContent>
+    </Card>
   );
 
   const backButton = (
@@ -638,11 +801,27 @@ export function AccountPage() {
                   <CardContent className="space-y-4">
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div>
-                        <Label htmlFor="customer-full-name">Full Name</Label>
+                        <Label htmlFor="customer-first-name">First Name</Label>
                         <Input
-                          id="customer-full-name"
-                          value={fullName}
-                          onChange={(event) => setFullName(event.target.value)}
+                          id="customer-first-name"
+                          value={firstName}
+                          onChange={(event) => setFirstName(event.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="customer-middle-name">Middle Name (Optional)</Label>
+                        <Input
+                          id="customer-middle-name"
+                          value={middleName}
+                          onChange={(event) => setMiddleName(event.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="customer-last-name">Last Name</Label>
+                        <Input
+                          id="customer-last-name"
+                          value={lastName}
+                          onChange={(event) => setLastName(event.target.value)}
                         />
                       </div>
                       <div>
@@ -678,11 +857,11 @@ export function AccountPage() {
                         <SelectTrigger id="customer-default-address">
                           <SelectValue placeholder="Select default address" />
                         </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">Create from delivery profile</SelectItem>
+                          <SelectContent>
+                          <SelectItem value="none">Create delivery profile</SelectItem>
                           {addresses.map((address) => (
                             <SelectItem key={address.id} value={String(address.id)}>
-                              {address.label}: {address.line1}, {address.city} {address.postcode}
+                              {address.label}: {[address.line1, address.line2, address.city, address.postcode].filter(Boolean).join(', ')}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -691,201 +870,233 @@ export function AccountPage() {
                   </CardContent>
                 </Card>
 
-                <Card
-                  ref={deliveryProfileRef}
-                  className={cn(
-                    'transition-colors duration-300',
-                    highlightedSection === 'delivery-profile' && 'border-green-500 ring-2 ring-green-200',
-                  )}
-                >
-                  <CardHeader>
-                    <CardTitle>Delivery Profile</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div>
-                      <Label htmlFor="customer-delivery-address">Delivery Address</Label>
-                      <Input
-                        id="customer-delivery-address"
-                        value={deliveryAddress}
-                        onChange={(event) => setDeliveryAddress(event.target.value)}
-                      />
-                    </div>
-                    <div className="max-w-sm">
-                      <Label htmlFor="customer-postcode">Postcode</Label>
-                      <Input
-                        id="customer-postcode"
-                        value={postcode}
-                        onChange={(event) => setPostcode(event.target.value)}
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
+                {renderDeliveryProfileCard(
+                  customerAddressDraft,
+                  updateCustomerAddressDraft,
+                  'Delivery Profile',
+                  'customer-delivery',
+                  { useLookup: true },
+                )}
               </>
             )}
 
             {displayRole === 'PRODUCER' && (
-              <Card
-                ref={businessProfileRef}
-                className={cn(
-                  'transition-colors duration-300',
-                  highlightedSection === 'business-profile' && 'border-green-500 ring-2 ring-green-200',
-                )}
-              >
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Store className="size-5" />
-                    Producer Business Profile
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div>
-                      <Label htmlFor="producer-business-name">Business Name</Label>
-                      <Input
-                        id="producer-business-name"
-                        value={producerBusinessName}
-                        onChange={(event) => setProducerBusinessName(event.target.value)}
-                      />
+              <>
+                <Card
+                  ref={businessProfileRef}
+                  className={cn(
+                    'transition-colors duration-300',
+                    highlightedSection === 'business-profile' && 'border-green-500 ring-2 ring-green-200',
+                  )}
+                >
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Store className="size-5" />
+                      Producer Business Profile
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <Label htmlFor="producer-business-name">Business Name</Label>
+                        <Input
+                          id="producer-business-name"
+                          value={producerBusinessName}
+                          onChange={(event) => setProducerBusinessName(event.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="producer-contact-first-name">Contact First Name</Label>
+                        <Input
+                          id="producer-contact-first-name"
+                          value={producerContactFirstName}
+                          onChange={(event) => setProducerContactFirstName(event.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="producer-contact-middle-name">Contact Middle Name (Optional)</Label>
+                        <Input
+                          id="producer-contact-middle-name"
+                          value={producerContactMiddleName}
+                          onChange={(event) => setProducerContactMiddleName(event.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="producer-contact-last-name">Contact Last Name</Label>
+                        <Input
+                          id="producer-contact-last-name"
+                          value={producerContactLastName}
+                          onChange={(event) => setProducerContactLastName(event.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="producer-phone">Phone</Label>
+                        <Input
+                          id="producer-phone"
+                          value={producerPhone}
+                          onChange={(event) => setProducerPhone(event.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="producer-lead-time">Lead Time (hours)</Label>
+                        <Input
+                          id="producer-lead-time"
+                          type="number"
+                          min="1"
+                          value={leadTimeHours}
+                          onChange={(event) => setLeadTimeHours(event.target.value)}
+                        />
+                      </div>
                     </div>
                     <div>
-                      <Label htmlFor="producer-contact-name">Contact Name</Label>
-                      <Input
-                        id="producer-contact-name"
-                        value={producerContactName}
-                        onChange={(event) => setProducerContactName(event.target.value)}
+                      <Label htmlFor="producer-origin">Farm Origin / Story</Label>
+                      <Textarea
+                        id="producer-origin"
+                        value={farmOriginText}
+                        onChange={(event) => setFarmOriginText(event.target.value)}
+                        placeholder="Tell customers where your produce comes from."
                       />
                     </div>
-                    <div>
-                      <Label htmlFor="producer-phone">Phone</Label>
-                      <Input
-                        id="producer-phone"
-                        value={producerPhone}
-                        onChange={(event) => setProducerPhone(event.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="producer-lead-time">Lead Time (hours)</Label>
-                      <Input
-                        id="producer-lead-time"
-                        type="number"
-                        min="1"
-                        value={leadTimeHours}
-                        onChange={(event) => setLeadTimeHours(event.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <Label htmlFor="producer-origin">Farm Origin / Story</Label>
-                    <Textarea
-                      id="producer-origin"
-                      value={farmOriginText}
-                      onChange={(event) => setFarmOriginText(event.target.value)}
-                      placeholder="Tell customers where your produce comes from."
-                    />
-                  </div>
-                  {renderAddressFields(producerAddressDraft, updateProducerAddressDraft, 'producer-address')}
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+                {renderDeliveryProfileCard(producerAddressDraft, updateProducerAddressDraft, 'Delivery Profile', 'producer-delivery', {
+                  useLookup: true,
+                })}
+              </>
             )}
 
             {displayRole === 'COMMUNITY' && (
-              <Card
-                ref={organisationProfileRef}
-                className={cn(
-                  'transition-colors duration-300',
-                  highlightedSection === 'organisation-profile' && 'border-green-500 ring-2 ring-green-200',
-                )}
-              >
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Users className="size-5" />
-                    Community Organisation Profile
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div>
-                      <Label htmlFor="community-organisation-name">Organisation Name</Label>
-                      <Input
-                        id="community-organisation-name"
-                        value={organisationName}
-                        onChange={(event) => setOrganisationName(event.target.value)}
-                      />
+              <>
+                <Card
+                  ref={organisationProfileRef}
+                  className={cn(
+                    'transition-colors duration-300',
+                    highlightedSection === 'organisation-profile' && 'border-green-500 ring-2 ring-green-200',
+                  )}
+                >
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Users className="size-5" />
+                      Community Organisation Profile
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <Label htmlFor="community-organisation-name">Organisation Name</Label>
+                        <Input
+                          id="community-organisation-name"
+                          value={organisationName}
+                          onChange={(event) => setOrganisationName(event.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="community-organisation-type">Organisation Type</Label>
+                        <Input
+                          id="community-organisation-type"
+                          value={organisationType}
+                          onChange={(event) => setOrganisationType(event.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="community-contact-first-name">Contact First Name</Label>
+                        <Input
+                          id="community-contact-first-name"
+                          value={communityContactFirstName}
+                          onChange={(event) => setCommunityContactFirstName(event.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="community-contact-middle-name">Contact Middle Name (Optional)</Label>
+                        <Input
+                          id="community-contact-middle-name"
+                          value={communityContactMiddleName}
+                          onChange={(event) => setCommunityContactMiddleName(event.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="community-contact-last-name">Contact Last Name</Label>
+                        <Input
+                          id="community-contact-last-name"
+                          value={communityContactLastName}
+                          onChange={(event) => setCommunityContactLastName(event.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="community-phone">Phone</Label>
+                        <Input
+                          id="community-phone"
+                          value={communityPhone}
+                          onChange={(event) => setCommunityPhone(event.target.value)}
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <Label htmlFor="community-organisation-type">Organisation Type</Label>
-                      <Input
-                        id="community-organisation-type"
-                        value={organisationType}
-                        onChange={(event) => setOrganisationType(event.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="community-contact-name">Contact Name</Label>
-                      <Input
-                        id="community-contact-name"
-                        value={communityContactName}
-                        onChange={(event) => setCommunityContactName(event.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="community-phone">Phone</Label>
-                      <Input
-                        id="community-phone"
-                        value={communityPhone}
-                        onChange={(event) => setCommunityPhone(event.target.value)}
-                      />
-                    </div>
-                  </div>
-                  {renderAddressFields(communityAddressDraft, updateCommunityAddressDraft, 'community-address')}
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+                {renderDeliveryProfileCard(communityAddressDraft, updateCommunityAddressDraft, 'Delivery Profile', 'community-delivery', {
+                  useLookup: true,
+                })}
+              </>
             )}
 
             {displayRole === 'RESTAURANT' && (
-              <Card
-                ref={deliveryProfileRef}
-                className={cn(
-                  'transition-colors duration-300',
-                  highlightedSection === 'delivery-profile' && 'border-green-500 ring-2 ring-green-200',
-                )}
-              >
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Building2 className="size-5" />
-                    Restaurant Profile
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div>
-                      <Label htmlFor="restaurant-business-name">Business Name</Label>
-                      <Input
-                        id="restaurant-business-name"
-                        value={restaurantBusinessName}
-                        onChange={(event) => setRestaurantBusinessName(event.target.value)}
-                      />
+              <>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Building2 className="size-5" />
+                      Restaurant Profile
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <Label htmlFor="restaurant-business-name">Business Name</Label>
+                        <Input
+                          id="restaurant-business-name"
+                          value={restaurantBusinessName}
+                          onChange={(event) => setRestaurantBusinessName(event.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="restaurant-contact-first-name">Contact First Name</Label>
+                        <Input
+                          id="restaurant-contact-first-name"
+                          value={restaurantContactFirstName}
+                          onChange={(event) => setRestaurantContactFirstName(event.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="restaurant-contact-middle-name">Contact Middle Name (Optional)</Label>
+                        <Input
+                          id="restaurant-contact-middle-name"
+                          value={restaurantContactMiddleName}
+                          onChange={(event) => setRestaurantContactMiddleName(event.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="restaurant-contact-last-name">Contact Last Name</Label>
+                        <Input
+                          id="restaurant-contact-last-name"
+                          value={restaurantContactLastName}
+                          onChange={(event) => setRestaurantContactLastName(event.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="restaurant-phone">Phone</Label>
+                        <Input
+                          id="restaurant-phone"
+                          value={restaurantPhone}
+                          onChange={(event) => setRestaurantPhone(event.target.value)}
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <Label htmlFor="restaurant-contact-name">Contact Name</Label>
-                      <Input
-                        id="restaurant-contact-name"
-                        value={restaurantContactName}
-                        onChange={(event) => setRestaurantContactName(event.target.value)}
-                      />
-                    </div>
-                    <div className="sm:col-span-2">
-                      <Label htmlFor="restaurant-phone">Phone</Label>
-                      <Input
-                        id="restaurant-phone"
-                        value={restaurantPhone}
-                        onChange={(event) => setRestaurantPhone(event.target.value)}
-                      />
-                    </div>
-                  </div>
-                  {renderAddressFields(restaurantAddressDraft, updateRestaurantAddressDraft, 'restaurant-address')}
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+                {renderDeliveryProfileCard(restaurantAddressDraft, updateRestaurantAddressDraft, 'Delivery Profile', 'restaurant-delivery', {
+                  useLookup: true,
+                })}
+              </>
             )}
 
             {displayRole === 'ADMIN' && (

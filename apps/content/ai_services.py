@@ -52,6 +52,7 @@ _PLACEHOLDER_API_KEYS = {
 }
 
 
+# these placeholder strings should behave the same as no key at all
 def _clean_api_key(value: str) -> str:
     """
     Helper for the file role: Source module for the content area.
@@ -95,6 +96,7 @@ def _google_error_message(response, provider: str) -> str:
     # bodies, or very long Google error payloads into the frontend toast.
     fallback = f"{provider} returned status {response.status_code}."
     try:
+        # google error bodies are json when the provider gives useful detail
         payload = response.json()
     except ValueError:
         return fallback
@@ -152,6 +154,7 @@ def _load_authorized_session():
         raise VertexAIUnavailable("Vertex AI support is not installed in this environment.") from exc
 
     try:
+        # google auth reads adc from docker mounts or local gcloud login
         credentials, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
     except Exception as exc:
         raise VertexAIUnavailable(
@@ -173,6 +176,7 @@ def _extract_json_array(text: str) -> list[dict[str, Any]]:
     # producer UI expects exactly three structured suggestions.
     cleaned = text.strip()
     if cleaned.startswith("```"):
+        # model output can still include markdown fences so strip them first
         cleaned = cleaned.strip("`")
         if cleaned.startswith("json"):
             cleaned = cleaned[4:]
@@ -197,14 +201,26 @@ def _build_prompt(content_type: str, products: list[dict[str, Any]], context: di
     # The prompt deliberately constrains claims: producers can edit the copy, but
     # the generator should not invent certifications, allergen guarantees, or
     # medical/nutrition claims that would be risky in a food marketplace.
+    type_rules = (
+        # recipe and story prompts split here so the ai does not return same shaped copy
+        "Recipe-specific requirements: use the selected products as the main ingredient context; "
+        "respect the producer request in notes as the primary brief; if the request asks for pasta and tomatoes are selected, "
+        "write a tomato-led pasta recipe or the closest sensible recipe. Include practical ingredients and numbered cooking steps."
+        if content_type == "recipe"
+        else "Farm-story-specific requirements: do not write ingredients or cooking instructions; use the selected products as story context; "
+        "respect the producer request in notes as the primary brief; focus on the product, producer practice, season, harvest, or customer context."
+    )
     return (
         "You are writing producer-owned marketplace content for a Bristol local food platform.\n"
         "Return exactly 3 options as a JSON array and no markdown.\n"
         "Each option must be safe, specific, warm, concise, and editable by the producer.\n"
         "Do not make medical, health-cure, nutrition-cure, or allergen-safety claims.\n"
         "Do not invent certifications, awards, reviews, or facts not present in the context.\n"
+        "Treat selected products as mandatory context unless the producer request clearly conflicts.\n"
+        "Treat the notes/request field as the main creative instruction, not decorative background.\n"
         "For recipes, use keys: title, description, ingredients, instructions, seasonal_tag.\n"
         "For farm stories, use keys: title, body, seasonal_tag.\n"
+        f"{type_rules}\n"
         f"Requested content type: {content_type}\n"
         f"Producer and request context: {json.dumps(context, default=str)}\n"
         f"Selected products: {json.dumps(products, default=str)}\n"
@@ -229,6 +245,7 @@ def _parse_suggestions(data: dict[str, Any], context: dict[str, Any]) -> list[Ge
     rows = _extract_json_array(text)
     suggestions: list[GeneratedSuggestion] = []
     for row in rows[:3]:
+        # bad rows are ignored but we still require three usable options later
         if not isinstance(row, dict):
             continue
         title = str(row.get("title", "")).strip()
@@ -272,6 +289,7 @@ def _generate_with_gemini_api_key(
         },
     }
     try:
+        # api key mode is useful for local demos when adc is not there
         response = requests.post(endpoint, params={"key": api_key}, json=payload, timeout=timeout_seconds)
     except requests.RequestException as exc:
         raise VertexAIResponseError("Gemini API request failed.") from exc
@@ -306,6 +324,7 @@ def _generate_with_vertex_adc(
 
     session = _load_authorized_session()
     try:
+        # adc mode calls vertex through a google authorized requests session
         response = session.post(endpoint, json=payload, timeout=timeout_seconds)
     except Exception as exc:
         raise VertexAIResponseError("Vertex AI request failed.") from exc
@@ -335,6 +354,7 @@ def generate_content_suggestions(
     prompt = _build_prompt(content_type, products, context)
 
     if api_key:
+        # explicit key wins because it does not depend on mounted gcloud files
         return _generate_with_gemini_api_key(
             api_key=api_key,
             model=model,
@@ -344,6 +364,7 @@ def generate_content_suggestions(
         )
 
     if not project_id or not location:
+        # project and location are required before adc can call vertex
         raise VertexAIUnavailable(
             "AI recipe generation needs either VERTEX_AI_PROJECT_ID plus Google ADC credentials, or GEMINI_API_KEY/GOOGLE_API_KEY."
         )

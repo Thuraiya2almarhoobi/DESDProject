@@ -49,7 +49,11 @@ class CommunityBulkCheckoutAPIView(APIView):
                 order = checkout_cart_with_stripe_reservation(request.user, serializer.validated_data)
                 from apps.payments.services import create_stripe_checkout_session_for_order
 
-                checkout_session = create_stripe_checkout_session_for_order(order)
+                checkout_session = create_stripe_checkout_session_for_order(
+                    order,
+                    success_url=serializer.validated_data.get("success_url"),
+                    cancel_url=serializer.validated_data.get("cancel_url"),
+                )
             else:
                 order = checkout_cart(request.user, serializer.validated_data)
         except ValueError as exc:

@@ -17,7 +17,6 @@ Implementation notes:
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from datetime import timedelta
 
@@ -29,20 +28,6 @@ from apps.orders.models import Order, OrderItem, Product as OrdersProduct
 from .models import ProductReview
 
 MAX_REVIEWS_PER_24_HOURS = 5
-
-URL_PATTERN = re.compile(r"(https?://|www\.)", re.IGNORECASE)
-EMAIL_PATTERN = re.compile(r"\b[\w.\-+]+@[\w.\-]+\.\w+\b", re.IGNORECASE)
-PHONE_PATTERN = re.compile(r"(\+?\d[\d\s().-]{7,}\d)")
-REPEATED_CHARACTER_PATTERN = re.compile(r"(.)\1{7,}")
-FLAGGED_LANGUAGE = {
-    "idiot",
-    "moron",
-    "trash",
-    "scam",
-    "fraud",
-    "hate you",
-}
-
 
 @dataclass(frozen=True)
 class ReviewEligibility:
@@ -158,6 +143,7 @@ def get_review_eligibility(*, user, catalog_product, order_product=None, require
 
     existing_review = (
         ProductReview.objects.filter(product=catalog_product, user=user)
+        .exclude(moderation_status=ProductReview.ModerationStatus.REJECTED)
         .order_by("-created_at")
         .first()
     )
@@ -236,36 +222,6 @@ def moderate_review_comment(comment: str) -> ReviewModerationDecision:
         return ReviewModerationDecision(
             status=ProductReview.ModerationStatus.PUBLISHED,
             reason="",
-        )
-
-    lowered = normalized_comment.lower()
-
-    if (
-        URL_PATTERN.search(normalized_comment)
-        or EMAIL_PATTERN.search(normalized_comment)
-        or PHONE_PATTERN.search(normalized_comment)
-    ):
-        return ReviewModerationDecision(
-            status=ProductReview.ModerationStatus.PENDING,
-            reason="Potential promotional or contact information detected.",
-        )
-
-    if REPEATED_CHARACTER_PATTERN.search(normalized_comment):
-        return ReviewModerationDecision(
-            status=ProductReview.ModerationStatus.PENDING,
-            reason="Potential spam pattern detected.",
-        )
-
-    if any(term in lowered for term in FLAGGED_LANGUAGE):
-        return ReviewModerationDecision(
-            status=ProductReview.ModerationStatus.PENDING,
-            reason="Potentially inappropriate language detected.",
-        )
-
-    if normalized_comment.count("!") >= 6:
-        return ReviewModerationDecision(
-            status=ProductReview.ModerationStatus.PENDING,
-            reason="Potentially abusive or spam-like tone detected.",
         )
 
     return ReviewModerationDecision(

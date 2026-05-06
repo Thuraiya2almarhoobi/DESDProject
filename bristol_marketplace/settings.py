@@ -80,6 +80,7 @@ INSTALLED_APPS = [
     "apps.delivery",
     "apps.community",
     "apps.content",
+    "apps.moderation",
 ]
 
 if HAS_CORSHEADERS:
@@ -263,6 +264,7 @@ else:
 # DRF configuration controls authentication behaviour and abuse-prevention
 # throttles for sensitive endpoints such as registration and login.
 REST_FRAMEWORK = {
+    "URL_FORMAT_OVERRIDE": None,
     "DEFAULT_AUTHENTICATION_CLASSES": (
         (
             "rest_framework_simplejwt.authentication.JWTAuthentication",

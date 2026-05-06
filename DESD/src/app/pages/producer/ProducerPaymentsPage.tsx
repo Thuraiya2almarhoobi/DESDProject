@@ -14,7 +14,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Calendar, Download, Loader2 } from 'lucide-react';
+import { ArrowLeft, Calendar, ChevronDown, Download, Loader2 } from 'lucide-react';
 import { format, isValid, parseISO } from 'date-fns';
 import { toast } from 'sonner';
 import { apiBlob, apiJson } from '../../lib/api';
@@ -25,6 +25,13 @@ import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
 import { Badge } from '../../components/ui/badge';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from '../../components/ui/dropdown-menu';
 
 interface WeeklySettlementApi {
   id: number;
@@ -38,6 +45,24 @@ interface WeeklySettlementApi {
   order_count: number;
   running_tax_year_total: string;
 }
+
+type ExportFormat = 'csv' | 'pdf' | 'xlsx';
+
+const exportFormats: ExportFormat[] = ['csv', 'pdf', 'xlsx'];
+const exportFormatLabels: Record<ExportFormat, { title: string; description: string }> = {
+  csv: {
+    title: 'CSV',
+    description: 'Recommended for spreadsheets and reconciliation.',
+  },
+  pdf: {
+    title: 'PDF',
+    description: 'Best for sharing a fixed statement.',
+  },
+  xlsx: {
+    title: 'XLSX',
+    description: 'Excel workbook with structured rows.',
+  },
+};
 
 function toNumber(value: string): number {
   const parsed = Number(value);
@@ -61,6 +86,65 @@ function triggerDownload(blob: Blob, filename: string): void {
   anchor.click();
   document.body.removeChild(anchor);
   URL.revokeObjectURL(objectUrl);
+}
+
+interface SettlementDownloadMenuProps {
+  disabled: boolean;
+  isDownloading: boolean;
+  label: string;
+  onExport: (format: ExportFormat) => void;
+  size?: 'default' | 'sm';
+  variant?: 'default' | 'outline';
+}
+
+function SettlementDownloadMenu({
+  disabled,
+  isDownloading,
+  label,
+  onExport,
+  size = 'default',
+  variant = 'default',
+}: SettlementDownloadMenuProps) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button size={size} variant={variant} disabled={disabled} className="whitespace-nowrap">
+          {isDownloading ? <Loader2 className="size-4 mr-2 animate-spin" /> : <Download className="size-4 mr-2" />}
+          {isDownloading ? 'Downloading' : label}
+          {!isDownloading ? <ChevronDown className="ml-2 size-4" /> : null}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-72 rounded-2xl border-[#d7dfd2] p-2 shadow-xl">
+        <DropdownMenuLabel className="px-3 py-2 text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-[#667461]">
+          Choose export format
+        </DropdownMenuLabel>
+        {exportFormats.map((format) => {
+          const metadata = exportFormatLabels[format];
+          return (
+            <DropdownMenuItem
+              key={format}
+              className="items-start rounded-xl px-3 py-3"
+              onSelect={() => onExport(format)}
+            >
+              <div className="flex w-full items-start justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-[#1d2a20]">{metadata.title}</span>
+                    {format === 'csv' ? (
+                      <span className="rounded-full bg-[#e7f1e4] px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-[var(--forest-green)]">
+                        Recommended
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="mt-1 text-xs leading-5 text-[#687567]">{metadata.description}</p>
+                </div>
+              </div>
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 }
 
 /**
@@ -120,28 +204,29 @@ export function ProducerPaymentsPage() {
     [settlements],
   );
 
-  const exportSettlement = async (settlement: WeeklySettlementApi) => {
+  const exportSettlement = async (settlement: WeeklySettlementApi, format: ExportFormat = 'csv') => {
     setExportingId(settlement.id);
     try {
-      const csvBlob = await apiBlob(`/api/payments/settlements/${settlement.id}/export/`);
-      const filename = `settlement-${settlement.week_start}-${settlement.week_end}.csv`;
-      triggerDownload(csvBlob, filename);
-      toast.success(`Exported ${settlement.transaction_reference}.`);
+      const query = `?format=${format}`;
+      const blob = await apiBlob(`/api/payments/settlements/${settlement.id}/export/${query}`);
+      const filename = `settlement-${settlement.week_start}-${settlement.week_end}.${format}`;
+      triggerDownload(blob, filename);
+      toast.success(`Exported ${settlement.transaction_reference} as ${format.toUpperCase()}.`);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to export settlement CSV.';
+      const message = error instanceof Error ? error.message : `Unable to export settlement ${format.toUpperCase()}.`;
       toast.error(message);
     } finally {
       setExportingId(null);
     }
   };
 
-  const exportLatest = async () => {
+  const exportLatest = async (format: ExportFormat) => {
     const latest = settlements[0];
     if (!latest) {
       toast.info('No settlements available to export yet.');
       return;
     }
-    await exportSettlement(latest);
+    await exportSettlement(latest, format);
   };
 
   return (
@@ -159,12 +244,14 @@ export function ProducerPaymentsPage() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-3xl font-semibold">Payment History</h1>
-            <p className="text-gray-600">Weekly settlement reports</p>
+            <p className="text-gray-600">Weekly settlement reports with CSV, PDF, and Excel exports</p>
           </div>
-          <Button onClick={exportLatest} disabled={loading || settlements.length === 0 || exportingId !== null}>
-            {exportingId !== null ? <Loader2 className="size-4 mr-2 animate-spin" /> : <Download className="size-4 mr-2" />}
-            Export Latest CSV
-          </Button>
+          <SettlementDownloadMenu
+            disabled={loading || settlements.length === 0 || exportingId !== null}
+            isDownloading={exportingId !== null}
+            label="Download latest"
+            onExport={(format) => void exportLatest(format)}
+          />
         </div>
 
         <div className="grid md:grid-cols-3 gap-6 mb-8">
@@ -210,7 +297,7 @@ export function ProducerPaymentsPage() {
                     <TableHead className="text-right">Commission (5%)</TableHead>
                     <TableHead className="text-right">Your Earnings</TableHead>
                     <TableHead className="text-right">Status</TableHead>
-                    <TableHead className="text-right">Export</TableHead>
+                    <TableHead className="text-right">Exports</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -239,18 +326,16 @@ export function ProducerPaymentsPage() {
                         <Badge variant="outline">{settlement.status.replaceAll('_', ' ')}</Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => exportSettlement(settlement)}
-                          disabled={exportingId !== null}
-                        >
-                          {exportingId === settlement.id ? (
-                            <Loader2 className="size-4 animate-spin" />
-                          ) : (
-                            <Download className="size-4" />
-                          )}
-                        </Button>
+                        <div className="flex justify-end">
+                          <SettlementDownloadMenu
+                            disabled={exportingId !== null}
+                            isDownloading={exportingId === settlement.id}
+                            label="Download"
+                            onExport={(format) => void exportSettlement(settlement, format)}
+                            size="sm"
+                            variant="outline"
+                          />
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -266,7 +351,7 @@ export function ProducerPaymentsPage() {
             <div className="text-sm text-gray-600 space-y-1">
               <p>Settlements are processed weekly and include delivered orders only.</p>
               <p>Platform commission is fixed at 5% per settlement line.</p>
-              <p>Use CSV export for finance reconciliation and evidence in reports.</p>
+              <p>Use CSV, PDF, or Excel export for finance reconciliation and evidence in reports.</p>
             </div>
           </CardContent>
         </Card>

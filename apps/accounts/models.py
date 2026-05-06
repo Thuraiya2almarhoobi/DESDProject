@@ -25,6 +25,21 @@ from django.db.models import Q
 from django.utils import timezone
 
 
+def split_customer_full_name(full_name: str | None) -> tuple[str, str, str]:
+    tokens = [token for token in (full_name or "").strip().split() if token]
+    if not tokens:
+        return "", "", ""
+    if len(tokens) == 1:
+        return tokens[0], "", ""
+    if len(tokens) == 2:
+        return tokens[0], "", tokens[1]
+    return tokens[0], " ".join(tokens[1:-1]), tokens[-1]
+
+
+def compose_customer_full_name(first_name: str | None, middle_name: str | None, last_name: str | None) -> str:
+    return " ".join(part.strip() for part in [first_name or "", middle_name or "", last_name or ""] if part.strip())
+
+
 class UserManager(BaseUserManager):
     """
     Documents the `UserManager` boundary for this module.
@@ -159,6 +174,9 @@ class CustomerProfile(models.Model):
     """
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="customer_profile")
     full_name = models.CharField(max_length=255)
+    first_name = models.CharField(max_length=100, blank=True)
+    middle_name = models.CharField(max_length=100, blank=True)
+    last_name = models.CharField(max_length=100, blank=True)
     phone = models.CharField(max_length=30)
     allergies_text = models.TextField(blank=True)
     preferences_text = models.TextField(blank=True)
@@ -179,6 +197,17 @@ class CustomerProfile(models.Model):
         if self.default_address and self.default_address.user_id != self.user_id:
             raise ValidationError("default_address must belong to the same user.")
 
+    def sync_name_fields(self):
+        if self.first_name.strip() or self.middle_name.strip() or self.last_name.strip():
+            self.full_name = compose_customer_full_name(self.first_name, self.middle_name, self.last_name)
+            return
+        if self.full_name.strip():
+            self.first_name, self.middle_name, self.last_name = split_customer_full_name(self.full_name)
+
+    def save(self, *args, **kwargs):
+        self.sync_name_fields()
+        super().save(*args, **kwargs)
+
     def __str__(self) -> str:
         return self.full_name
 
@@ -194,6 +223,9 @@ class ProducerProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="producer_profile")
     business_name = models.CharField(max_length=255)
     contact_name = models.CharField(max_length=255, blank=True, default="")
+    contact_first_name = models.CharField(max_length=100, blank=True, default="")
+    contact_middle_name = models.CharField(max_length=100, blank=True, default="")
+    contact_last_name = models.CharField(max_length=100, blank=True, default="")
     phone = models.CharField(max_length=30)
     farm_origin_text = models.TextField(blank=True)
     lead_time_hours = models.PositiveIntegerField(default=48)
@@ -214,6 +246,21 @@ class ProducerProfile(models.Model):
         if self.address and self.address.user_id != self.user_id:
             raise ValidationError("address must belong to the same user.")
 
+    def sync_contact_name_fields(self):
+        if self.contact_first_name.strip() or self.contact_middle_name.strip() or self.contact_last_name.strip():
+            self.contact_name = compose_customer_full_name(
+                self.contact_first_name,
+                self.contact_middle_name,
+                self.contact_last_name,
+            )
+            return
+        if self.contact_name.strip():
+            self.contact_first_name, self.contact_middle_name, self.contact_last_name = split_customer_full_name(self.contact_name)
+
+    def save(self, *args, **kwargs):
+        self.sync_contact_name_fields()
+        super().save(*args, **kwargs)
+
     def __str__(self) -> str:
         return self.business_name
 
@@ -230,6 +277,9 @@ class CommunityGroupProfile(models.Model):
     organisation_name = models.CharField(max_length=255)
     org_type = models.CharField(max_length=100)
     contact_name = models.CharField(max_length=255)
+    contact_first_name = models.CharField(max_length=100, blank=True, default="")
+    contact_middle_name = models.CharField(max_length=100, blank=True, default="")
+    contact_last_name = models.CharField(max_length=100, blank=True, default="")
     phone = models.CharField(max_length=30)
     delivery_address = models.ForeignKey(
         Address,
@@ -248,6 +298,21 @@ class CommunityGroupProfile(models.Model):
         if self.delivery_address and self.delivery_address.user_id != self.user_id:
             raise ValidationError("delivery_address must belong to the same user.")
 
+    def sync_contact_name_fields(self):
+        if self.contact_first_name.strip() or self.contact_middle_name.strip() or self.contact_last_name.strip():
+            self.contact_name = compose_customer_full_name(
+                self.contact_first_name,
+                self.contact_middle_name,
+                self.contact_last_name,
+            )
+            return
+        if self.contact_name.strip():
+            self.contact_first_name, self.contact_middle_name, self.contact_last_name = split_customer_full_name(self.contact_name)
+
+    def save(self, *args, **kwargs):
+        self.sync_contact_name_fields()
+        super().save(*args, **kwargs)
+
     def __str__(self) -> str:
         return self.organisation_name
 
@@ -263,6 +328,9 @@ class RestaurantProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="restaurant_profile")
     business_name = models.CharField(max_length=255)
     contact_name = models.CharField(max_length=255)
+    contact_first_name = models.CharField(max_length=100, blank=True, default="")
+    contact_middle_name = models.CharField(max_length=100, blank=True, default="")
+    contact_last_name = models.CharField(max_length=100, blank=True, default="")
     phone = models.CharField(max_length=30)
     delivery_address = models.ForeignKey(
         Address,
@@ -280,6 +348,21 @@ class RestaurantProfile(models.Model):
             raise ValidationError("RestaurantProfile can only be linked to RESTAURANT users.")
         if self.delivery_address and self.delivery_address.user_id != self.user_id:
             raise ValidationError("delivery_address must belong to the same user.")
+
+    def sync_contact_name_fields(self):
+        if self.contact_first_name.strip() or self.contact_middle_name.strip() or self.contact_last_name.strip():
+            self.contact_name = compose_customer_full_name(
+                self.contact_first_name,
+                self.contact_middle_name,
+                self.contact_last_name,
+            )
+            return
+        if self.contact_name.strip():
+            self.contact_first_name, self.contact_middle_name, self.contact_last_name = split_customer_full_name(self.contact_name)
+
+    def save(self, *args, **kwargs):
+        self.sync_contact_name_fields()
+        super().save(*args, **kwargs)
 
     def __str__(self) -> str:
         return self.business_name

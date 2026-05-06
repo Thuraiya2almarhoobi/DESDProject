@@ -14,6 +14,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router';
 import { ArrowLeft, MapPin, Route } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { apiJson } from '../lib/api';
@@ -67,6 +68,7 @@ interface CartMilesPayload {
  * so future contributors can trace behavior during sprint reviews.
  */
 export function MapPage() {
+  const location = useLocation();
   const goBack = useSafeBack('/marketplace');
   const { user, profile, addresses, loading: authLoading } = useAuth();
   const [postcode, setPostcode] = useState('');
@@ -75,6 +77,7 @@ export function MapPage() {
   const [error, setError] = useState('');
   const [nearPayload, setNearPayload] = useState<ProducersNearPayload | null>(null);
   const [cartMiles, setCartMiles] = useState<CartMilesPayload | null>(null);
+  const searchQuery = new URLSearchParams(location.search).get('q') || '';
   const backToMarketplaceButton = (
     <Button variant="ghost" onClick={goBack}>
       <ArrowLeft className="mr-2 size-4" />
@@ -145,15 +148,48 @@ export function MapPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, defaultPostcode]);
 
+  const visibleProducers = useMemo(() => {
+    const normalizedSearch = searchQuery.trim().toLowerCase();
+    const producers = nearPayload?.producers || [];
+    if (!normalizedSearch) {
+      return producers;
+    }
+    return producers.filter((producer) =>
+      [producer.producer_name, producer.postcode, `${producer.distance_miles.toFixed(2)} miles`]
+        .join(' ')
+        .toLowerCase()
+        .includes(normalizedSearch),
+    );
+  }, [nearPayload, searchQuery]);
+
+  const visibleProducerTotals = useMemo(() => {
+    const normalizedSearch = searchQuery.trim().toLowerCase();
+    const rows = cartMiles?.producer_totals || [];
+    if (!normalizedSearch) {
+      return rows;
+    }
+    return rows.filter((row) =>
+      [row.producer_name, `${Number(row.distance_miles).toFixed(2)} miles`, `${row.item_count} items`]
+        .join(' ')
+        .toLowerCase()
+        .includes(normalizedSearch),
+    );
+  }, [cartMiles, searchQuery]);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-[oklch(0.98_0.01_145)] to-[oklch(0.96_0.02_150)]">
-      <SiteHeader />
+      <SiteHeader searchPlaceholder="Search nearby producers, postcodes, distances..." />
 
       <main className="max-w-6xl mx-auto px-4 py-8 space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3">{backToMarketplaceButton}</div>
         <div>
           <h1 className="text-3xl font-semibold">{heading}</h1>
           <p className="text-sm text-gray-600 mt-1">{introCopy}</p>
+          {searchQuery && (
+            <p className="mt-2 text-sm text-gray-600">
+              Search: <span className="font-medium text-gray-900">{searchQuery}</span>
+            </p>
+          )}
         </div>
 
         <Card>
@@ -192,12 +228,12 @@ export function MapPage() {
         ) : (
           <div className="grid lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-4">
-              {(nearPayload?.producers || []).length === 0 ? (
+              {visibleProducers.length === 0 ? (
                 <Card>
                   <CardContent className="py-10 text-center text-gray-600">No producers found in the selected radius.</CardContent>
                 </Card>
               ) : (
-                nearPayload?.producers.map((producer) => (
+                visibleProducers.map((producer) => (
                   <Card key={producer.producer_id}>
                     <CardContent className="p-4 space-y-3">
                       <div className="flex justify-between gap-4 items-start">
@@ -267,7 +303,7 @@ export function MapPage() {
                   </div>
 
                   <div className="space-y-2">
-                    {(cartMiles?.producer_totals || []).map((row) => (
+                    {visibleProducerTotals.map((row) => (
                       <div key={row.producer_id} className="border rounded p-3">
                         <p className="font-medium text-sm">{row.producer_name}</p>
                         <p className="text-xs text-gray-600">{row.item_count} item(s)</p>

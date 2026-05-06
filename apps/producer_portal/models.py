@@ -103,7 +103,11 @@ class ProducerProduct(models.Model):
         default=10,
         validators=[MinValueValidator(1), MaxValueValidator(9999)],
     )
+    is_organic = models.BooleanField(default=False)
+    organic_certification = models.CharField(max_length=160, blank=True)
     allergen_information = models.CharField(max_length=255, blank=True)
+    storage_tips = models.TextField(blank=True, default="")
+    storage_tips_ai_generated = models.BooleanField(default=False)
     harvest_date = models.DateField()
     image_url = models.URLField(blank=True)
     is_surplus = models.BooleanField(default=False)
@@ -112,6 +116,9 @@ class ProducerProduct(models.Model):
         blank=True,
         validators=[MinValueValidator(10), MaxValueValidator(50)],
     )
+    surplus_expires_at = models.DateTimeField(null=True, blank=True)
+    surplus_best_before = models.CharField(max_length=80, blank=True)
+    surplus_note = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -119,13 +126,25 @@ class ProducerProduct(models.Model):
         ordering = ["-created_at"]
 
     def clean(self) -> None:
+        # surplus products need discount data so customer price is clear
         if self.is_surplus and self.surplus_discount_percent is None:
             raise ValidationError(
                 {"surplus_discount_percent": "Surplus discount is required when item is marked surplus."}
             )
+        if self.is_surplus and self.surplus_expires_at is None:
+            # default expiry keeps last minute deals temporary by default
+            self.surplus_expires_at = timezone.now() + timezone.timedelta(hours=48)
         if not self.is_surplus:
+            # clearing surplus removes old deal fields so they cannot leak into cards
             self.surplus_discount_percent = None
+            self.surplus_expires_at = None
+            self.surplus_best_before = ""
+            self.surplus_note = ""
+        if not self.is_organic:
+            # certification text is only meaningful when organic is selected
+            self.organic_certification = ""
         if self.availability == ProductAvailability.IN_SEASON:
+            # seasonal products need months so customers see when they can buy
             if not self.season_start_month or not self.season_end_month:
                 raise ValidationError(
                     {
@@ -136,6 +155,10 @@ class ProducerProduct(models.Model):
         else:
             self.season_start_month = None
             self.season_end_month = None
+        if not (self.storage_tips or "").strip():
+            # empty storage tips should not be labelled as ai generated
+            self.storage_tips = ""
+            self.storage_tips_ai_generated = False
 
     @property
     def is_visible_to_customers(self) -> bool:
@@ -192,6 +215,30 @@ class ProducerProduct(models.Model):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.producer_id})"
+
+
+class ProducerProductInventoryEvent(models.Model):
+    product = models.ForeignKey(ProducerProduct, on_delete=models.CASCADE, related_name="inventory_events")
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="producer_inventory_events",
+    )
+    event_type = models.CharField(max_length=40)
+    previous_stock_quantity = models.PositiveIntegerField(null=True, blank=True)
+    new_stock_quantity = models.PositiveIntegerField(null=True, blank=True)
+    previous_availability = models.CharField(max_length=20, blank=True)
+    new_availability = models.CharField(max_length=20, blank=True)
+    note = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self) -> str:
+        return f"{self.product_id}:{self.event_type}"
 
 
 class ProducerOrder(models.Model):

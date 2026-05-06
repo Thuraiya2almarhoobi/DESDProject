@@ -36,6 +36,10 @@ class Command(BaseCommand):
     help = "Seed demo catalog, compliance, and review data for Sprint 1."
 
     def handle(self, *args, **options):
+        if Product.objects.filter(name="Organic Carrots", producer__name="Bristol Valley Farm").exists():
+            self.stdout.write("Full TC demo catalog is already present; skipping legacy catalog seed.")
+            return
+
         categories_payload = [
             {"name": "Vegetables", "slug": "vegetables"},
             {"name": "Dairy Products", "slug": "dairy"},
@@ -46,9 +50,15 @@ class Command(BaseCommand):
 
         categories: dict[str, Category] = {}
         for payload in categories_payload:
-            category, _ = Category.objects.update_or_create(
-                slug=payload["slug"], defaults={"name": payload["name"]}
-            )
+            category = Category.objects.filter(slug=payload["slug"]).first() or Category.objects.filter(
+                name=payload["name"]
+            ).first()
+            if category is None:
+                category = Category.objects.create(slug=payload["slug"], name=payload["name"])
+            else:
+                category.slug = payload["slug"]
+                category.name = payload["name"]
+                category.save(update_fields=["slug", "name"])
             categories[category.slug] = category
 
         producers_payload = [

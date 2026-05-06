@@ -19,6 +19,7 @@ import {
   AlertCircle,
   AlertTriangle,
   ArrowLeft,
+  ArrowUpRight,
   Calendar,
   CheckCircle2,
   ChevronDown,
@@ -26,12 +27,14 @@ import {
   HelpCircle,
   Loader2,
   Plus,
+  Sparkles,
   Tag,
   XCircle,
 } from 'lucide-react';
 import { differenceInCalendarDays, format, isValid, parseISO } from 'date-fns';
 import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
+import { hasMinWords, isValidOptionalUrl, validateRequiredText } from '../../lib/formValidation';
 import { useSafeBack } from '../../lib/navigation';
 import { AvailabilityBadge, OrganicBadge, SurplusBadge } from '../../components/ProductBadges';
 import { ImageSourceField } from '../../components/ImageSourceField';
@@ -77,16 +80,24 @@ import {
 
 type HealthFilter = 'all' | 'low-stock' | 'out-of-stock' | 'surplus' | 'season-ending' | 'season-starting';
 type MonthOption = { value: number; label: string };
+const STORAGE_TIPS_MAX_LENGTH = 700;
 
 interface ProductDraft {
   stock: string;
   lowStockThreshold: string;
   availability: AvailabilityType;
   harvestDate: string;
+  isOrganic: boolean;
+  organicCertification: string;
   seasonStartMonth: string;
   seasonEndMonth: string;
   isSurplus: boolean;
   surplusDiscountPercent: string;
+  surplusExpiresAt: string;
+  surplusBestBefore: string;
+  surplusNote: string;
+  storageTips: string;
+  storageTipsAiGenerated: boolean;
 }
 
 interface NewProductForm {
@@ -98,6 +109,8 @@ interface NewProductForm {
   availability: AvailabilityType;
   stock: string;
   lowStockThreshold: string;
+  isOrganic: boolean;
+  organicCertification: string;
   allergens: string[];
   harvestDate: string;
   seasonStartMonth: string;
@@ -105,6 +118,11 @@ interface NewProductForm {
   imageUrl: string;
   isSurplus: boolean;
   surplusDiscountPercent: string;
+  surplusExpiresAt: string;
+  surplusBestBefore: string;
+  surplusNote: string;
+  storageTips: string;
+  storageTipsAiGenerated: boolean;
 }
 
 /**
@@ -172,8 +190,54 @@ function getSelectedAllergenSummary(allergens: string[]): string {
   return `${allergens.length} allergens selected`;
 }
 
+function generateStorageGuidanceDraft(product: {
+  name: string;
+  category: string;
+  description?: string;
+  unit?: ProductUnit;
+  allergens?: string[];
+}): string {
+  const productName = product.name.trim() || product.category.trim() || 'this product';
+  const categoryText = `${product.category} ${product.name} ${product.description || ''}`.toLowerCase();
+  const hasAllergens = Boolean(product.allergens?.length);
+
+  let guidance =
+    'Store in a cool, dry place away from direct sunlight. Keep sealed after opening and use while the product is at its freshest.';
+
+  if (/(dairy|milk|cheese|yoghurt|yogurt|cream|butter)/i.test(categoryText)) {
+    guidance =
+      'Keep refrigerated at 4C or below. Return to the fridge quickly after use and consume within the producer date guidance once opened.';
+  } else if (/(leaf|lettuce|spinach|herb|salad|vegetable|veg|berry|berries|fruit)/i.test(categoryText)) {
+    guidance =
+      'Keep refrigerated in a breathable bag or container. Avoid washing until just before use so the product stays crisp and fresh for longer.';
+  } else if (/(tomato|potato|onion|garlic|squash|pumpkin)/i.test(categoryText)) {
+    guidance =
+      'Store in a cool, dry, well-ventilated place away from direct sunlight. Keep separate from strong-smelling produce and use any ripe items first.';
+  } else if (/(bread|bakery|pastry|cake|loaf|roll)/i.test(categoryText)) {
+    guidance =
+      'Keep covered at room temperature in a bread box or sealed container. Freeze portions you will not use quickly and thaw fully before serving.';
+  } else if (/(egg|eggs)/i.test(categoryText)) {
+    guidance =
+      'Keep eggs refrigerated in their original box and away from strong-smelling foods. Use by the date supplied by the producer.';
+  } else if (/(jam|preserve|chutney|pickle|sauce)/i.test(categoryText)) {
+    guidance =
+      'Store unopened jars in a cool cupboard. Once opened, refrigerate, use a clean spoon each time, and follow the producer use-by guidance.';
+  }
+
+  const allergenNote = hasAllergens
+    ? ' Keep allergen information visible when storing or serving this item.'
+    : '';
+  return `${productName}: ${guidance}${allergenNote}`.slice(0, STORAGE_TIPS_MAX_LENGTH);
+}
+
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+function defaultSurplusExpiryLocal(): string {
+  const date = new Date(Date.now() + 48 * 60 * 60 * 1000);
+  const offsetMs = date.getTimezoneOffset() * 60 * 1000;
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
 }
 
 function currentMonthNumber(): number {
@@ -199,6 +263,8 @@ function initialNewProductForm(): NewProductForm {
     availability: 'in-season',
     stock: '0',
     lowStockThreshold: '10',
+    isOrganic: false,
+    organicCertification: '',
     allergens: [],
     harvestDate: todayIso(),
     seasonStartMonth: String(startMonth),
@@ -206,6 +272,11 @@ function initialNewProductForm(): NewProductForm {
     imageUrl: '',
     isSurplus: false,
     surplusDiscountPercent: '20',
+    surplusExpiresAt: defaultSurplusExpiryLocal(),
+    surplusBestBefore: '',
+    surplusNote: '',
+    storageTips: '',
+    storageTipsAiGenerated: false,
   };
 }
 
@@ -217,10 +288,17 @@ function toDraft(product: Product): ProductDraft {
     lowStockThreshold: String(product.lowStockThreshold ?? 10),
     availability: configuredAvailability,
     harvestDate: product.harvestDate || todayIso(),
+    isOrganic: Boolean(product.isOrganic),
+    organicCertification: product.organicCertification ?? '',
     seasonStartMonth: String(startMonth),
     seasonEndMonth: String(product.seasonEndMonth ?? defaultSeasonEndMonth(startMonth)),
     isSurplus: Boolean(product.isSurplus),
     surplusDiscountPercent: String(product.surplusDiscount ?? 20),
+    surplusExpiresAt: product.surplusExpiresAt ? product.surplusExpiresAt.slice(0, 16) : defaultSurplusExpiryLocal(),
+    surplusBestBefore: product.surplusBestBefore ?? '',
+    surplusNote: product.surplusNote ?? '',
+    storageTips: product.storageTips ?? '',
+    storageTipsAiGenerated: Boolean(product.storageTipsAiGenerated && product.storageTips),
   };
 }
 
@@ -295,6 +373,7 @@ export function ProducerInventoryPage() {
   const goBack = useSafeBack('/producer/dashboard');
   const { user } = useAuth();
   const demoUserEmail = (user?.email || 'producer@example.com').trim().toLowerCase();
+  const searchQuery = new URLSearchParams(location.search).get('q') || '';
 
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -360,27 +439,68 @@ export function ProducerInventoryPage() {
   const lowStockItems = useMemo(() => products.filter((product) => isLowStock(product)), [products]);
   const outOfStockItems = useMemo(() => products.filter((product) => product.stock === 0), [products]);
   const surplusItems = useMemo(() => products.filter((product) => product.isSurplus), [products]);
+  const surplusImpact = useMemo(() => {
+    const unitsProtected = surplusItems.reduce((total, product) => total + Math.max(0, product.stock), 0);
+    const estimatedCustomerSavings = surplusItems.reduce((total, product) => {
+      const originalPrice = product.surplusOriginalPrice ?? product.price;
+      return total + Math.max(0, originalPrice - product.price) * Math.max(0, product.stock);
+    }, 0);
+    const averageDiscount =
+      surplusItems.length === 0
+        ? 0
+        : surplusItems.reduce((total, product) => total + (product.surplusDiscount ?? 0), 0) / surplusItems.length;
+    return {
+      unitsProtected,
+      estimatedCustomerSavings,
+      averageDiscount,
+    };
+  }, [surplusItems]);
   const seasonEndingItems = useMemo(() => products.filter((product) => isSeasonEndingSoon(product)), [products]);
   const seasonStartingItems = useMemo(() => products.filter((product) => isSeasonStartingSoon(product)), [products]);
 
   const filteredProducts = useMemo(() => {
-    if (filterHealthStatus === 'low-stock') {
-      return lowStockItems;
+    const normalizedSearch = searchQuery.trim().toLowerCase();
+    const healthFiltered =
+      filterHealthStatus === 'low-stock'
+        ? lowStockItems
+        : filterHealthStatus === 'out-of-stock'
+          ? outOfStockItems
+          : filterHealthStatus === 'surplus'
+            ? surplusItems
+            : filterHealthStatus === 'season-ending'
+              ? seasonEndingItems
+              : filterHealthStatus === 'season-starting'
+                ? seasonStartingItems
+                : products;
+    if (!normalizedSearch) {
+      return healthFiltered;
     }
-    if (filterHealthStatus === 'out-of-stock') {
-      return outOfStockItems;
-    }
-    if (filterHealthStatus === 'surplus') {
-      return surplusItems;
-    }
-    if (filterHealthStatus === 'season-ending') {
-      return seasonEndingItems;
-    }
-    if (filterHealthStatus === 'season-starting') {
-      return seasonStartingItems;
-    }
-    return products;
-  }, [filterHealthStatus, lowStockItems, outOfStockItems, products, seasonEndingItems, seasonStartingItems, surplusItems]);
+    return healthFiltered.filter((product) => {
+      const searchableText = [
+        product.name,
+        product.category,
+        product.description,
+        product.unit,
+        product.availability,
+        product.configuredAvailability,
+        product.effectiveAvailability,
+        product.seasonalDates,
+        product.seasonalStatusMessage,
+        product.seasonalReminderMessage,
+        product.storageTips,
+        product.organicCertification,
+        product.storageTipsAiGenerated ? 'ai generated storage guidance' : '',
+        product.isOrganic ? 'organic' : '',
+        product.surplusBestBefore,
+        product.surplusNote,
+        product.isSurplus ? 'surplus' : '',
+        product.stock === 0 ? 'out of stock' : 'in stock',
+      ]
+        .join(' ')
+        .toLowerCase();
+      return searchableText.includes(normalizedSearch);
+    });
+  }, [filterHealthStatus, lowStockItems, outOfStockItems, products, searchQuery, seasonEndingItems, seasonStartingItems, surplusItems]);
 
   const openEditor = (product: Product) => {
     if (editingId === product.id) {
@@ -410,6 +530,40 @@ export function ProducerInventoryPage() {
     });
   };
 
+  const generateDraftStorageGuidance = (product: Product) => {
+    const draft = drafts[product.id] || toDraft(product);
+    const generated = generateStorageGuidanceDraft({
+      name: product.name,
+      category: product.category,
+      description: product.description,
+      unit: product.unit,
+      allergens: product.allergens,
+    });
+    setDrafts((previous) => ({
+      ...previous,
+      [product.id]: {
+        ...draft,
+        storageTips: generated,
+        storageTipsAiGenerated: true,
+      },
+    }));
+  };
+
+  const generateNewProductStorageGuidance = () => {
+    const generated = generateStorageGuidanceDraft({
+      name: newProduct.name,
+      category: newProduct.category,
+      description: newProduct.description,
+      unit: newProduct.unit,
+      allergens: newProduct.allergens,
+    });
+    setNewProduct((previous) => ({
+      ...previous,
+      storageTips: generated,
+      storageTipsAiGenerated: true,
+    }));
+  };
+
   const saveDraft = async (productId: string) => {
     const draft = drafts[productId];
     if (!draft) {
@@ -426,21 +580,36 @@ export function ProducerInventoryPage() {
       toast.error('Low-stock threshold must be 1 or greater.');
       return;
     }
+    if (draft.isOrganic && !draft.organicCertification.trim()) {
+      toast.error('Add the certification body or reference for organic products.');
+      return;
+    }
 
     const payload: {
       stock: number;
       lowStockThreshold: number;
       availability: AvailabilityType;
       harvestDate: string;
+      isOrganic: boolean;
+      organicCertification: string;
+      storageTips: string;
+      storageTipsAiGenerated: boolean;
       seasonStartMonth?: number;
       seasonEndMonth?: number;
       isSurplus: boolean;
       surplusDiscountPercent?: number;
+      surplusExpiresAt?: string;
+      surplusBestBefore?: string;
+      surplusNote?: string;
     } = {
       stock: parsedStock,
       lowStockThreshold: parsedLowStockThreshold,
       availability: draft.availability,
       harvestDate: draft.harvestDate || todayIso(),
+      isOrganic: draft.isOrganic,
+      organicCertification: draft.isOrganic ? draft.organicCertification.trim() : '',
+      storageTips: draft.storageTips.trim(),
+      storageTipsAiGenerated: Boolean(draft.storageTips.trim() && draft.storageTipsAiGenerated),
       isSurplus: draft.isSurplus,
     };
 
@@ -462,6 +631,13 @@ export function ProducerInventoryPage() {
         return;
       }
       payload.surplusDiscountPercent = parsedDiscount;
+      if (!draft.surplusExpiresAt) {
+        toast.error('Surplus deals need an expiry date and time.');
+        return;
+      }
+      payload.surplusExpiresAt = draft.surplusExpiresAt;
+      payload.surplusBestBefore = draft.surplusBestBefore.trim();
+      payload.surplusNote = draft.surplusNote.trim();
     }
 
     try {
@@ -559,8 +735,20 @@ export function ProducerInventoryPage() {
     const price = Number.parseFloat(newProduct.price);
     const stock = Number.parseInt(newProduct.stock, 10);
     const lowStockThreshold = Number.parseInt(newProduct.lowStockThreshold, 10);
-    if (!newProduct.name.trim() || !newProduct.category.trim() || !newProduct.description.trim()) {
-      toast.error('Name, category, and description are required.');
+    const requiredError =
+      validateRequiredText(newProduct.name, 'Product name', 3) ||
+      validateRequiredText(newProduct.category, 'Category', 2) ||
+      validateRequiredText(newProduct.description, 'Description', 12);
+    if (requiredError) {
+      toast.error(requiredError);
+      return;
+    }
+    if (!hasMinWords(newProduct.description, 5)) {
+      toast.error('Description must include at least five words so customers understand the product.');
+      return;
+    }
+    if (!UNIT_OPTIONS.includes(newProduct.unit)) {
+      toast.error('Choose a valid selling unit.');
       return;
     }
     if (!Number.isFinite(price) || price <= 0) {
@@ -573,6 +761,18 @@ export function ProducerInventoryPage() {
     }
     if (!Number.isFinite(lowStockThreshold) || lowStockThreshold < 1) {
       toast.error('Low-stock threshold must be 1 or greater.');
+      return;
+    }
+    if (newProduct.isOrganic && !newProduct.organicCertification.trim()) {
+      toast.error('Add the certification body or reference for organic products.');
+      return;
+    }
+    if (!isValidOptionalUrl(newProduct.imageUrl)) {
+      toast.error('Image URL must start with http:// or https://.');
+      return;
+    }
+    if (newProduct.storageTips.length > STORAGE_TIPS_MAX_LENGTH) {
+      toast.error(`Storage guidance must be ${STORAGE_TIPS_MAX_LENGTH} characters or fewer.`);
       return;
     }
     if (newProduct.availability === 'in-season') {
@@ -591,6 +791,10 @@ export function ProducerInventoryPage() {
         toast.error('Surplus discount must be between 10 and 50.');
         return;
       }
+      if (!newProduct.surplusExpiresAt) {
+        toast.error('Surplus deals need an expiry date and time.');
+        return;
+      }
     }
 
     setCreatingProduct(true);
@@ -605,7 +809,11 @@ export function ProducerInventoryPage() {
           availability: newProduct.availability,
           stock,
           lowStockThreshold,
+          isOrganic: newProduct.isOrganic,
+          organicCertification: newProduct.isOrganic ? newProduct.organicCertification.trim() : '',
           allergens: newProduct.allergens,
+          storageTips: newProduct.storageTips.trim(),
+          storageTipsAiGenerated: Boolean(newProduct.storageTips.trim() && newProduct.storageTipsAiGenerated),
           harvestDate: newProduct.harvestDate || todayIso(),
           seasonStartMonth:
             newProduct.availability === 'in-season' ? parseMonthInput(newProduct.seasonStartMonth) : undefined,
@@ -614,6 +822,9 @@ export function ProducerInventoryPage() {
           imageUrl: newProduct.imageUrl.trim(),
           isSurplus: newProduct.isSurplus,
           surplusDiscountPercent: parsedDiscount,
+          surplusExpiresAt: newProduct.isSurplus ? newProduct.surplusExpiresAt : undefined,
+          surplusBestBefore: newProduct.isSurplus ? newProduct.surplusBestBefore.trim() : undefined,
+          surplusNote: newProduct.isSurplus ? newProduct.surplusNote.trim() : undefined,
         },
         demoUserEmail,
       );
@@ -632,7 +843,7 @@ export function ProducerInventoryPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[oklch(0.98_0.01_145)] to-[oklch(0.96_0.02_150)]">
-      <SiteHeader />
+      <SiteHeader searchPlaceholder="Search inventory by product, category, stock, season..." />
 
       <main className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-5 lg:min-h-[calc(100svh-60px)] lg:px-6">
         <div className="mb-6">
@@ -651,6 +862,11 @@ export function ProducerInventoryPage() {
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--earth-accent)]">Producer inventory</p>
             <h1 className="mt-1 text-3xl font-semibold tracking-tight">Stock Management</h1>
             <p className="mt-1 text-sm text-gray-700">Product availability, low-stock alerts, allergens, seasons, and surplus deals.</p>
+            {searchQuery && (
+              <p className="mt-2 text-sm text-gray-600">
+                Search: <span className="font-medium text-gray-900">{searchQuery}</span>
+              </p>
+            )}
           </div>
           <div className="flex flex-wrap gap-2">
             <Button
@@ -763,6 +979,26 @@ export function ProducerInventoryPage() {
           </Card>
         </div>
 
+        <Card className="mb-6 border-[#d8d0c0] bg-[#fffdf7]">
+          <CardContent className="grid gap-4 p-4 sm:grid-cols-3">
+            <div>
+              <p className="text-sm font-medium text-gray-700">Food waste impact</p>
+              <p className="mt-1 text-2xl font-semibold text-[var(--earth-accent)]">{surplusImpact.unitsProtected}</p>
+              <p className="text-xs text-gray-500">surplus units actively being redirected</p>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-700">Average surplus discount</p>
+              <p className="mt-1 text-2xl font-semibold text-gray-900">{Math.round(surplusImpact.averageDiscount)}%</p>
+              <p className="text-xs text-gray-500">across current surplus deals</p>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-700">Estimated customer savings</p>
+              <p className="mt-1 text-2xl font-semibold text-gray-900">£{surplusImpact.estimatedCustomerSavings.toFixed(2)}</p>
+              <p className="text-xs text-gray-500">if current surplus stock is sold</p>
+            </div>
+          </CardContent>
+        </Card>
+
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2">
             <Badge variant="secondary">
@@ -863,7 +1099,16 @@ export function ProducerInventoryPage() {
                               )}
                             </div>
                           </div>
-                          <div className="flex gap-2">
+                          <div className="flex flex-wrap justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => navigate(`/product/${product.id}`)}
+                              className="focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
+                            >
+                              <ArrowUpRight className="size-4 mr-2" />
+                              View product page
+                            </Button>
                             <Button
                               variant={product.stock === 0 ? 'default' : 'outline'}
                               size="sm"
@@ -1000,6 +1245,27 @@ export function ProducerInventoryPage() {
                           </div>
                         </div>
 
+                        <div className="grid gap-4 rounded-lg border border-green-100 bg-white p-4 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+                          <div className="flex items-center gap-2">
+                            <Switch
+                              id={`organic-${product.id}`}
+                              checked={draft.isOrganic}
+                              onCheckedChange={(value) => updateDraft(product.id, 'isOrganic', value)}
+                            />
+                            <Label htmlFor={`organic-${product.id}`}>Certified organic</Label>
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor={`organic-certification-${product.id}`}>Certification Body or Reference</Label>
+                            <Input
+                              id={`organic-certification-${product.id}`}
+                              value={draft.organicCertification}
+                              disabled={!draft.isOrganic}
+                              onChange={(event) => updateDraft(product.id, 'organicCertification', event.target.value)}
+                              placeholder="Example: Soil Association"
+                            />
+                          </div>
+                        </div>
+
                         <div className="grid md:grid-cols-2 gap-6">
                           <div className="space-y-2">
                             <Label htmlFor={`harvest-${product.id}`}>Harvest Date</Label>
@@ -1064,19 +1330,101 @@ export function ProducerInventoryPage() {
                               <Label htmlFor={`surplus-${product.id}`}>Mark as surplus deal</Label>
                             </div>
                             {draft.isSurplus && (
-                              <div className="space-y-2">
-                                <Label htmlFor={`discount-${product.id}`}>Discount % (10-50)</Label>
-                                <Input
-                                  id={`discount-${product.id}`}
-                                  type="number"
-                                  min="10"
-                                  max="50"
-                                  value={draft.surplusDiscountPercent}
-                                  onChange={(event) => updateDraft(product.id, 'surplusDiscountPercent', event.target.value)}
-                                />
+                              <div className="grid gap-3 md:grid-cols-2">
+                                <div className="space-y-2">
+                                  <Label htmlFor={`discount-${product.id}`}>Discount % (10-50)</Label>
+                                  <Input
+                                    id={`discount-${product.id}`}
+                                    type="number"
+                                    min="10"
+                                    max="50"
+                                    value={draft.surplusDiscountPercent}
+                                    onChange={(event) => updateDraft(product.id, 'surplusDiscountPercent', event.target.value)}
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label htmlFor={`surplus-expiry-${product.id}`}>Deal Expires</Label>
+                                  <Input
+                                    id={`surplus-expiry-${product.id}`}
+                                    type="datetime-local"
+                                    value={draft.surplusExpiresAt}
+                                    onChange={(event) => updateDraft(product.id, 'surplusExpiresAt', event.target.value)}
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label htmlFor={`surplus-best-before-${product.id}`}>Best Before / Urgency</Label>
+                                  <Input
+                                    id={`surplus-best-before-${product.id}`}
+                                    value={draft.surplusBestBefore}
+                                    onChange={(event) => updateDraft(product.id, 'surplusBestBefore', event.target.value)}
+                                    placeholder="Example: 3 days"
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label htmlFor={`surplus-note-${product.id}`}>Surplus Note</Label>
+                                  <Input
+                                    id={`surplus-note-${product.id}`}
+                                    value={draft.surplusNote}
+                                    onChange={(event) => updateDraft(product.id, 'surplusNote', event.target.value)}
+                                    placeholder="Perfect condition, short shelf life."
+                                  />
+                                </div>
                               </div>
                             )}
                           </div>
+                        </div>
+
+                        <div className="space-y-3 rounded-lg border border-emerald-100 bg-emerald-50/40 p-4">
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                              <Label htmlFor={`storage-${product.id}`}>Storage Guidance</Label>
+                              <p className="text-xs text-gray-600">
+                                Optional. Leave blank and customers will see no storage information at the moment.
+                              </p>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => generateDraftStorageGuidance(product)}
+                              className="gap-2"
+                            >
+                              <Sparkles className="size-4" />
+                              Generate guidance
+                            </Button>
+                          </div>
+                          <Textarea
+                            id={`storage-${product.id}`}
+                            value={draft.storageTips}
+                            onChange={(event) => {
+                              const value = event.target.value.slice(0, STORAGE_TIPS_MAX_LENGTH);
+                              updateDraft(product.id, 'storageTips', value);
+                              if (!value.trim()) {
+                                updateDraft(product.id, 'storageTipsAiGenerated', false);
+                              }
+                            }}
+                            maxLength={STORAGE_TIPS_MAX_LENGTH}
+                            placeholder="Example: Keep refrigerated and use within three days of delivery."
+                            rows={4}
+                          />
+                          <p className="text-right text-xs text-gray-500">
+                            {draft.storageTips.length}/{STORAGE_TIPS_MAX_LENGTH}
+                          </p>
+                          <label
+                            htmlFor={`storage-ai-${product.id}`}
+                            className="flex items-start gap-3 rounded-md border bg-white px-3 py-2 text-sm text-slate-700"
+                          >
+                            <Checkbox
+                              id={`storage-ai-${product.id}`}
+                              checked={draft.storageTipsAiGenerated}
+                              disabled={!draft.storageTips.trim()}
+                              onCheckedChange={(checked) =>
+                                updateDraft(product.id, 'storageTipsAiGenerated', Boolean(checked && draft.storageTips.trim()))
+                              }
+                              className="mt-0.5"
+                            />
+                            <span>Label this storage guidance as AI generated on the product page.</span>
+                          </label>
                         </div>
 
                         <div className="flex justify-end">
@@ -1216,6 +1564,35 @@ export function ProducerInventoryPage() {
               </div>
             </div>
 
+            <div className="grid gap-4 rounded-lg border border-green-100 bg-white p-4 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="new-organic"
+                  checked={newProduct.isOrganic}
+                  onCheckedChange={(checked) =>
+                    setNewProduct((previous) => ({
+                      ...previous,
+                      isOrganic: checked,
+                      organicCertification: checked ? previous.organicCertification : '',
+                    }))
+                  }
+                />
+                <Label htmlFor="new-organic">Certified organic</Label>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="new-organic-certification">Certification Body or Reference</Label>
+                <Input
+                  id="new-organic-certification"
+                  value={newProduct.organicCertification}
+                  disabled={!newProduct.isOrganic}
+                  onChange={(event) =>
+                    setNewProduct((previous) => ({ ...previous, organicCertification: event.target.value }))
+                  }
+                  placeholder="Example: Soil Association"
+                />
+              </div>
+            </div>
+
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="new-availability">Availability</Label>
@@ -1285,6 +1662,63 @@ export function ProducerInventoryPage() {
                 </div>
               </div>
             )}
+
+            <div className="space-y-3 rounded-lg border border-emerald-100 bg-emerald-50/40 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <Label htmlFor="new-storage">Storage Guidance</Label>
+                  <p className="text-sm text-gray-600">
+                    Optional. Leave blank and customers will see no storage information at the moment.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={generateNewProductStorageGuidance}
+                  className="gap-2"
+                >
+                  <Sparkles className="size-4" />
+                  Generate guidance
+                </Button>
+              </div>
+              <Textarea
+                id="new-storage"
+                value={newProduct.storageTips}
+                onChange={(event) => {
+                  const value = event.target.value.slice(0, STORAGE_TIPS_MAX_LENGTH);
+                  setNewProduct((previous) => ({
+                    ...previous,
+                    storageTips: value,
+                    storageTipsAiGenerated: value.trim() ? previous.storageTipsAiGenerated : false,
+                  }));
+                }}
+                maxLength={STORAGE_TIPS_MAX_LENGTH}
+                placeholder="Example: Keep refrigerated and use within three days of delivery."
+                rows={4}
+              />
+              <p className="text-right text-xs text-gray-500">
+                {newProduct.storageTips.length}/{STORAGE_TIPS_MAX_LENGTH}
+              </p>
+              <label
+                htmlFor="new-storage-ai"
+                className="flex items-start gap-3 rounded-md border bg-white px-3 py-2 text-sm text-slate-700"
+              >
+                <Checkbox
+                  id="new-storage-ai"
+                  checked={newProduct.storageTipsAiGenerated}
+                  disabled={!newProduct.storageTips.trim()}
+                  onCheckedChange={(checked) =>
+                    setNewProduct((previous) => ({
+                      ...previous,
+                      storageTipsAiGenerated: Boolean(checked && previous.storageTips.trim()),
+                    }))
+                  }
+                  className="mt-0.5"
+                />
+                <span>Label this storage guidance as AI generated on the product page.</span>
+              </label>
+            </div>
 
             <div className="grid md:grid-cols-2 gap-4 items-start">
               <div className="space-y-2">
@@ -1366,18 +1800,53 @@ export function ProducerInventoryPage() {
                 <Label htmlFor="new-is-surplus">Mark as surplus deal</Label>
               </div>
               {newProduct.isSurplus && (
-                <div className="space-y-2">
-                  <Label htmlFor="new-discount">Surplus Discount % (10-50)</Label>
-                  <Input
-                    id="new-discount"
-                    type="number"
-                    min="10"
-                    max="50"
-                    value={newProduct.surplusDiscountPercent}
-                    onChange={(event) =>
-                      setNewProduct((previous) => ({ ...previous, surplusDiscountPercent: event.target.value }))
-                    }
-                  />
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="new-discount">Surplus Discount % (10-50)</Label>
+                    <Input
+                      id="new-discount"
+                      type="number"
+                      min="10"
+                      max="50"
+                      value={newProduct.surplusDiscountPercent}
+                      onChange={(event) =>
+                        setNewProduct((previous) => ({ ...previous, surplusDiscountPercent: event.target.value }))
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="new-surplus-expiry">Deal Expires</Label>
+                    <Input
+                      id="new-surplus-expiry"
+                      type="datetime-local"
+                      value={newProduct.surplusExpiresAt}
+                      onChange={(event) =>
+                        setNewProduct((previous) => ({ ...previous, surplusExpiresAt: event.target.value }))
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="new-surplus-best-before">Best Before / Urgency</Label>
+                    <Input
+                      id="new-surplus-best-before"
+                      value={newProduct.surplusBestBefore}
+                      onChange={(event) =>
+                        setNewProduct((previous) => ({ ...previous, surplusBestBefore: event.target.value }))
+                      }
+                      placeholder="Example: 3 days"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="new-surplus-note">Surplus Note</Label>
+                    <Input
+                      id="new-surplus-note"
+                      value={newProduct.surplusNote}
+                      onChange={(event) =>
+                        setNewProduct((previous) => ({ ...previous, surplusNote: event.target.value }))
+                      }
+                      placeholder="Perfect condition, must sell quickly."
+                    />
+                  </div>
                 </div>
               )}
             </div>

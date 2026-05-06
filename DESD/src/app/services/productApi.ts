@@ -15,6 +15,7 @@
 
 import { Product, AvailabilityType } from '../types';
 import { resolveApiPathBase } from '../lib/apiBase';
+import { apiJson } from '../lib/api';
 
 /**
  * Marketplace and producer-product API helpers.
@@ -46,11 +47,18 @@ interface BackendProduct {
   is_currently_in_season?: boolean;
   stock_quantity: number;
   low_stock_threshold?: number;
+  is_organic?: boolean;
+  organic_certification?: string;
   allergen_information: string | string[];
+  storage_tips?: string;
+  storage_tips_ai_generated?: boolean;
   harvest_date: string;
   image_url: string;
   is_surplus: boolean;
   surplus_discount_percent: number | null;
+  surplus_expires_at?: string | null;
+  surplus_best_before?: string;
+  surplus_note?: string;
 }
 
 interface ProducerCreatePayload {
@@ -62,13 +70,20 @@ interface ProducerCreatePayload {
   availability: AvailabilityType;
   stock: number;
   lowStockThreshold?: number;
+  isOrganic?: boolean;
+  organicCertification?: string;
   allergens?: string[];
+  storageTips?: string;
+  storageTipsAiGenerated?: boolean;
   harvestDate: string;
   seasonStartMonth?: number;
   seasonEndMonth?: number;
   imageUrl?: string;
   isSurplus?: boolean;
   surplusDiscountPercent?: number;
+  surplusExpiresAt?: string;
+  surplusBestBefore?: string;
+  surplusNote?: string;
 }
 
 const configuredBase = resolveApiPathBase(import.meta.env.VITE_API_BASE_URL, '/api');
@@ -144,7 +159,8 @@ export function backendProductToFrontend(product: BackendProduct): Product {
     seasonalStatusMessage: product.season_status_message || undefined,
     seasonalReminderMessage: product.season_reminder_message || undefined,
     isCurrentlyInSeason: product.is_currently_in_season,
-    isOrganic: /organic/i.test(product.name) || /organic/i.test(product.description),
+    isOrganic: Boolean(product.is_organic),
+    organicCertification: product.organic_certification || undefined,
     allergens,
     imageUrl: product.image_url || 'https://images.unsplash.com/photo-1563636619-e9143da7973b?w=800',
     stock: product.stock_quantity,
@@ -153,8 +169,11 @@ export function backendProductToFrontend(product: BackendProduct): Product {
     isSurplus: product.is_surplus,
     surplusDiscount: discount,
     surplusOriginalPrice: originalPrice,
-    surplusExpiresAt: discount ? new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString() : undefined,
-    surplusBestBefore: discount ? '2 days' : undefined,
+    surplusExpiresAt: product.surplus_expires_at || undefined,
+    surplusBestBefore: product.surplus_best_before || undefined,
+    surplusNote: product.surplus_note || undefined,
+    storageTips: product.storage_tips || undefined,
+    storageTipsAiGenerated: Boolean(product.storage_tips_ai_generated && product.storage_tips),
   };
 }
 
@@ -179,12 +198,8 @@ export async function fetchPublicMarketplaceProductById(productId: string): Prom
 }
 
 export async function fetchProducerProductsFromApi(demoUserEmail: string): Promise<Product[]> {
-  const res = await fetch(apiUrl('/producer/products/'), {
-    headers: {
-      'X-Demo-User': demoUserEmail,
-    },
-  });
-  const products = await parseResponse<BackendProduct[]>(res);
+  void demoUserEmail;
+  const products = await apiJson<BackendProduct[]>('/api/producer/products/');
   return products.map(backendProductToFrontend);
 }
 
@@ -203,22 +218,28 @@ export async function createProducerProductInApi(
     season_end_month: payload.availability === 'in-season' ? payload.seasonEndMonth ?? null : null,
     stock_quantity: payload.stock,
     low_stock_threshold: payload.lowStockThreshold ?? 10,
+    is_organic: Boolean(payload.isOrganic),
+    organic_certification: payload.isOrganic ? payload.organicCertification?.trim() ?? '' : '',
     allergen_information: serializeAllergens(payload.allergens),
+    storage_tips: payload.storageTips?.trim() ?? '',
+    storage_tips_ai_generated: Boolean(payload.storageTips?.trim() && payload.storageTipsAiGenerated),
     harvest_date: payload.harvestDate,
     image_url: payload.imageUrl ?? '',
     is_surplus: Boolean(payload.isSurplus),
     surplus_discount_percent: payload.isSurplus ? payload.surplusDiscountPercent ?? 20 : null,
+    surplus_expires_at: payload.isSurplus && payload.surplusExpiresAt ? payload.surplusExpiresAt : null,
+    surplus_best_before: payload.isSurplus ? payload.surplusBestBefore?.trim() ?? '' : '',
+    surplus_note: payload.isSurplus ? payload.surplusNote?.trim() ?? '' : '',
   };
 
-  const res = await fetch(apiUrl('/producer/products/'), {
+  void demoUserEmail;
+  const product = await apiJson<BackendProduct>('/api/producer/products/', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Demo-User': demoUserEmail,
     },
     body: JSON.stringify(body),
   });
-  const product = await parseResponse<BackendProduct>(res);
   return backendProductToFrontend(product);
 }
 
@@ -238,29 +259,42 @@ export async function patchProducerProductInApi(
   if (partialPayload.seasonEndMonth !== undefined) body.season_end_month = partialPayload.seasonEndMonth;
   if (partialPayload.stock !== undefined) body.stock_quantity = partialPayload.stock;
   if (partialPayload.lowStockThreshold !== undefined) body.low_stock_threshold = partialPayload.lowStockThreshold;
+  if (partialPayload.isOrganic !== undefined) body.is_organic = partialPayload.isOrganic;
+  if (partialPayload.organicCertification !== undefined) {
+    body.organic_certification = partialPayload.isOrganic === false ? '' : partialPayload.organicCertification.trim();
+  }
   if (partialPayload.allergens !== undefined) body.allergen_information = serializeAllergens(partialPayload.allergens);
+  if (partialPayload.storageTips !== undefined) body.storage_tips = partialPayload.storageTips.trim();
+  if (partialPayload.storageTipsAiGenerated !== undefined) {
+    body.storage_tips_ai_generated = Boolean(partialPayload.storageTips?.trim() && partialPayload.storageTipsAiGenerated);
+  }
   if (partialPayload.harvestDate !== undefined) body.harvest_date = partialPayload.harvestDate;
   if (partialPayload.imageUrl !== undefined) body.image_url = partialPayload.imageUrl;
   if (partialPayload.isSurplus !== undefined) body.is_surplus = partialPayload.isSurplus;
   if (partialPayload.surplusDiscountPercent !== undefined) {
     body.surplus_discount_percent = partialPayload.surplusDiscountPercent;
   }
+  if (partialPayload.surplusExpiresAt !== undefined) body.surplus_expires_at = partialPayload.surplusExpiresAt || null;
+  if (partialPayload.surplusBestBefore !== undefined) body.surplus_best_before = partialPayload.surplusBestBefore.trim();
+  if (partialPayload.surplusNote !== undefined) body.surplus_note = partialPayload.surplusNote.trim();
   if (partialPayload.isSurplus === false) {
     body.surplus_discount_percent = null;
+    body.surplus_expires_at = null;
+    body.surplus_best_before = '';
+    body.surplus_note = '';
   }
   if (partialPayload.availability !== undefined && partialPayload.availability !== 'in-season') {
     body.season_start_month = null;
     body.season_end_month = null;
   }
 
-  const res = await fetch(apiUrl(`/producer/products/${productId}/`), {
+  void demoUserEmail;
+  const product = await apiJson<BackendProduct>(`/api/producer/products/${productId}/`, {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',
-      'X-Demo-User': demoUserEmail,
     },
     body: JSON.stringify(body),
   });
-  const product = await parseResponse<BackendProduct>(res);
   return backendProductToFrontend(product);
 }

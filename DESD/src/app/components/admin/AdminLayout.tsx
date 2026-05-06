@@ -13,20 +13,21 @@
  *   unless they communicate an important layout or accessibility choice.
  */
 
-import { Activity, ChartColumnBig, LayoutDashboard, LogOut, ShieldCheck } from 'lucide-react';
+import { Activity, ChartColumnBig, Flag, LayoutDashboard, LogOut, ShieldCheck } from 'lucide-react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 
 import { useAuth } from '../../contexts/AuthContext';
 import { Avatar, AvatarFallback } from '../ui/avatar';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
+import { PageTransition } from '../motion/Motion';
 import { cn } from '../ui/utils';
 
 const navigationItems = [
   {
     to: '/admin/dashboard',
     label: 'Overview',
-    description: 'Live commission and moderation summary',
+    description: 'Live commission and payout summary',
     icon: LayoutDashboard,
   },
   {
@@ -34,6 +35,12 @@ const navigationItems = [
     label: 'Financial Reports',
     description: 'Auditable order and settlement reporting',
     icon: ChartColumnBig,
+  },
+  {
+    to: '/admin/moderation',
+    label: 'Moderation',
+    description: 'Reported content and account actions',
+    icon: Flag,
   },
 ];
 
@@ -54,6 +61,9 @@ function getSectionTitle(pathname: string): string {
   if (pathname.startsWith('/admin/financial-reports') || pathname.startsWith('/admin/commission')) {
     return 'Financial reports';
   }
+  if (pathname.startsWith('/admin/moderation')) {
+    return 'Moderation';
+  }
 
   return 'Admin overview';
 }
@@ -62,8 +72,11 @@ function getSectionSubtitle(pathname: string): string {
   if (pathname.startsWith('/admin/financial-reports') || pathname.startsWith('/admin/commission')) {
     return 'Filter reporting periods, review order-level commission detail, and export auditable results.';
   }
+  if (pathname.startsWith('/admin/moderation')) {
+    return 'Review reported content and remove only items that have been reported.';
+  }
 
-  return 'Monitor commission health, track recent orders, and action moderation from one workspace.';
+  return 'Monitor commission health and track recent orders from one workspace.';
 }
 
 /**
@@ -194,7 +207,7 @@ export function AdminLayout() {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <div className="hidden rounded-2xl border border-[#d6ddd0] bg-white px-4 py-3 text-left xl:block">
                 <p className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-[#6d7c6f]">Workspace</p>
-                <p className="mt-1 text-sm font-medium text-[#243127]">Commission, audit, and moderation</p>
+                <p className="mt-1 text-sm font-medium text-[#243127]">Commission and audit</p>
               </div>
               <Button
                 asChild
@@ -211,7 +224,9 @@ export function AdminLayout() {
         </header>
 
         <main className="min-w-0 px-4 py-6 sm:px-6 lg:px-8">
-          <Outlet />
+          <PageTransition key={location.pathname}>
+            <Outlet />
+          </PageTransition>
         </main>
       </div>
     </div>

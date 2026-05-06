@@ -30,6 +30,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.permissions import IsAdmin
+from bristol_marketplace.export_utils import build_simple_pdf, build_simple_xlsx
 
 from .models import Order
 
@@ -228,7 +229,7 @@ class AdminCommissionReportDetailAPIView(APIView):
 
 
 class AdminCommissionReportExportCSVAPIView(APIView):
-    """Export the filtered commission report in CSV format."""
+    """Export the filtered commission report in CSV, PDF, or XLSX format."""
 
     permission_classes = [IsAuthenticated, IsAdmin]
 
@@ -245,30 +246,26 @@ class AdminCommissionReportExportCSVAPIView(APIView):
         status_value = request.query_params.get("status")
         queryset = _report_queryset(start_date, end_date, producer_id, status_value)
 
-        response = HttpResponse(content_type="text/csv")
-        response["Content-Disposition"] = (
-            f'attachment; filename="commission-report-{start_date.isoformat()}-{end_date.isoformat()}.csv"'
-        )
-        writer = csv.writer(response)
-        writer.writerow(
-            [
-                "order_id",
-                "order_number",
-                "order_date",
-                "status",
-                "payment_status",
-                "order_total",
-                "order_commission",
-                "producer_name",
-                "producer_subtotal",
-                "producer_payout",
-            ]
-        )
+        export_format = (request.query_params.get("format") or "csv").strip().lower()
+        filename_base = f"commission-report-{start_date.isoformat()}-{end_date.isoformat()}"
+        headers = [
+            "order_id",
+            "order_number",
+            "order_date",
+            "status",
+            "payment_status",
+            "order_total",
+            "order_commission",
+            "producer_name",
+            "producer_subtotal",
+            "producer_payout",
+        ]
+        rows = []
         for order in queryset:
             for sub_order in order.sub_orders.select_related("producer").all():
-                writer.writerow(
+                rows.append(
                     [
-                        order.id,
+                        str(order.id),
                         order.order_number,
                         order.created_at.date().isoformat(),
                         order.status,
@@ -280,6 +277,28 @@ class AdminCommissionReportExportCSVAPIView(APIView):
                         f"{_money(sub_order.payout_amount):.2f}",
                     ]
                 )
+
+        if export_format == "pdf":
+            response = HttpResponse(
+                build_simple_pdf(f"Commission report {start_date.isoformat()} to {end_date.isoformat()}", [headers, *rows]),
+                content_type="application/pdf",
+            )
+            response["Content-Disposition"] = f'attachment; filename="{filename_base}.pdf"'
+            return response
+
+        if export_format in {"xlsx", "excel"}:
+            response = HttpResponse(
+                build_simple_xlsx(headers, rows),
+                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+            response["Content-Disposition"] = f'attachment; filename="{filename_base}.xlsx"'
+            return response
+
+        response = HttpResponse(content_type="text/csv")
+        response["Content-Disposition"] = f'attachment; filename="{filename_base}.csv"'
+        writer = csv.writer(response)
+        writer.writerow(headers)
+        writer.writerows(rows)
         return response
 
 

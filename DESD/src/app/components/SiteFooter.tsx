@@ -14,7 +14,7 @@
  */
 
 import { Link } from 'react-router';
-import { ExternalLink, Sprout } from 'lucide-react';
+import { Sprout } from 'lucide-react';
 
 import { useAuth } from '../contexts/AuthContext';
 import { getSiteNavItems } from '../lib/siteNavigation';
@@ -77,21 +77,22 @@ export function SiteFooter() {
             <Link to="/select-portal?mode=register" className="transition-colors hover:text-[var(--forest-green)]">
               Create Account
             </Link>
-            <Link
-              to="/portal/producer"
-              className="inline-flex items-center gap-2 transition-colors hover:text-[var(--forest-green)]"
-            >
-              Producer Portal
-              <ExternalLink className="size-3.5" />
-            </Link>
           </div>
         </div>
       </div>
 
       <div className="border-t border-[#e4e1d8] bg-[#fbfaf4]">
-        <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-4 text-xs text-[oklch(0.44_0.03_95)] sm:flex-row sm:items-center sm:justify-between">
+        <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-4 text-xs text-[oklch(0.44_0.03_95)] sm:flex-row sm:items-center sm:justify-between">
           <p>{currentYear} Local Food Marketplace. Local sourcing, lower food miles, clearer ordering.</p>
-          <p>Bristol network ordering for households, kitchens, and community buyers.</p>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <p>Bristol network ordering for households, kitchens, and community buyers.</p>
+            <Link to="/terms" className="font-semibold transition-colors hover:text-[var(--forest-green)]">
+              Terms and Conditions
+            </Link>
+            <Link to="/privacy" className="font-semibold transition-colors hover:text-[var(--forest-green)]">
+              Privacy Policy
+            </Link>
+          </div>
         </div>
       </div>
     </footer>

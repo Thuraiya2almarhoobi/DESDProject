@@ -308,7 +308,7 @@ export function ProducerDashboardPage() {
         id: 'urgent-orders',
         title: `${urgentOrders.length} sales order${urgentOrders.length === 1 ? '' : 's'} due in under 24h`,
         description: 'Prioritise confirmation, preparation, and delivery updates.',
-        path: '/producer/orders',
+        path: '/producer/orders?view=sales',
         tone: 'urgent',
         icon: AlertCircle,
         action: 'Open sales',
@@ -320,7 +320,7 @@ export function ProducerDashboardPage() {
         id: 'pending-orders',
         title: `${pendingOrders.length} order${pendingOrders.length === 1 ? '' : 's'} waiting confirmation`,
         description: 'Customers see status updates as soon as you confirm.',
-        path: '/producer/orders',
+        path: '/producer/orders?view=sales',
         tone: 'warning',
         icon: ShoppingBag,
         action: 'Review',
@@ -371,7 +371,7 @@ export function ProducerDashboardPage() {
         id: 'clear',
         title: 'No urgent actions right now',
         description: 'Sales, inventory, and seasonal signals are currently stable.',
-        path: '/producer/orders',
+        path: '/producer/orders?view=sales',
         tone: 'success',
         icon: Clock,
         action: 'View sales',
@@ -392,9 +392,9 @@ export function ProducerDashboardPage() {
     { label: 'Add product', description: 'Create a listing', icon: Plus, path: '/producer/inventory?create=product', variant: 'default' },
     { label: 'Stock', description: 'Inventory health', icon: RefreshCw, path: '/producer/inventory', variant: 'outline' },
     { label: 'Surplus', description: 'Discount excess', icon: Tag, path: '/producer/inventory?focus=surplus', variant: 'outline' },
-    { label: 'AI Recipes', description: 'Generate recipes and stories', icon: Sparkles, path: '/producer/publish', variant: 'outline' },
+    { label: 'Content', description: 'Publish recipes and stories', icon: Sparkles, path: '/producer/publish', variant: 'outline' },
     { label: 'Buy produce', description: 'Shop as customer', icon: ShoppingBag, path: '/marketplace', variant: 'outline' },
-    { label: 'Purchases', description: 'Track orders', icon: ReceiptText, path: '/orders/history', variant: 'outline' },
+    { label: 'Purchases', description: 'Track orders', icon: ReceiptText, path: '/producer/orders?view=purchases', variant: 'outline' },
   ];
 
   const notificationToneClass: Record<NotificationItem['tone'], string> = {
@@ -493,6 +493,16 @@ export function ProducerDashboardPage() {
                         </button>
                       );
                     })}
+                    {notifications.length >= 4 && (
+                      <Button
+                        variant="outline"
+                        className="justify-between border-[#d8d0c0] bg-white/80 text-[var(--forest-green)]"
+                        onClick={() => navigate('/producer/notifications')}
+                      >
+                        Browse notifications page
+                        <ArrowRight className="size-4" />
+                      </Button>
+                    )}
                   </div>
                 </aside>
               </div>
@@ -506,10 +516,15 @@ export function ProducerDashboardPage() {
                       <LineChart className="size-5 text-[var(--forest-green)]" />
                       Producer analytics
                     </CardTitle>
-                    <CardDescription>Real-time view from orders, stock, and settlements.</CardDescription>
+                  <CardDescription>Real-time view from orders, stock, and settlements.</CardDescription>
                   </CardHeader>
                   <CardContent className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
-                    <div className="h-64 rounded-xl border border-[#eee9df] bg-[#fbfaf4] p-3">
+                    <div className="rounded-xl border border-[#eee9df] bg-[#fbfaf4] p-3">
+                      <div className="mb-3">
+                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#6a786c]">Payout trend</p>
+                        <p className="mt-1 text-sm text-[#4f5f53]">Producer payout value across recent fulfilled order activity.</p>
+                      </div>
+                      <div className="h-52">
                       <ResponsiveContainer width="100%" height="100%">
                         <AreaChart data={payoutTrendData} margin={{ left: 4, right: 12, top: 10, bottom: 0 }}>
                           <CartesianGrid stroke="#e4e1d8" strokeDasharray="3 3" />
@@ -526,10 +541,16 @@ export function ProducerDashboardPage() {
                           />
                         </AreaChart>
                       </ResponsiveContainer>
+                      </div>
                     </div>
 
                     <div className="grid gap-4">
-                      <div className="h-32 rounded-xl border border-[#eee9df] bg-[#fbfaf4] p-3">
+                      <div className="rounded-xl border border-[#eee9df] bg-[#fbfaf4] p-3">
+                        <div className="mb-3">
+                          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#6a786c]">Order status mix</p>
+                          <p className="mt-1 text-sm text-[#4f5f53]">Sales orders grouped by pending, confirmed, ready, and delivered states.</p>
+                        </div>
+                        <div className="h-24">
                         <ResponsiveContainer width="100%" height="100%">
                           <BarChart data={orderStatusData} margin={{ left: -20, right: 5, top: 5, bottom: 0 }}>
                             <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={11} />
@@ -538,9 +559,15 @@ export function ProducerDashboardPage() {
                             <Bar dataKey="count" fill="#1a5c35" radius={[6, 6, 0, 0]} />
                           </BarChart>
                         </ResponsiveContainer>
+                        </div>
                       </div>
 
-                      <div className="h-32 rounded-xl border border-[#eee9df] bg-[#fbfaf4] p-3">
+                      <div className="rounded-xl border border-[#eee9df] bg-[#fbfaf4] p-3">
+                        <div className="mb-3">
+                          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#6a786c]">Inventory health</p>
+                          <p className="mt-1 text-sm text-[#4f5f53]">Current product stock split between healthy, low-stock, and empty items.</p>
+                        </div>
+                        <div className="h-24">
                         <ResponsiveContainer width="100%" height="100%">
                           <PieChart>
                             <Pie data={inventoryHealthData} dataKey="value" nameKey="label" innerRadius={30} outerRadius={48}>
@@ -551,6 +578,7 @@ export function ProducerDashboardPage() {
                             <Tooltip />
                           </PieChart>
                         </ResponsiveContainer>
+                        </div>
                       </div>
                     </div>
                   </CardContent>
@@ -677,7 +705,7 @@ export function ProducerDashboardPage() {
                       <ShoppingBag className="size-4" />
                       Cart
                     </Button>
-                    <Button variant="outline" className="justify-start gap-2" onClick={() => navigate('/orders/history')}>
+                    <Button variant="outline" className="justify-start gap-2" onClick={() => navigate('/producer/orders?view=purchases')}>
                       <ReceiptText className="size-4" />
                       Purchase tracking
                     </Button>

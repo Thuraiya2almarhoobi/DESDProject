@@ -173,6 +173,7 @@ export interface ApiOrderSummary {
   commission_amount: string;
   total_amount: string;
   producer_names: string[];
+  sub_orders?: ApiProducerSubOrder[];
 }
 
 export interface ApiOrderItem {
@@ -198,6 +199,14 @@ export interface ApiProducerSubOrder {
   payout_amount: string;
   notes?: string;
   delivery?: ApiDeliveryInfo | null;
+  status_history?: Array<{
+    id: number;
+    previous_status: string;
+    new_status: string;
+    note: string;
+    actor_email?: string;
+    created_at: string;
+  }>;
 }
 
 export interface ApiOrderDetail {
@@ -215,6 +224,7 @@ export interface ApiOrderDetail {
   total_amount: string;
   payment_method: string;
   payment_reference: string;
+  payment_reference_masked?: string;
   is_recurring_instance?: boolean;
   recurring_scheduled_for?: string | null;
   created_at: string;
@@ -291,6 +301,7 @@ export function setBasicAuthToken(token: string | null): void {
   if (typeof window === 'undefined') {
     return;
   }
+  // basic token is only kept for old demo flows that still expect it
   if (token) {
     window.localStorage.setItem(AUTH_STORAGE_KEY, token);
   } else {
@@ -306,6 +317,7 @@ export function getBasicAuthToken(): string | null {
 }
 
 function toUrl(path: string): string {
+  // absolute urls pass through so external service callbacks can reuse helper
   if (path.startsWith('http://') || path.startsWith('https://')) {
     return path;
   }
@@ -341,6 +353,7 @@ function isAuthEndpoint(url: string): boolean {
 async function tryRefreshAccessToken(): Promise<string | null> {
   const refreshToken = getRefreshToken();
   if (!refreshToken) {
+    // no refresh token means the local auth state is not recoverable
     clearAuthStorage();
     setBasicAuthToken(null);
     return null;
@@ -359,11 +372,13 @@ async function tryRefreshAccessToken(): Promise<string | null> {
     payload && typeof payload === 'object' ? (payload as { access?: unknown }).access : undefined;
 
   if (!response.ok || typeof nextAccessToken !== 'string' || !nextAccessToken.trim()) {
+    // failed refresh clears everything so protected pages send user to login
     clearAuthStorage();
     setBasicAuthToken(null);
     return null;
   }
 
+  // keep the new access token with the existing refresh token
   setAuthTokens(nextAccessToken, refreshToken);
   return nextAccessToken;
 }

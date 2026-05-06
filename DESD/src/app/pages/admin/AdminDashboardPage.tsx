@@ -13,13 +13,13 @@
  *   unless they communicate an important layout or accessibility choice.
  */
 
-import { ArrowRight, CalendarRange, ShieldCheck, Star, Wallet } from 'lucide-react';
+import { ArrowRight, Search, Wallet } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, XAxis, YAxis } from 'recharts';
 import { toast } from 'sonner';
 
-import { FeedLoadingSkeleton, PageLoadingSkeleton } from '../../components/LoadingSkeletons';
+import { PageLoadingSkeleton } from '../../components/LoadingSkeletons';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import {
@@ -29,6 +29,8 @@ import {
   ChartTooltip,
   ChartTooltipContent,
 } from '../../components/ui/chart';
+import { Input } from '../../components/ui/input';
+import { Label } from '../../components/ui/label';
 import { apiJson } from '../../lib/api';
 import { formatAdminCurrency, formatAdminDate, getDefaultAdminDateRange } from '../../lib/adminReporting';
 
@@ -60,22 +62,6 @@ interface YTDSummary {
   total_order_value: string;
   total_commission: string;
   total_producer_payouts: string;
-}
-
-interface PendingReviewModerationRow {
-  id: number;
-  order_product_id: number | null;
-  product_name: string;
-  producer_name: string;
-  title?: string;
-  reviewer_name: string;
-  rating: number;
-  comment: string;
-  moderation_status: 'pending' | 'published' | 'rejected';
-  moderation_reason?: string;
-  has_verified_purchase: boolean;
-  purchase_label: string;
-  created_at: string;
 }
 
 const defaultRange = getDefaultAdminDateRange();
@@ -125,34 +111,28 @@ export function AdminDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [report, setReport] = useState<DashboardReportResponse | null>(null);
   const [ytdSummary, setYtdSummary] = useState<YTDSummary | null>(null);
-  const [pendingReviews, setPendingReviews] = useState<PendingReviewModerationRow[]>([]);
-  const [pendingReviewsLoading, setPendingReviewsLoading] = useState(true);
-  const [activeModerationReviewId, setActiveModerationReviewId] = useState<number | null>(null);
   const [selectedYear] = useState(new Date().getFullYear().toString());
+  const [orderSearch, setOrderSearch] = useState('');
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState('');
 
   useEffect(() => {
     const loadSnapshot = async () => {
       setLoading(true);
-      setPendingReviewsLoading(true);
       try {
-        const [reportPayload, ytdPayload, pendingReviewsPayload] = await Promise.all([
+        const [reportPayload, ytdPayload] = await Promise.all([
           apiJson<DashboardReportResponse>(
             `/api/admin/commission-report/?start=${defaultRange.dateFrom}&end=${defaultRange.dateTo}`,
           ),
           apiJson<YTDSummary>(`/api/admin/commission-report/summary/ytd?year=${selectedYear}`),
-          apiJson<PendingReviewModerationRow[]>(`/api/orders/reviews/moderation-queue/`),
         ]);
         setReport(reportPayload);
         setYtdSummary(ytdPayload);
-        setPendingReviews(pendingReviewsPayload);
       } catch (error) {
         toast.error(error instanceof Error ? error.message : 'Unable to load the admin overview.');
         setReport(null);
         setYtdSummary(null);
-        setPendingReviews([]);
       } finally {
         setLoading(false);
-        setPendingReviewsLoading(false);
       }
     };
 
@@ -160,6 +140,21 @@ export function AdminDashboardPage() {
   }, [selectedYear]);
 
   const recentOrders = useMemo(() => (report?.orders || []).slice(0, 6), [report]);
+  const paymentStatusOptions = useMemo(
+    () => Array.from(new Set((report?.orders || []).map((order) => order.payment_status).filter(Boolean))).sort(),
+    [report],
+  );
+  const visibleRecentOrders = useMemo(() => {
+    const normalizedSearch = orderSearch.trim().toLowerCase();
+    return recentOrders.filter((order) => {
+      const matchesStatus = !paymentStatusFilter || order.payment_status === paymentStatusFilter;
+      const matchesSearch =
+        !normalizedSearch ||
+        order.order_number.toLowerCase().includes(normalizedSearch) ||
+        order.producer_breakdown.some((producer) => producer.producer_name.toLowerCase().includes(normalizedSearch));
+      return matchesStatus && matchesSearch;
+    });
+  }, [orderSearch, paymentStatusFilter, recentOrders]);
 
   const summaryCards = [
     {
@@ -220,43 +215,6 @@ export function AdminDashboardPage() {
       .slice(0, 5);
   }, [report]);
 
-  const handleModerationAction = async (
-    review: PendingReviewModerationRow,
-    moderationStatus: 'published' | 'rejected',
-  ) => {
-    if (!review.order_product_id) {
-      toast.error('This review is not linked to a checkout product, so it cannot be moderated from this queue.');
-      return;
-    }
-
-    setActiveModerationReviewId(review.id);
-    try {
-      await apiJson<unknown>(
-        `/api/orders/products/${review.order_product_id}/reviews/${review.id}/moderate/`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            moderation_status: moderationStatus,
-            moderation_reason: moderationStatus === 'published' ? '' : 'Rejected by moderator.',
-          }),
-        },
-      );
-      setPendingReviews((currentReviews) => currentReviews.filter((currentReview) => currentReview.id !== review.id));
-      toast.success(
-        moderationStatus === 'published'
-          ? `${review.reviewer_name}'s review is now published.`
-          : `${review.reviewer_name}'s review was rejected.`,
-      );
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Unable to update review moderation status.');
-    } finally {
-      setActiveModerationReviewId(null);
-    }
-  };
-
   return (
     <div className="space-y-6">
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -306,29 +264,35 @@ export function AdminDashboardPage() {
                 No completed orders were found in the current reporting window.
               </div>
             ) : (
-              <ChartContainer config={trendChartConfig} className="h-[300px] w-full min-w-0 aspect-auto">
-                <AreaChart data={trendData} margin={{ left: 4, right: 8, top: 12, bottom: 0 }}>
-                  <CartesianGrid vertical={false} stroke="#dde5d7" />
-                  <XAxis axisLine={false} dataKey="label" tickLine={false} tickMargin={10} />
-                  <YAxis axisLine={false} tickLine={false} tickFormatter={(value) => `£${value}`} width={72} />
-                  <ChartTooltip
-                    content={
-                      <ChartTooltipContent
-                        formatter={(value, name) => (
-                          <div className="flex min-w-[10rem] items-center justify-between gap-6">
-                            <span className="text-[#5f6d61]">{name}</span>
-                            <span className="font-mono font-medium text-[#182219]">{formatCurrencyValue(value)}</span>
-                          </div>
-                        )}
-                      />
-                    }
-                  />
-                  <ChartLegend content={<ChartLegendContent />} />
-                  <Area dataKey="total" fill="var(--color-total)" fillOpacity={0.16} stroke="var(--color-total)" strokeWidth={2.2} type="monotone" />
-                  <Area dataKey="commission" fill="var(--color-commission)" fillOpacity={0.18} stroke="var(--color-commission)" strokeWidth={2.2} type="monotone" />
-                  <Area dataKey="payouts" fill="var(--color-payouts)" fillOpacity={0.12} stroke="var(--color-payouts)" strokeWidth={2} type="monotone" />
-                </AreaChart>
-              </ChartContainer>
+              <div>
+                <div className="mb-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#738176]">Order value, commission, and payouts</p>
+                  <p className="mt-1 text-sm text-[#5f6d61]">Completed order value, commission retained, and producer payouts across the current audit window.</p>
+                </div>
+                <ChartContainer config={trendChartConfig} className="h-[300px] w-full min-w-0 aspect-auto">
+                  <AreaChart data={trendData} margin={{ left: 4, right: 8, top: 12, bottom: 0 }}>
+                    <CartesianGrid vertical={false} stroke="#dde5d7" />
+                    <XAxis axisLine={false} dataKey="label" tickLine={false} tickMargin={10} />
+                    <YAxis axisLine={false} tickLine={false} tickFormatter={(value) => `£${value}`} width={72} />
+                    <ChartTooltip
+                      content={
+                        <ChartTooltipContent
+                          formatter={(value, name) => (
+                            <div className="flex min-w-[10rem] items-center justify-between gap-6">
+                              <span className="text-[#5f6d61]">{name}</span>
+                              <span className="font-mono font-medium text-[#182219]">{formatCurrencyValue(value)}</span>
+                            </div>
+                          )}
+                        />
+                      }
+                    />
+                    <ChartLegend content={<ChartLegendContent />} />
+                    <Area dataKey="total" fill="var(--color-total)" fillOpacity={0.16} stroke="var(--color-total)" strokeWidth={2.2} type="monotone" />
+                    <Area dataKey="commission" fill="var(--color-commission)" fillOpacity={0.18} stroke="var(--color-commission)" strokeWidth={2.2} type="monotone" />
+                    <Area dataKey="payouts" fill="var(--color-payouts)" fillOpacity={0.12} stroke="var(--color-payouts)" strokeWidth={2} type="monotone" />
+                  </AreaChart>
+                </ChartContainer>
+              </div>
             )}
           </div>
         </div>
@@ -347,36 +311,42 @@ export function AdminDashboardPage() {
 
             <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] lg:items-center">
               {splitData.some((entry) => entry.value > 0) ? (
-                <ChartContainer config={splitChartConfig} className="h-[240px] w-full min-w-0 aspect-auto">
-                  <PieChart>
-                    <ChartTooltip
-                      content={
-                        <ChartTooltipContent
-                          hideIndicator
-                          formatter={(value, name) => (
-                            <div className="flex min-w-[9rem] items-center justify-between gap-4">
-                              <span className="text-[#5f6d61]">{name}</span>
-                              <span className="font-mono font-medium text-[#182219]">{formatCurrencyValue(value)}</span>
-                            </div>
-                          )}
-                        />
-                      }
-                    />
-                    <Pie
-                      data={splitData}
-                      dataKey="value"
-                      innerRadius={58}
-                      outerRadius={84}
-                      paddingAngle={3}
-                      stroke="none"
-                    >
-                      {splitData.map((entry) => (
-                        <Cell key={entry.name} fill={entry.fill} />
-                      ))}
-                    </Pie>
-                    <ChartLegend content={<ChartLegendContent nameKey="name" className="flex-wrap gap-3 pt-4 text-center" />} />
-                  </PieChart>
-                </ChartContainer>
+                <div>
+                  <div className="mb-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#738176]">Commission and payout split</p>
+                    <p className="mt-1 text-sm text-[#5f6d61]">Revenue split between retained platform commission and producer payout allocation.</p>
+                  </div>
+                  <ChartContainer config={splitChartConfig} className="h-[240px] w-full min-w-0 aspect-auto">
+                    <PieChart>
+                      <ChartTooltip
+                        content={
+                          <ChartTooltipContent
+                            hideIndicator
+                            formatter={(value, name) => (
+                              <div className="flex min-w-[9rem] items-center justify-between gap-4">
+                                <span className="text-[#5f6d61]">{name}</span>
+                                <span className="font-mono font-medium text-[#182219]">{formatCurrencyValue(value)}</span>
+                              </div>
+                            )}
+                          />
+                        }
+                      />
+                      <Pie
+                        data={splitData}
+                        dataKey="value"
+                        innerRadius={58}
+                        outerRadius={84}
+                        paddingAngle={3}
+                        stroke="none"
+                      >
+                        {splitData.map((entry) => (
+                          <Cell key={entry.name} fill={entry.fill} />
+                        ))}
+                      </Pie>
+                      <ChartLegend content={<ChartLegendContent nameKey="name" className="flex-wrap gap-3 pt-4 text-center" />} />
+                    </PieChart>
+                  </ChartContainer>
+                </div>
               ) : (
                 <div className="rounded-2xl border border-dashed border-[#d6ddd0] bg-[#f4f7f1] p-6 text-sm leading-6 text-[#5f6d61]">
                   No financial totals are available yet for the current period.
@@ -420,26 +390,32 @@ export function AdminDashboardPage() {
                   No payment-status data is available for the current report.
                 </div>
               ) : (
-                <ChartContainer config={statusChartConfig} className="h-[220px] w-full min-w-0 aspect-auto">
-                  <BarChart data={paymentStatusData} layout="vertical" margin={{ left: 8, right: 8, top: 8, bottom: 0 }}>
-                    <CartesianGrid horizontal={false} stroke="#e3e8de" />
-                    <XAxis axisLine={false} tickLine={false} type="number" allowDecimals={false} />
-                    <YAxis axisLine={false} dataKey="status" tickLine={false} type="category" width={92} />
-                    <ChartTooltip
-                      content={
-                        <ChartTooltipContent
-                          formatter={(value) => (
-                            <div className="flex min-w-[8rem] items-center justify-between gap-4">
-                              <span className="text-[#5f6d61]">Orders</span>
-                              <span className="font-mono font-medium text-[#182219]">{String(value)}</span>
-                            </div>
-                          )}
-                        />
-                      }
-                    />
-                    <Bar dataKey="count" fill="var(--color-count)" radius={[8, 8, 8, 8]} />
-                  </BarChart>
-                </ChartContainer>
+                <div>
+                  <div className="mb-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#738176]">Orders by payment status</p>
+                    <p className="mt-1 text-sm text-[#5f6d61]">Number of orders currently grouped by payment status.</p>
+                  </div>
+                  <ChartContainer config={statusChartConfig} className="h-[220px] w-full min-w-0 aspect-auto">
+                    <BarChart data={paymentStatusData} layout="vertical" margin={{ left: 8, right: 8, top: 8, bottom: 0 }}>
+                      <CartesianGrid horizontal={false} stroke="#e3e8de" />
+                      <XAxis axisLine={false} tickLine={false} type="number" allowDecimals={false} />
+                      <YAxis axisLine={false} dataKey="status" tickLine={false} type="category" width={92} />
+                      <ChartTooltip
+                        content={
+                          <ChartTooltipContent
+                            formatter={(value) => (
+                              <div className="flex min-w-[8rem] items-center justify-between gap-4">
+                                <span className="text-[#5f6d61]">Orders</span>
+                                <span className="font-mono font-medium text-[#182219]">{String(value)}</span>
+                              </div>
+                            )}
+                          />
+                        }
+                      />
+                      <Bar dataKey="count" fill="var(--color-count)" radius={[8, 8, 8, 8]} />
+                    </BarChart>
+                  </ChartContainer>
+                </div>
               )}
             </div>
           </div>
@@ -458,6 +434,42 @@ export function AdminDashboardPage() {
             </Badge>
           </div>
 
+          <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
+            <div>
+              <Label htmlFor="overview-order-search" className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-[#6a786c]">
+                Search recent orders
+              </Label>
+              <div className="relative mt-2">
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#7a867d]" />
+                <Input
+                  id="overview-order-search"
+                  value={orderSearch}
+                  onChange={(event) => setOrderSearch(event.target.value)}
+                  placeholder="Order number or producer"
+                  className="h-11 rounded-2xl border-[#ccd4c5] bg-white pl-10"
+                />
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="overview-payment-status" className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-[#6a786c]">
+                Payment status
+              </Label>
+              <select
+                id="overview-payment-status"
+                value={paymentStatusFilter}
+                onChange={(event) => setPaymentStatusFilter(event.target.value)}
+                className="mt-2 h-11 w-full rounded-2xl border border-[#ccd4c5] bg-white px-4 text-sm text-[#223026]"
+              >
+                <option value="">All statuses</option>
+                {paymentStatusOptions.map((status) => (
+                  <option key={status} value={status}>
+                    {status}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
           <div className="mt-4 hidden grid-cols-[1.05fr_0.9fr_0.9fr_1fr] gap-4 px-2 text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-[#738176] md:grid">
             <span>Order</span>
             <span>Total</span>
@@ -472,8 +484,12 @@ export function AdminDashboardPage() {
               <div className="rounded-2xl border border-dashed border-[#d6ddd0] bg-[#f4f7f1] p-6 text-sm leading-6 text-[#5f6d61]">
                 No recent orders are available in the current reporting window.
               </div>
+            ) : visibleRecentOrders.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-[#d6ddd0] bg-[#f4f7f1] p-6 text-sm leading-6 text-[#5f6d61]">
+                No recent orders match the current search and payment-status filter.
+              </div>
             ) : (
-              recentOrders.map((order) => {
+              visibleRecentOrders.map((order) => {
                 const payoutTotal = order.producer_breakdown.reduce(
                   (sum, producer) => sum + toNumber(producer.payout_amount),
                   0,
@@ -519,80 +535,27 @@ export function AdminDashboardPage() {
         <div className={`${panelClass} p-6`}>
           <div className="flex items-center justify-between gap-4 border-b border-[#e5eadf] pb-4">
             <div>
-              <p className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-[#6a786c]">Moderation</p>
-              <h2 className="mt-2 text-xl font-semibold text-[#182219]">Pending review queue</h2>
+              <p className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-[#6a786c]">Year to date</p>
+              <h2 className="mt-2 text-xl font-semibold text-[#182219]">Financial snapshot</h2>
             </div>
-            <ShieldCheck className="size-5 text-[var(--forest-green)]" />
+            <Badge className="rounded-full bg-[#edf4ee] px-3 py-1 text-[var(--forest-green)] shadow-none hover:bg-[#edf4ee]">
+              {selectedYear}
+            </Badge>
           </div>
 
           <div className="mt-4 space-y-3">
-            <div className="rounded-2xl border border-[#d6ddd0] bg-[#f4f7f1] p-4 text-sm leading-6 text-[#4f5f53]">
-              Use this queue to approve or reject new marketplace reviews without leaving the admin workspace.
+            <div className="rounded-2xl border border-[#d6ddd0] bg-white p-4">
+              <p className="text-sm text-[#6a786c]">YTD order value</p>
+              <p className="mt-2 text-2xl font-semibold text-[#182219]">
+                {formatAdminCurrency(ytdSummary?.total_order_value || '0')}
+              </p>
             </div>
-
-            {pendingReviewsLoading ? (
-              <FeedLoadingSkeleton rows={3} />
-            ) : pendingReviews.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-[#d6ddd0] bg-white p-6 text-sm leading-6 text-[#5f6d61]">
-                There are no reviews waiting for moderation right now.
-              </div>
-            ) : (
-              <div className="max-h-[540px] space-y-3 overflow-y-auto pr-1">
-                {pendingReviews.map((review) => (
-                  <div key={review.id} className="rounded-2xl border border-[#dde4d7] bg-white p-4">
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-[#738176]">
-                          {review.product_name}
-                        </p>
-                        <p className="mt-2 font-semibold text-[#182219]">{review.reviewer_name}</p>
-                        {review.title ? <p className="mt-1 text-sm font-medium text-[#2b382c]">{review.title}</p> : null}
-                        <p className="mt-2 text-sm text-[#5f6d61]">
-                          {review.producer_name} - {new Date(review.created_at).toLocaleDateString('en-GB')}
-                        </p>
-                      </div>
-                      <Badge className="rounded-full bg-[#f7ecd2] px-3 py-1 text-[#6a4e11] shadow-none hover:bg-[#f7ecd2]">
-                        Pending
-                      </Badge>
-                    </div>
-
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                      <Badge className="rounded-full border border-[#e4e1d8] bg-white px-3 py-1 text-[#46564a] shadow-none hover:bg-white">
-                        {review.purchase_label}
-                      </Badge>
-                      <div className="flex items-center gap-1 text-amber-500">
-                        {Array.from({ length: 5 }).map((_, index) => (
-                          <Star
-                            key={`${review.id}-${index}`}
-                            className={`size-4 ${index < review.rating ? 'fill-current' : 'text-[#d9d2c3]'}`}
-                          />
-                        ))}
-                      </div>
-                    </div>
-
-                    <p className="mt-3 text-sm leading-7 text-[#324033]">{review.comment || 'No written comment provided.'}</p>
-
-                    <div className="mt-4 flex flex-wrap gap-3">
-                      <Button
-                        className="bg-[var(--forest-green)] text-white hover:bg-[var(--forest-green)]"
-                        disabled={activeModerationReviewId === review.id || !review.order_product_id}
-                        onClick={() => void handleModerationAction(review, 'published')}
-                      >
-                        {activeModerationReviewId === review.id ? 'Updating...' : 'Approve'}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        className="border-[#c7d0c1] bg-white text-[#405043] hover:bg-[#edf2eb] hover:text-[#405043]"
-                        disabled={activeModerationReviewId === review.id || !review.order_product_id}
-                        onClick={() => void handleModerationAction(review, 'rejected')}
-                      >
-                        Reject
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+            <div className="rounded-2xl border border-[#d6ddd0] bg-white p-4">
+              <p className="text-sm text-[#6a786c]">YTD producer payouts</p>
+              <p className="mt-2 text-2xl font-semibold text-[#182219]">
+                {formatAdminCurrency(ytdSummary?.total_producer_payouts || '0')}
+              </p>
+            </div>
           </div>
         </div>
       </section>

@@ -16,13 +16,14 @@
 import type { FormEvent, MouseEvent } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
-import { LogOut, MapPin, Menu, Search, ShoppingCart, Sprout, User, X } from 'lucide-react';
+import { Bell, LogOut, MapPin, Menu, Search, ShoppingCart, Sprout, User, X } from 'lucide-react';
 
 import { useAuth } from '../contexts/AuthContext';
 import { formatDisplayPostcode, getPreferredAddress, getRoleLabel } from '../lib/accountLocation';
 import { useCart } from '../contexts/CartContext';
 import { clearPendingCustomerPreviewExitTarget } from '../lib/customerPreview';
 import { formatCompactNumber } from '../lib/numberFormat';
+import { fetchProducerNotifications, getProducerNotificationBadgeCount } from '../lib/producerNotifications';
 import { getDashboardPathForRole } from '../lib/roleRouting';
 import { getSiteNavItems, isSiteNavItemActive } from '../lib/siteNavigation';
 import { Button } from './ui/button';
@@ -54,6 +55,13 @@ function canOrder(role?: string | null): boolean {
   return role === 'CUSTOMER' || role === 'PRODUCER' || role === 'COMMUNITY' || role === 'RESTAURANT';
 }
 
+function firstNameFrom(value: unknown): string {
+  if (typeof value !== 'string') {
+    return '';
+  }
+  return value.trim().split(/\s+/).filter(Boolean)[0] || '';
+}
+
 /**
  * SiteHeader boundary.
  *
@@ -78,6 +86,7 @@ export function SiteHeader({
   const { getTotalItems } = useCart();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [localSearchQuery, setLocalSearchQuery] = useState('');
+  const [producerNotificationCount, setProducerNotificationCount] = useState(0);
 
   const isMarketingSurface = isMarketingPath(location.pathname);
   const isAuthenticated = Boolean(user);
@@ -95,7 +104,11 @@ export function SiteHeader({
 
   const brandLinkTarget = isMarketingSurface ? '/' : user ? getDashboardPathForRole(user.role) : '/';
   const searchTargetPath =
-    !user || isMarketingSurface || user.role === 'ADMIN' ? '/browse' : '/marketplace';
+    !user || isMarketingSurface || user.role === 'ADMIN'
+      ? '/browse'
+      : location.pathname.startsWith('/product') || location.pathname.startsWith('/cart') || location.pathname.startsWith('/checkout')
+        ? '/marketplace'
+        : location.pathname;
   const searchValue = onSearchQueryChange ? searchQuery : localSearchQuery;
   const cartItemCount = getTotalItems();
   const preferredAddress = useMemo(
@@ -104,6 +117,20 @@ export function SiteHeader({
   );
   const userPostcode = formatDisplayPostcode(preferredAddress?.postcode);
   const signedInRoleLabel = getRoleLabel(user?.role);
+  const signedInFirstName = useMemo(() => {
+    if (!user) {
+      return '';
+    }
+    const profileRecord = (profile || {}) as Record<string, unknown>;
+    return (
+      firstNameFrom(profileRecord.first_name) ||
+      firstNameFrom(profileRecord.contact_first_name) ||
+      firstNameFrom(profileRecord.full_name) ||
+      firstNameFrom(profileRecord.contact_name) ||
+      firstNameFrom(user.name) ||
+      firstNameFrom(user.email?.split('@')[0])
+    );
+  }, [profile, user]);
   const postcodeEditTarget = user
     ? user.role === 'PRODUCER'
       ? '/account#business-profile'
@@ -126,6 +153,33 @@ export function SiteHeader({
     const queryFromUrl = new URLSearchParams(location.search).get('q') || '';
     setLocalSearchQuery(queryFromUrl);
   }, [location.search, onSearchQueryChange]);
+
+  useEffect(() => {
+    if (!user || user.role !== 'PRODUCER') {
+      setProducerNotificationCount(0);
+      return;
+    }
+
+    let mounted = true;
+    const loadProducerNotificationCount = async () => {
+      try {
+        const notifications = await fetchProducerNotifications((user.email || '').trim().toLowerCase());
+        if (!mounted) {
+          return;
+        }
+        setProducerNotificationCount(getProducerNotificationBadgeCount(notifications));
+      } catch {
+        if (mounted) {
+          setProducerNotificationCount(0);
+        }
+      }
+    };
+
+    void loadProducerNotificationCount();
+    return () => {
+      mounted = false;
+    };
+  }, [location.pathname, location.search, user]);
 
   const updateSearchValue = (value: string) => {
     if (onSearchQueryChange) {
@@ -152,7 +206,14 @@ export function SiteHeader({
       setIsMobileMenuOpen(false);
       return;
     }
-    const nextPath = nextQuery ? `${searchTargetPath}?q=${encodeURIComponent(nextQuery)}` : searchTargetPath;
+    const currentParams = searchTargetPath === location.pathname ? new URLSearchParams(location.search) : new URLSearchParams();
+    if (nextQuery) {
+      currentParams.set('q', nextQuery);
+    } else {
+      currentParams.delete('q');
+    }
+    const nextSearch = currentParams.toString();
+    const nextPath = nextSearch ? `${searchTargetPath}?${nextSearch}` : searchTargetPath;
     navigate(nextPath);
     setIsMobileMenuOpen(false);
   };
@@ -163,6 +224,25 @@ export function SiteHeader({
     logout();
     navigate('/');
   };
+
+  const producerNotificationButton =
+    user?.role === 'PRODUCER' ? (
+      <Button
+        asChild
+        variant="ghost"
+        size="icon"
+        className="relative text-[var(--forest-green)] hover:bg-[color-mix(in_srgb,var(--forest-green)_6%,white)]"
+      >
+        <Link to="/producer/notifications" aria-label={`Notifications${producerNotificationCount > 0 ? `, ${producerNotificationCount} active` : ''}`}>
+          <Bell className="size-4" />
+          {producerNotificationCount > 0 ? (
+            <span className="absolute -right-1 -top-1 inline-flex min-w-5 items-center justify-center rounded-full bg-[var(--forest-green)] px-1.5 py-0.5 text-[11px] font-semibold text-white">
+              {formatCompactNumber(producerNotificationCount)}
+            </span>
+          ) : null}
+        </Link>
+      </Button>
+    ) : null;
 
   const desktopActionButtons = !isAuthenticated ? (
     <>
@@ -204,6 +284,7 @@ export function SiteHeader({
           <Link to={getDashboardPathForRole(user.role)}>Dashboard</Link>
         </Button>
       )}
+      {producerNotificationButton}
       <Button asChild variant="ghost" size="sm" className="text-[var(--forest-green)] hover:bg-[color-mix(in_srgb,var(--forest-green)_6%,white)]">
         <Link to="/account">
           <User className="size-4" />
@@ -271,7 +352,7 @@ export function SiteHeader({
                 {isAuthenticated ? (
                   <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4 py-2.5">
                     <div className="min-w-0 truncate pl-2 text-sm text-[oklch(0.42_0.03_145)]">
-                      <span className="font-medium text-[var(--forest-green)]">{user.name}</span>
+                      <span className="font-medium text-[var(--forest-green)]">{signedInFirstName || user.name}</span>
                       <span className="px-2 text-[oklch(0.55_0.02_145)]">&middot;</span>
                       <span>{signedInRoleLabel}</span>
                     </div>
@@ -335,7 +416,7 @@ export function SiteHeader({
               <div className="border-t border-[#e9e3d7]">
                 <div className="flex items-center justify-between gap-4 py-2 text-sm text-[oklch(0.42_0.03_145)]">
                   <div className="min-w-0 truncate pl-2">
-                    <span className="font-medium text-[var(--forest-green)]">{user.name}</span>
+                    <span className="font-medium text-[var(--forest-green)]">{signedInFirstName || user.name}</span>
                     <span className="px-2">&middot;</span>
                     <span>{signedInRoleLabel}</span>
                   </div>
@@ -364,24 +445,27 @@ export function SiteHeader({
               <span className="truncate text-sm font-semibold tracking-tight">Local Food Marketplace</span>
             </Link>
 
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              aria-expanded={isMobileMenuOpen}
-              aria-label={isMobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
-              onClick={() => setIsMobileMenuOpen((current) => !current)}
-              className="text-[var(--forest-green)] hover:bg-[color-mix(in_srgb,var(--forest-green)_6%,white)]"
-            >
-              {isMobileMenuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
-            </Button>
+            <div className="flex items-center gap-1">
+              {producerNotificationButton}
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-expanded={isMobileMenuOpen}
+                aria-label={isMobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+                onClick={() => setIsMobileMenuOpen((current) => !current)}
+                className="text-[var(--forest-green)] hover:bg-[color-mix(in_srgb,var(--forest-green)_6%,white)]"
+              >
+                {isMobileMenuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
+              </Button>
+            </div>
           </div>
 
           {isAuthenticated ? (
             <div className="border-t border-[oklch(0.9_0.02_145)] py-2 md:hidden">
               <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[oklch(0.42_0.03_145)]">
                 <div className="min-w-0 truncate pl-12">
-                  <span className="font-medium text-[var(--forest-green)]">{user.name}</span>
+                  <span className="font-medium text-[var(--forest-green)]">{signedInFirstName || user.name}</span>
                   <span className="px-1.5">&middot;</span>
                   <span>{signedInRoleLabel}</span>
                 </div>

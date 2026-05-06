@@ -25,6 +25,7 @@ const GOOGLE_MAPS_EMBED_BASE = 'https://www.google.com/maps/embed/v1/place';
 const GOOGLE_MAPS_DIRECTIONS_EMBED_BASE = 'https://www.google.com/maps/embed/v1/directions';
 const GOOGLE_MAPS_SEARCH_BASE = 'https://www.google.com/maps/search/';
 const GOOGLE_MAPS_DIRECTIONS_BASE = 'https://www.google.com/maps/dir/';
+const GOOGLE_MAPS_LIBRARIES = 'places';
 /**
  * GOOGLE_MAPS_JS_BASE boundary.
  *
@@ -150,7 +151,7 @@ export async function loadGoogleMapsJavaScriptApi(): Promise<any | null> {
       }
 
       const script = document.createElement('script');
-      script.src = `${GOOGLE_MAPS_JS_BASE}?key=${encodeURIComponent(apiKey)}`;
+      script.src = `${GOOGLE_MAPS_JS_BASE}?key=${encodeURIComponent(apiKey)}&libraries=${encodeURIComponent(GOOGLE_MAPS_LIBRARIES)}`;
       script.async = true;
       script.defer = true;
       script.dataset.desdGoogleMaps = 'true';

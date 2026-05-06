@@ -29,11 +29,13 @@ from rest_framework.test import APITestCase
 from apps.catalog.models import Product as CatalogProduct
 from apps.orders.models import Producer as OrdersProducer
 from apps.orders.models import Product as OrdersProduct
+from apps.orders.models import FavoriteProducer, ProducerNotification, UserNotification
 from apps.producer_portal.models import (
     OrderStatus,
     ProducerOrder,
     ProducerOrderItem,
     ProducerProduct,
+    ProducerProductInventoryEvent,
     ProductAvailability,
 )
 
@@ -53,11 +55,13 @@ class ProducerPortalCriticalTestCases(APITestCase):
             username="producer_user",
             email="producer@example.com",
             password="test-pass-123",
+            role=User.Role.PRODUCER,
         )
         self.other_producer = User.objects.create_user(
             username="other_producer",
             email="other@example.com",
             password="test-pass-123",
+            role=User.Role.PRODUCER,
         )
         self.client.force_authenticate(self.producer)
 
@@ -88,6 +92,7 @@ class ProducerPortalCriticalTestCases(APITestCase):
         return order
 
     def test_tc_003_producer_lists_product_successfully(self):
+        current_month = timezone.localdate().month
         payload = {
             "name": "Organic Free Range Eggs",
             "category": "Dairy & Eggs",
@@ -95,11 +100,20 @@ class ProducerPortalCriticalTestCases(APITestCase):
             "price": "3.50",
             "unit": "dozen",
             "availability": ProductAvailability.IN_SEASON,
-            "season_start_month": 1,
-            "season_end_month": 3,
+            "season_start_month": current_month,
+            "season_end_month": current_month,
             "stock_quantity": 50,
             "low_stock_threshold": 14,
             "allergen_information": "Contains eggs",
+            "storage_tips": "Keep refrigerated and use within seven days.",
+            "storage_tips_ai_generated": True,
+            "is_organic": True,
+            "organic_certification": "Soil Association GB-ORG-05",
+            "is_surplus": True,
+            "surplus_discount_percent": 20,
+            "surplus_expires_at": (timezone.now() + timedelta(hours=48)).isoformat(),
+            "surplus_best_before": "Use within 3 days",
+            "surplus_note": "Short-dated surplus batch from today's collection.",
             "harvest_date": timezone.localdate().isoformat(),
             "image_url": "https://example.com/eggs.jpg",
         }
@@ -113,6 +127,14 @@ class ProducerPortalCriticalTestCases(APITestCase):
         self.assertEqual(product.category, payload["category"])
         self.assertEqual(product.stock_quantity, 50)
         self.assertEqual(product.low_stock_threshold, 14)
+        self.assertEqual(product.storage_tips, payload["storage_tips"])
+        self.assertTrue(product.storage_tips_ai_generated)
+        self.assertTrue(product.is_organic)
+        self.assertEqual(product.organic_certification, payload["organic_certification"])
+        self.assertTrue(product.is_surplus)
+        self.assertEqual(product.surplus_discount_percent, Decimal("20"))
+        self.assertEqual(product.surplus_best_before, payload["surplus_best_before"])
+        self.assertEqual(product.surplus_note, payload["surplus_note"])
         self.assertTrue(product.is_visible_to_customers)
 
         list_response = self.client.get("/api/producer/products/")
@@ -121,6 +143,109 @@ class ProducerPortalCriticalTestCases(APITestCase):
         self.assertEqual(list_response.data[0]["name"], payload["name"])
         self.assertEqual(list_response.data[0]["availability"], ProductAvailability.IN_SEASON)
         self.assertEqual(list_response.data[0]["low_stock_threshold"], 14)
+        self.assertEqual(list_response.data[0]["storage_tips"], payload["storage_tips"])
+        self.assertTrue(list_response.data[0]["storage_tips_ai_generated"])
+        self.assertTrue(list_response.data[0]["is_organic"])
+        self.assertEqual(list_response.data[0]["organic_certification"], payload["organic_certification"])
+        self.assertTrue(list_response.data[0]["is_surplus"])
+        self.assertEqual(list_response.data[0]["surplus_best_before"], payload["surplus_best_before"])
+        self.assertEqual(list_response.data[0]["surplus_note"], payload["surplus_note"])
+
+    def test_surplus_product_creation_notifies_users_who_favorite_the_producer(self):
+        orders_producer = OrdersProducer.objects.create(
+            user=self.producer,
+            business_name="Bristol Valley Farm",
+            postcode="BS1 4DJ",
+        )
+        customer = User.objects.create_user(
+            username="surplus_fan",
+            email="surplus-fan@example.com",
+            password="test-pass-123",
+            role=User.Role.CUSTOMER,
+        )
+        FavoriteProducer.objects.create(user=customer, producer=orders_producer)
+
+        response = self.client.post(
+            "/api/producer/products/",
+            {
+                "name": "Rescue Tomatoes",
+                "category": "Vegetables",
+                "description": "Short-dated tomatoes for sauces and soups.",
+                "price": "2.20",
+                "unit": "kg",
+                "availability": ProductAvailability.IN_SEASON,
+                "season_start_month": timezone.localdate().month,
+                "season_end_month": timezone.localdate().month,
+                "stock_quantity": "12",
+                "low_stock_threshold": 5,
+                "allergen_information": "No common allergens",
+                "harvest_date": timezone.localdate().isoformat(),
+                "is_surplus": True,
+                "surplus_discount_percent": 30,
+                "surplus_expires_at": (timezone.now() + timedelta(hours=24)).isoformat(),
+                "surplus_best_before": "Best before tomorrow",
+                "surplus_note": "Cosmetic marks only.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        notification = UserNotification.objects.get(user=customer, category="surplus_deal")
+        self.assertIn("Bristol Valley Farm added a surplus deal", notification.message)
+        self.assertEqual(notification.metadata["product_name"], "Rescue Tomatoes")
+
+    def test_blank_storage_guidance_is_allowed_and_not_ai_labelled(self):
+        current_month = timezone.localdate().month
+        payload = {
+            "name": "Seasonal Kale",
+            "category": "Vegetables",
+            "description": "Fresh leafy greens grown locally today",
+            "price": "2.10",
+            "unit": "kg",
+            "availability": ProductAvailability.IN_SEASON,
+            "season_start_month": current_month,
+            "season_end_month": current_month,
+            "stock_quantity": 24,
+            "low_stock_threshold": 8,
+            "allergen_information": "",
+            "storage_tips": "",
+            "storage_tips_ai_generated": True,
+            "harvest_date": timezone.localdate().isoformat(),
+        }
+
+        create_response = self.client.post("/api/producer/products/", payload, format="json")
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+
+        product = ProducerProduct.objects.get(id=create_response.data["id"])
+        self.assertEqual(product.storage_tips, "")
+        self.assertFalse(product.storage_tips_ai_generated)
+        self.assertEqual(create_response.data["storage_tips"], "")
+        self.assertFalse(create_response.data["storage_tips_ai_generated"])
+
+    def test_storage_guidance_has_server_side_character_limit(self):
+        current_month = timezone.localdate().month
+        response = self.client.post(
+            "/api/producer/products/",
+            {
+                "name": "Long Storage Notes",
+                "category": "Vegetables",
+                "description": "Fresh produce",
+                "price": "2.10",
+                "unit": "kg",
+                "availability": ProductAvailability.IN_SEASON,
+                "season_start_month": current_month,
+                "season_end_month": current_month,
+                "stock_quantity": 24,
+                "low_stock_threshold": 8,
+                "allergen_information": "",
+                "storage_tips": "x" * 701,
+                "harvest_date": timezone.localdate().isoformat(),
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("700 characters", str(response.data))
 
     def test_low_stock_threshold_persists_and_default_alert_filter_uses_saved_value(self):
         product = ProducerProduct.objects.create(
@@ -144,6 +269,12 @@ class ProducerPortalCriticalTestCases(APITestCase):
         self.assertEqual(patch_response.status_code, status.HTTP_200_OK)
         product.refresh_from_db()
         self.assertEqual(product.low_stock_threshold, 5)
+        self.assertTrue(
+            ProducerProductInventoryEvent.objects.filter(
+                product=product,
+                event_type="updated",
+            ).exists()
+        )
 
         low_stock_response = self.client.get("/api/producer/products/?low_stock=true")
         self.assertEqual(low_stock_response.status_code, status.HTTP_200_OK)
@@ -165,6 +296,30 @@ class ProducerPortalCriticalTestCases(APITestCase):
         self.assertEqual(alert_response.status_code, status.HTTP_200_OK)
         self.assertEqual(alert_response.data["count"], 1)
         self.assertEqual(alert_response.data["results"][0]["low_stock_threshold"], 6)
+        orders_producer = OrdersProducer.objects.get(user=self.producer)
+        self.assertTrue(
+            ProducerNotification.objects.filter(
+                producer=orders_producer,
+                category="low_stock",
+                metadata__product_id=product.id,
+                resolved_at__isnull=True,
+            ).exists()
+        )
+
+        patch_response = self.client.patch(
+            f"/api/producer/products/{product.id}/",
+            {"stock_quantity": 10},
+            format="json",
+        )
+        self.assertEqual(patch_response.status_code, status.HTTP_200_OK)
+        self.assertFalse(
+            ProducerNotification.objects.filter(
+                producer=orders_producer,
+                category="low_stock",
+                metadata__product_id=product.id,
+                resolved_at__isnull=True,
+            ).exists()
+        )
 
     def test_tc_009_producer_views_only_their_orders_sorted_by_delivery_date(self):
         product = ProducerProduct.objects.create(
@@ -233,7 +388,7 @@ class ProducerPortalCriticalTestCases(APITestCase):
         forbidden_response = self.client.get(f"/api/producer/orders/{other_order.id}/")
         self.assertEqual(forbidden_response.status_code, status.HTTP_404_NOT_FOUND)
 
-    def test_product_persists_via_demo_header_and_is_visible_in_public_feed(self):
+    def test_product_create_requires_authenticated_producer_and_public_feed_stays_open(self):
         self.client.force_authenticate(user=None)
         payload = {
             "name": "Database Saved Lettuce",
@@ -252,13 +407,17 @@ class ProducerPortalCriticalTestCases(APITestCase):
             format="json",
             HTTP_X_DEMO_USER="producer@example.com",
         )
+        self.assertEqual(create_response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        self.client.force_authenticate(self.producer)
+        create_response = self.client.post("/api/producer/products/", payload, format="json")
         self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
 
         public_response = self.client.get("/api/producer/public/products/")
         self.assertEqual(public_response.status_code, status.HTTP_200_OK)
         self.assertTrue(any(item["name"] == "Database Saved Lettuce" for item in public_response.data))
 
-        producer_view = self.client.get("/api/producer/products/", HTTP_X_DEMO_USER="producer@example.com")
+        producer_view = self.client.get("/api/producer/products/")
         self.assertEqual(producer_view.status_code, status.HTTP_200_OK)
         self.assertTrue(any(item["name"] == "Database Saved Lettuce" for item in producer_view.data))
 
@@ -266,12 +425,19 @@ class ProducerPortalCriticalTestCases(APITestCase):
         payload = {
             "name": "Sync Ready Beetroot",
             "category": "Vegetables",
-            "description": "Cross-app sync validation",
+            "description": "Cross app sync validation for fresh beetroot",
             "price": "2.40",
             "unit": "kg",
             "availability": ProductAvailability.YEAR_ROUND,
             "stock_quantity": 14,
             "allergen_information": "",
+            "is_organic": True,
+            "organic_certification": "Soil Association GB-ORG-05",
+            "is_surplus": True,
+            "surplus_discount_percent": 25,
+            "surplus_expires_at": (timezone.now() + timedelta(hours=36)).isoformat(),
+            "surplus_best_before": "Best before tomorrow",
+            "surplus_note": "Cosmetic marks only, quality checked.",
             "harvest_date": timezone.localdate().isoformat(),
         }
         create_response = self.client.post("/api/producer/products/", payload, format="json")
@@ -292,6 +458,11 @@ class ProducerPortalCriticalTestCases(APITestCase):
                 producer__name=orders_producer.business_name,
                 name="Sync Ready Beetroot",
                 stock=14,
+                is_organic=True,
+                organic_certification="Soil Association GB-ORG-05",
+                is_surplus=True,
+                surplus_discount=25,
+                surplus_best_before="Best before tomorrow",
             ).exists()
         )
 
@@ -347,7 +518,7 @@ class ProducerPortalCriticalTestCases(APITestCase):
         payload = {
             "name": "Spring Asparagus",
             "category": "Vegetables",
-            "description": "Seasonal asparagus",
+            "description": "Seasonal asparagus grown for spring harvest",
             "price": "4.10",
             "unit": "kg",
             "availability": ProductAvailability.IN_SEASON,
@@ -395,7 +566,7 @@ class ProducerPortalCriticalTestCases(APITestCase):
         payload = {
             "name": "Inventory Reduction Potatoes",
             "category": "Vegetables",
-            "description": "Stock deduction verification",
+            "description": "Stock deduction verification for delivered orders",
             "price": "2.00",
             "unit": "kg",
             "availability": ProductAvailability.YEAR_ROUND,

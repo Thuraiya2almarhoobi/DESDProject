@@ -14,10 +14,11 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import {
   ArrowLeft,
   BookOpenText,
+  Flag,
   Leaf,
   Newspaper,
   RefreshCw,
@@ -30,8 +31,10 @@ import {
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { ApiFeedEntry, ApiGeneratedContentSuggestion, ApiRecipe, ApiStory, apiJson } from '../lib/api';
+import { hasMinWords, isValidOptionalUrl, validateRequiredText } from '../lib/formValidation';
 import { formatCompactNumber } from '../lib/numberFormat';
 import { useSafeBack } from '../lib/navigation';
+import { reportModerationTarget } from '../lib/moderation';
 import { useAuth } from '../contexts/AuthContext';
 import { ImageSourceField } from '../components/ImageSourceField';
 import { SiteHeader } from '../components/SiteHeader';
@@ -46,11 +49,20 @@ import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Checkbox } from '../components/ui/checkbox';
 import { Skeleton } from '../components/ui/skeleton';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../components/ui/dialog';
 
 type FeedFilter = 'all' | 'recipe' | 'story' | 'saved';
 type AiContentType = 'recipe' | 'story';
 type AiPanelMode = 'generate' | 'saved';
 type ContentView = 'all' | 'recipes' | 'stories';
+type ProductPickerTarget = 'recipe' | 'ai';
 
 type FeedDetail = ApiRecipe | ApiStory;
 
@@ -199,6 +211,7 @@ interface ContentFeedPageProps {
  */
 export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentFeedPageProps) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
   const isProducer = user?.role === 'PRODUCER';
   const isPublishMode = mode === 'publish';
@@ -216,6 +229,7 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
   const [detailLoadingKey, setDetailLoadingKey] = useState<string | null>(null);
   const [detailsByKey, setDetailsByKey] = useState<Record<string, FeedDetail>>({});
   const [savedRecipeIds, setSavedRecipeIds] = useState<Set<number>>(new Set());
+  const [activeReportKey, setActiveReportKey] = useState<string | null>(null);
   const [contentSearch, setContentSearch] = useState('');
   const [producerFilter, setProducerFilter] = useState(ALL_PRODUCERS);
   const [productFilter, setProductFilter] = useState(ALL_PRODUCTS);
@@ -233,11 +247,51 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
   const [generatingAi, setGeneratingAi] = useState(false);
   const [publishingRecipe, setPublishingRecipe] = useState(false);
   const [publishingStory, setPublishingStory] = useState(false);
+  const [productPickerTarget, setProductPickerTarget] = useState<ProductPickerTarget | null>(null);
   const backButton = (
     <Button variant="ghost" onClick={goBack}>
       <ArrowLeft className="mr-2 size-4" />
       Back
     </Button>
+  );
+  const activeContentSection = showProducerPublisher
+    ? 'publish'
+    : contentView === 'stories'
+      ? 'stories'
+      : 'recipes';
+  const contentNavButtonClass = 'min-w-24 justify-center';
+  const contentSectionNav = (
+    <div className="inline-flex flex-wrap rounded-xl border border-[#d7dfd0] bg-white p-1 shadow-sm">
+      {isProducer && (
+        <Button
+          type="button"
+          variant={activeContentSection === 'publish' ? 'default' : 'ghost'}
+          size="sm"
+          className={contentNavButtonClass}
+          onClick={() => navigate('/producer/publish')}
+        >
+          Publish
+        </Button>
+      )}
+      <Button
+        type="button"
+        variant={activeContentSection === 'recipes' ? 'default' : 'ghost'}
+        size="sm"
+        className={contentNavButtonClass}
+        onClick={() => navigate('/content/recipes')}
+      >
+        Recipes
+      </Button>
+      <Button
+        type="button"
+        variant={activeContentSection === 'stories' ? 'default' : 'ghost'}
+        size="sm"
+        className={contentNavButtonClass}
+        onClick={() => navigate('/content/stories')}
+      >
+        Farm Stories
+      </Button>
+    </div>
   );
   const contentPageCopy = showProducerPublisher
     ? {
@@ -321,8 +375,9 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
   }, [loadFeed]);
 
   useEffect(() => {
-    setFilter(pageFilter);
-  }, [pageFilter]);
+    const requestedFilter = new URLSearchParams(location.search).get('filter');
+    setFilter(requestedFilter === 'saved' ? 'saved' : pageFilter);
+  }, [location.search, pageFilter]);
 
   useEffect(() => {
     setContentSearch('');
@@ -430,6 +485,30 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
     : contentCount === 1
       ? 'recipe'
       : 'recipes';
+  const aiComposerCopy =
+    aiDraft.content_type === 'recipe'
+      ? {
+          occasionLabel: 'Recipe Goal',
+          occasionPlaceholder: 'Quick pasta dinner, family meal, seasonal lunch',
+          notesLabel: 'Recipe Request',
+          notesPlaceholder: 'Example: Make a pasta recipe using tomatoes and keep it easy for a weeknight.',
+          storageLabel: 'Cooking or Storage Guidance',
+          storagePlaceholder: 'Example: Include storage tips, prep notes, or cooking constraints.',
+          pickerTitle: 'Recipe Products for Context',
+          pickerDescription: 'Select the marketplace products the recipe should be built around.',
+          button: 'Generate Recipe Suggestions',
+        }
+      : {
+          occasionLabel: 'Story Angle',
+          occasionPlaceholder: 'Harvest update, farm visit, supplier spotlight',
+          notesLabel: 'Farm Story Brief',
+          notesPlaceholder: 'Example: Write a story about this product, the harvest, and why it matters this season.',
+          storageLabel: 'Production or Handling Notes',
+          storagePlaceholder: 'Example: Mention storage, harvest timing, or producer handling details if relevant.',
+          pickerTitle: 'Story Products for Context',
+          pickerDescription: 'Select the products the farm story should mention or explain.',
+          button: 'Generate Farm Story Suggestions',
+        };
 
   const resetDiscoveryFilters = () => {
     setContentSearch('');
@@ -456,6 +535,25 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
       toast.success(payload.saved ? 'Recipe saved' : 'Recipe removed from saved list');
     } catch {
       toast.error('Unable to update saved recipe status.');
+    }
+  };
+
+  const reportContentEntry = async (entry: ApiFeedEntry) => {
+    if (!user) {
+      toast.error('Please sign in to report content.');
+      return;
+    }
+
+    const targetType = entry.type === 'recipe' ? 'recipe' : 'farm_story';
+    const key = detailKey(entry.type, entry.id);
+    setActiveReportKey(key);
+    try {
+      await reportModerationTarget(targetType, entry.id, `Reported from the content feed: ${entry.title}`);
+      toast.success(`${entry.type === 'recipe' ? 'Recipe' : 'Farm story'} reported to moderation.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to report this content.');
+    } finally {
+      setActiveReportKey(null);
     }
   };
 
@@ -502,6 +600,93 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
         ? Array.from(new Set([...previous.product_ids, productId]))
         : previous.product_ids.filter((id) => id !== productId),
     }));
+  };
+
+  const setProductSelection = (target: ProductPickerTarget, productId: number, checked: boolean) => {
+    if (target === 'recipe') {
+      toggleRecipeProduct(productId, checked);
+      return;
+    }
+    toggleAiProduct(productId, checked);
+  };
+
+  const productPickerSelectedIds =
+    productPickerTarget === 'recipe'
+      ? recipeDraft.product_ids
+      : productPickerTarget === 'ai'
+        ? aiDraft.product_ids
+        : [];
+
+  const renderSelectedProducts = (
+    target: ProductPickerTarget,
+    selectedIds: number[],
+    emptyText: string,
+  ) => {
+    const selectedProducts = producerProducts.filter((product) => selectedIds.includes(product.id));
+    if (selectedProducts.length === 0) {
+      return (
+        <div className="rounded-2xl border border-dashed border-[#d9d0c0] bg-white/60 px-4 py-3 text-sm text-gray-600">
+          {emptyText}
+        </div>
+      );
+    }
+    return (
+      <div className="flex flex-wrap gap-2">
+        {selectedProducts.map((product) => (
+          <Badge
+            key={product.id}
+            variant="outline"
+            className="gap-2 rounded-full border-[#d9d0c0] bg-white px-3 py-1 text-sm text-[var(--rich-soil)]"
+          >
+            {product.name}
+            <button
+              type="button"
+              className="rounded-full text-gray-500 hover:text-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+              onClick={() => setProductSelection(target, product.id, false)}
+              aria-label={`Remove ${product.name}`}
+            >
+              <X className="size-3" />
+            </button>
+          </Badge>
+        ))}
+      </div>
+    );
+  };
+
+  const renderProductPickerSummary = (
+    target: ProductPickerTarget,
+    title: string,
+    emptyText: string,
+  ) => {
+    const selectedIds = target === 'recipe' ? recipeDraft.product_ids : aiDraft.product_ids;
+    return (
+      <div className="rounded-2xl border border-[#eee8dc] bg-[#fffefa] p-4">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-sm font-medium text-[var(--rich-soil)]">{title}</p>
+            <p className="mt-1 text-xs text-gray-600">
+              {selectedIds.length === 0
+                ? 'No products selected'
+                : `${selectedIds.length} product${selectedIds.length === 1 ? '' : 's'} selected`}
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setProductPickerTarget(target)}
+            disabled={producerProducts.length === 0}
+          >
+            Select Products
+          </Button>
+        </div>
+        {producerProducts.length === 0 ? (
+          <p className="text-sm text-gray-600">No producer products are available.</p>
+        ) : (
+          renderSelectedProducts(target, selectedIds, emptyText)
+        )}
+      </div>
+    );
   };
 
   const createRandomAiDraft = (): AiDraft | null => {
@@ -556,7 +741,7 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
     if (draftToUse.product_ids.length === 0) {
       const randomDraft = createRandomAiDraft();
       if (!randomDraft) {
-        toast.error('Add a producer product before refreshing AI suggestions.');
+        toast.error('Add a producer product before generating random AI suggestions.');
         return;
       }
       void generateAiSuggestions(randomDraft);
@@ -569,7 +754,7 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
   const fullRefreshAiSuggestions = () => {
     const randomDraft = createRandomAiDraft();
     if (!randomDraft) {
-      toast.error('Add a producer product before refreshing AI suggestions.');
+      toast.error('Add a producer product before generating random AI suggestions.');
       return;
     }
 
@@ -645,8 +830,21 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
   };
 
   const publishRecipe = async () => {
-    if (!recipeDraft.title.trim() || !recipeDraft.ingredients.trim() || !recipeDraft.instructions.trim()) {
-      toast.error('Recipe title, ingredients, and instructions are required.');
+    const requiredError =
+      validateRequiredText(recipeDraft.title, 'Recipe title', 3) ||
+      validateRequiredText(recipeDraft.description, 'Recipe description', 10) ||
+      validateRequiredText(recipeDraft.ingredients, 'Ingredients', 10) ||
+      validateRequiredText(recipeDraft.instructions, 'Cooking instructions', 15);
+    if (requiredError) {
+      toast.error(requiredError);
+      return;
+    }
+    if (!hasMinWords(recipeDraft.instructions, 8)) {
+      toast.error('Cooking instructions must include enough detail for a customer to follow them.');
+      return;
+    }
+    if (!isValidOptionalUrl(recipeDraft.image_url)) {
+      toast.error('Recipe image URL must start with http:// or https://.');
       return;
     }
 
@@ -676,8 +874,19 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
   };
 
   const publishStory = async () => {
-    if (!storyDraft.title.trim() || !storyDraft.body.trim()) {
-      toast.error('Story title and body are required.');
+    const requiredError =
+      validateRequiredText(storyDraft.title, 'Story title', 3) ||
+      validateRequiredText(storyDraft.body, 'Story body', 20);
+    if (requiredError) {
+      toast.error(requiredError);
+      return;
+    }
+    if (!hasMinWords(storyDraft.body, 12)) {
+      toast.error('Farm story body must include at least twelve words.');
+      return;
+    }
+    if (!isValidOptionalUrl(storyDraft.image_url)) {
+      toast.error('Farm story image URL must start with http:// or https://.');
       return;
     }
 
@@ -719,18 +928,23 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
 	      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-5 lg:px-6">
 	        <div className="flex flex-wrap items-center justify-between gap-3">
 	          {backButton}
-	          {showProducerPublisher ? (
-	            <Button variant="outline" onClick={() => navigate('/content/recipes')}>
-	              View Published Recipes
-	            </Button>
-	          ) : isBuyer ? (
+	          <div className="flex min-h-11 flex-wrap items-center gap-2">
+	            {contentSectionNav}
+	          {isBuyer ? (
 	            <div className="flex flex-wrap gap-2">
-	              {!isStoriesPage && (
-	                <Button variant="outline" onClick={() => setFilter('saved')}>
-	                  <Star className="mr-2 size-4" />
-	                  Saved Recipes
-	                </Button>
-	              )}
+	              <Button
+	                variant="outline"
+	                onClick={() => {
+	                  if (showProducerPublisher) {
+	                    navigate('/content/recipes?filter=saved');
+	                    return;
+	                  }
+	                  setFilter('saved');
+	                }}
+	              >
+	                <Star className="mr-2 size-4" />
+	                Saved Recipes
+	              </Button>
 	              <Button variant="outline" onClick={() => navigate('/orders/history')}>
 	                Order History
 	              </Button>
@@ -740,6 +954,7 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
 	              Marketplace
 	            </Button>
 	          )}
+	          </div>
 	        </div>
 
 	        <section className="mt-5 rounded-3xl border border-[#dfe8d9] bg-[#fffefa] px-5 py-6 shadow-sm sm:px-7">
@@ -768,16 +983,18 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
 	          {!showProducerPublisher && (
 	            <div className="mt-5 border-t border-[#eee8dc] pt-4">
 	              <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-	                {!isStoriesPage && (
-	                  <Tabs value={filter} onValueChange={(value) => setFilter(value as FeedFilter)}>
-	                    <TabsList className="bg-[#ede8dc]">
-	                      {contentView === 'all' && <TabsTrigger value="all">All Content</TabsTrigger>}
-	                      <TabsTrigger value="recipe">Recipes</TabsTrigger>
-	                      {contentView === 'all' && <TabsTrigger value="story">Farm Stories</TabsTrigger>}
-	                      <TabsTrigger value="saved">Saved Recipes</TabsTrigger>
-	                    </TabsList>
-	                  </Tabs>
-	                )}
+                <div className="min-h-10">
+                {!isStoriesPage && (
+                  <Tabs value={filter} onValueChange={(value) => setFilter(value as FeedFilter)}>
+                    <TabsList className="bg-[#ede8dc]">
+                      {contentView === 'all' && <TabsTrigger value="all">All Content</TabsTrigger>}
+                      <TabsTrigger value="recipe">Recipes</TabsTrigger>
+                      {contentView === 'all' && <TabsTrigger value="story">Farm Stories</TabsTrigger>}
+                      <TabsTrigger value="saved">Saved Recipes</TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+                )}
+                </div>
 
 	                <div className="grid gap-3 sm:grid-cols-3 xl:w-[34rem]">
 	                  <div>
@@ -989,34 +1206,11 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
                         </span>
                       </span>
                     </label>
-                    <div>
-                      <p className="mb-2 text-sm font-medium">Link Products</p>
-                      {producerProducts.length === 0 ? (
-                        <p className="text-sm text-gray-600">No producer products are available to link.</p>
-                      ) : (
-                        <div className="grid gap-2 sm:grid-cols-2">
-                          {producerProducts.map((product) => {
-                            const checked = recipeDraft.product_ids.includes(product.id);
-                            return (
-                              <label
-                                key={product.id}
-                                className="flex cursor-pointer items-center gap-3 rounded-md border border-[#eee8dc] bg-white/70 p-2"
-                              >
-                                <Checkbox
-                                  checked={checked}
-                                  onCheckedChange={(value) =>
-                                    toggleRecipeProduct(product.id, value === true)
-                                  }
-                                />
-                                <span className="text-sm">
-                                  {product.name} ({product.unit}) • £{Number(product.price).toFixed(2)}
-                                </span>
-                              </label>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
+                    {renderProductPickerSummary(
+                      'recipe',
+                      'Linked Products',
+                      'Select products to link this recipe to your marketplace listings.',
+                    )}
                     <Button onClick={publishRecipe} disabled={publishingRecipe}>
                       {publishingRecipe ? 'Publishing...' : 'Publish Recipe'}
                     </Button>
@@ -1163,10 +1357,10 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
                       </div>
                     </div>
                     <div>
-                      <Label htmlFor="ai-occasion">Occasion</Label>
+                      <Label htmlFor="ai-occasion">{aiComposerCopy.occasionLabel}</Label>
                       <Input
                         id="ai-occasion"
-                        placeholder="Weekly box, family dinner, harvest update"
+                        placeholder={aiComposerCopy.occasionPlaceholder}
                         value={aiDraft.occasion}
                         onChange={(event) =>
                           setAiDraft((previous) => ({ ...previous, occasion: event.target.value }))
@@ -1174,9 +1368,10 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
                       />
                     </div>
                     <div>
-                      <Label htmlFor="ai-notes">Product Context</Label>
+                      <Label htmlFor="ai-notes">{aiComposerCopy.notesLabel}</Label>
                       <Textarea
                         id="ai-notes"
+                        placeholder={aiComposerCopy.notesPlaceholder}
                         value={aiDraft.notes}
                         onChange={(event) =>
                           setAiDraft((previous) => ({ ...previous, notes: event.target.value }))
@@ -1184,44 +1379,24 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
                       />
                     </div>
                     <div>
-                      <Label htmlFor="ai-storage">Storage or Cooking Guidance</Label>
+                      <Label htmlFor="ai-storage">{aiComposerCopy.storageLabel}</Label>
                       <Textarea
                         id="ai-storage"
+                        placeholder={aiComposerCopy.storagePlaceholder}
                         value={aiDraft.storage_context}
                         onChange={(event) =>
                           setAiDraft((previous) => ({ ...previous, storage_context: event.target.value }))
                         }
                       />
                     </div>
-                    <div>
-                      <p className="mb-2 text-sm font-medium">Products for Context</p>
-                      {producerProducts.length === 0 ? (
-                        <p className="text-sm text-gray-600">No producer products are available for AI context.</p>
-                      ) : (
-                        <div className="grid gap-2">
-                          {producerProducts.map((product) => {
-                            const checked = aiDraft.product_ids.includes(product.id);
-                            return (
-                              <label
-                                key={product.id}
-                                className="flex cursor-pointer items-center gap-3 rounded-md border border-[#eee8dc] bg-white/70 p-2"
-                              >
-                                <Checkbox
-                                  checked={checked}
-                                  onCheckedChange={(value) => toggleAiProduct(product.id, value === true)}
-                                />
-                                <span className="text-sm">
-                                  {product.name} ({product.unit}) • £{Number(product.price).toFixed(2)}
-                                </span>
-                              </label>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
+                    {renderProductPickerSummary(
+                      'ai',
+                      aiComposerCopy.pickerTitle,
+                      aiComposerCopy.pickerDescription,
+                    )}
 	                    <Button onClick={() => void generateAiSuggestions()} disabled={generatingAi} className="w-full">
 	                      <Sparkles className="mr-2 size-4" />
-	                      {generatingAi ? 'Generating...' : 'Generate 2 Suggestions'}
+	                      {generatingAi ? 'Generating...' : aiComposerCopy.button}
 	                    </Button>
 	                  </div>
 	                )}
@@ -1244,7 +1419,7 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
 	                      className="flex-1 justify-center border-[#b89573] text-[#6f4b2f] hover:bg-[#f7efe7]"
 	                    >
 	                      <Sparkles className="mr-2 size-4" />
-	                      Full refresh
+	                      Random generate
 	                    </Button>
 	                  </div>
 	                )}
@@ -1390,6 +1565,16 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
 	                                ? 'View Full Recipe'
 	                                : 'View Full Story'}
 	                          </Button>
+	                          <Button
+	                            variant="ghost"
+	                            size="sm"
+	                            className="text-[#6a4f45] hover:bg-[#f3eee5] hover:text-[#4b382f]"
+	                            disabled={activeReportKey === key}
+	                            onClick={() => void reportContentEntry(entry)}
+	                          >
+	                            <Flag className="mr-2 size-4" />
+	                            {activeReportKey === key ? 'Reporting...' : 'Report'}
+	                          </Button>
 	                          {isRecipe && isBuyer && (
 	                            <Button
 	                              size="sm"
@@ -1475,6 +1660,66 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
 	          </section>
 	        )}
       </main>
+      <Dialog open={productPickerTarget !== null} onOpenChange={(open) => !open && setProductPickerTarget(null)}>
+        <DialogContent className="max-h-[min(88vh,760px)] max-w-3xl overflow-hidden p-0">
+          <DialogHeader className="border-b border-[#eee8dc] px-6 py-5">
+            <DialogTitle>
+              {productPickerTarget === 'recipe' ? 'Select Linked Products' : aiComposerCopy.pickerTitle}
+            </DialogTitle>
+            <DialogDescription>
+              Choose from your full producer catalogue. The page will only show the products you select here.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="max-h-[52vh] overflow-y-auto px-6 py-4">
+            {producerProducts.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-[#d9d0c0] bg-[#fffefa] px-4 py-8 text-center text-sm text-gray-600">
+                No producer products are available.
+              </div>
+            ) : (
+              <div className="grid gap-2 sm:grid-cols-2">
+                {producerProducts.map((product) => {
+                  const checked = productPickerSelectedIds.includes(product.id);
+                  return (
+                    <label
+                      key={product.id}
+                      className="flex cursor-pointer items-start gap-3 rounded-2xl border border-[#eee8dc] bg-[#fffefa] p-3 transition-colors hover:border-[var(--forest-green)]"
+                    >
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={(value) => {
+                          if (!productPickerTarget) {
+                            return;
+                          }
+                          setProductSelection(productPickerTarget, product.id, value === true);
+                        }}
+                        aria-label={`Select ${product.name}`}
+                      />
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-medium text-[var(--rich-soil)]">
+                          {product.name}
+                        </span>
+                        <span className="mt-1 block text-xs text-gray-600">
+                          {product.unit} • £{Number(product.price).toFixed(2)} • {Number(product.stock_quantity).toFixed(0)} available
+                        </span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="border-t border-[#eee8dc] px-6 py-4">
+            <div className="mr-auto text-sm text-gray-600">
+              {productPickerSelectedIds.length} selected
+            </div>
+            <Button type="button" onClick={() => setProductPickerTarget(null)}>
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

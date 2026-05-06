@@ -15,12 +15,15 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { Filter, X, Plus, Minus, AlertCircle, AlertTriangle, Star } from 'lucide-react';
+import { ArrowLeft, Filter, X, Plus, Minus, AlertCircle, AlertTriangle, Flag, Heart, MapPin, Star, Store } from 'lucide-react';
 import { toast } from 'sonner';
 import { Product, UserRole } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 import { fetchCategories, fetchProducts } from '../api/catalog';
+import { apiJson } from '../lib/api';
+import { fuzzyIncludes } from '../lib/fuzzySearch';
+import { fetchMyModerationReportStatus, reportModerationTarget } from '../lib/moderation';
 import { getQuantityCapForRole, isBulkBuyerRole, isBuyerRole } from '../lib/ordering';
 import { getDashboardPathForRole } from '../lib/roleRouting';
 import { Button } from '../components/ui/button';
@@ -32,7 +35,6 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '../c
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Skeleton } from '../components/ui/skeleton';
 import { AvailabilityBadge, OrganicBadge, SurplusBadge } from '../components/ProductBadges';
-import { SurplusInfo } from '../components/SurplusInfo';
 import { Card, CardContent } from '../components/ui/card';
 import { SiteHeader } from '../components/SiteHeader';
 import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs';
@@ -60,6 +62,20 @@ type SortOption = 'relevance' | 'price-low' | 'price-high' | 'nearest' | 'harves
 type ViewMode = 'all' | 'surplus';
 type PriceFilter = 'any' | 'under-3' | '3-to-6' | 'over-6';
 
+export interface MarketplaceProducer {
+  id: number;
+  user_id?: number;
+  business_name: string;
+  contact_email?: string;
+  phone?: string;
+  postcode?: string;
+  lead_time_hours?: number;
+}
+
+interface MarketplacePageProps {
+  producerScopeId?: string;
+}
+
 function getPriceBounds(priceFilter: PriceFilter): { minPrice?: number; maxPrice?: number } {
   switch (priceFilter) {
     case 'under-3':
@@ -82,12 +98,13 @@ function getPriceBounds(priceFilter: PriceFilter): { minPrice?: number; maxPrice
  * Keep role checks, API coordination, and cross-page side effects visible here
  * so future contributors can trace behavior during sprint reviews.
  */
-export function MarketplacePage() {
+export function MarketplacePage({ producerScopeId }: MarketplacePageProps = {}) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const { addToCartAndWait, getProductCartQuantity, prepareSingleItemCheckout, undoLastAdd } = useCart();
   const [products, setProducts] = useState<Product[]>([]);
+  const [producers, setProducers] = useState<MarketplaceProducer[]>([]);
   const [categories, setCategories] = useState<string[]>(fallbackCategories);
   const [searchQuery, setSearchQuery] = useState(() => searchParams.get('q') || '');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(() => searchParams.get('q') || '');
@@ -103,7 +120,12 @@ export function MarketplacePage() {
   const [viewMode, setViewMode] = useState<ViewMode>('all');
   const [excludedAllergens, setExcludedAllergens] = useState<string[]>([]);
   const [reloadKey, setReloadKey] = useState(0);
+  const [producerFavorite, setProducerFavorite] = useState(false);
+  const [producerFavoriteSaving, setProducerFavoriteSaving] = useState(false);
+  const [producerReported, setProducerReported] = useState(false);
+  const [producerReporting, setProducerReporting] = useState(false);
   const isBulkBuyer = isBulkBuyerRole(user?.role);
+  const queryFromUrl = searchParams.get('q') || '';
 
   useEffect(() => {
     let mounted = true;
@@ -130,6 +152,24 @@ export function MarketplacePage() {
 
   useEffect(() => {
     let mounted = true;
+    apiJson<MarketplaceProducer[]>('/api/orders/producers/')
+      .then((payload) => {
+        if (mounted) {
+          setProducers(payload);
+        }
+      })
+      .catch(() => {
+        if (mounted) {
+          setProducers([]);
+        }
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
     setIsLoading(true);
     setHasError(false);
 
@@ -142,6 +182,7 @@ export function MarketplacePage() {
       organic: showOnlyOrganic ? true : undefined,
       minPrice,
       maxPrice,
+      producerId: producerScopeId,
     })
       .then((apiProducts) => {
         if (mounted) {
@@ -163,7 +204,7 @@ export function MarketplacePage() {
     return () => {
       mounted = false;
     };
-  }, [debouncedSearchQuery, selectedCategories, showOnlyOrganic, priceFilter, reloadKey]);
+  }, [debouncedSearchQuery, selectedCategories, showOnlyOrganic, priceFilter, producerScopeId, reloadKey]);
 
   // Auto-sort by "ending soon" when on Surplus tab (H)
   useEffect(() => {
@@ -196,16 +237,12 @@ export function MarketplacePage() {
   }, [searchQuery]);
 
   useEffect(() => {
-    const nextQuery = searchParams.get('q') || '';
-    if (nextQuery !== searchQuery) {
-      setSearchQuery(nextQuery);
-      setDebouncedSearchQuery(nextQuery);
-    }
-  }, [searchParams, searchQuery]);
+    setSearchQuery((current) => (current === queryFromUrl ? current : queryFromUrl));
+    setDebouncedSearchQuery((current) => (current === queryFromUrl ? current : queryFromUrl));
+  }, [queryFromUrl]);
 
   useEffect(() => {
-    const currentQuery = searchParams.get('q') || '';
-    if (currentQuery === debouncedSearchQuery) {
+    if (queryFromUrl === debouncedSearchQuery) {
       return;
     }
 
@@ -216,7 +253,7 @@ export function MarketplacePage() {
       nextParams.delete('q');
     }
     setSearchParams(nextParams, { replace: true });
-  }, [debouncedSearchQuery, searchParams, setSearchParams]);
+  }, [debouncedSearchQuery, queryFromUrl, searchParams, setSearchParams]);
 
   // Show skeleton briefly on local filter/sort changes.
   useEffect(() => {
@@ -258,6 +295,43 @@ export function MarketplacePage() {
   // Sort products (H - improved clarity)
   const sortedProducts = useMemo(() => {
     const sorted = [...filteredProducts];
+    const query = debouncedSearchQuery.trim().toLowerCase();
+    const relevanceScore = (product: Product) => {
+      let score = 0;
+
+      if (query) {
+        const name = product.name.toLowerCase();
+        const category = product.category.toLowerCase();
+        const producer = product.producerName.toLowerCase();
+        const description = product.description.toLowerCase();
+        if (name === query) score += 120;
+        if (name.startsWith(query)) score += 90;
+        if (fuzzyIncludes(query, [product.name])) score += 70;
+        if (fuzzyIncludes(query, [product.category])) score += 45;
+        if (fuzzyIncludes(query, [product.producerName])) score += 40;
+        if (fuzzyIncludes(query, [product.producerLocation, product.producerPostcode])) score += 28;
+        if (description.includes(query)) score += 24;
+        if (category.includes(query) || producer.includes(query)) score += 18;
+      }
+
+      if (product.availability !== 'unavailable' && product.stock > 0) score += 35;
+      if (product.availability === 'in-season') score += 12;
+      if (product.isOrganic) score += 8;
+      if (product.isSurplus) score += 6;
+      score += Math.min(product.reviewCount || 0, 8) * 4;
+      score += Math.min(product.verifiedReviewCount || 0, 5) * 3;
+      score += (product.averageRating || 0) * 5;
+      if (Number.isFinite(product.foodMiles)) {
+        score -= Math.min(product.foodMiles, 30) * 0.35;
+      }
+      const harvestAgeDays = Math.max(
+        0,
+        (Date.now() - new Date(product.harvestDate).getTime()) / 86_400_000,
+      );
+      score += Math.max(0, 5 - harvestAgeDays);
+      return score;
+    };
+
     switch (sortBy) {
       case 'price-low':
         return sorted.sort((a, b) => a.price - b.price);
@@ -275,9 +349,99 @@ export function MarketplacePage() {
         });
       case 'relevance':
       default:
-        return sorted;
+        return sorted.sort((a, b) => {
+          const scoreDelta = relevanceScore(b) - relevanceScore(a);
+          if (scoreDelta !== 0) {
+            return scoreDelta;
+          }
+          const distanceDelta = a.foodMiles - b.foodMiles;
+          if (distanceDelta !== 0) {
+            return distanceDelta;
+          }
+          return a.name.localeCompare(b.name);
+        });
     }
-  }, [filteredProducts, sortBy]);
+  }, [filteredProducts, sortBy, debouncedSearchQuery]);
+
+  const matchingProducers = useMemo(() => {
+    if (producerScopeId) {
+      return [];
+    }
+    const query = debouncedSearchQuery.trim().toLowerCase();
+    if (!query) {
+      return [];
+    }
+    const productProducerIds = new Set(
+      products
+        .filter((product) => fuzzyIncludes(query, [product.producerName, product.producerLocation, product.producerPostcode]))
+        .map((product) => product.producerId),
+    );
+    return producers
+      .filter((producer) => {
+        const textMatch = fuzzyIncludes(query, [producer.business_name, producer.postcode, producer.contact_email]);
+        return textMatch || productProducerIds.has(String(producer.id));
+      })
+      .slice(0, 3);
+  }, [debouncedSearchQuery, producers, products, producerScopeId]);
+
+  const scopedProducer = useMemo(() => {
+    if (!producerScopeId) {
+      return null;
+    }
+    return producers.find((producer) => String(producer.id) === producerScopeId) || null;
+  }, [producers, producerScopeId]);
+
+  const scopedProducerProduct = products.find((product) => product.producerId === producerScopeId);
+  const scopedProducerName =
+    scopedProducer?.business_name || scopedProducerProduct?.producerName || (isLoading ? 'Loading producer' : 'Producer unavailable');
+  const scopedProducerUserId =
+    scopedProducer?.user_id === undefined || scopedProducer?.user_id === null
+      ? scopedProducerProduct?.producerUserId
+      : String(scopedProducer.user_id);
+
+  useEffect(() => {
+    if (!user || !producerScopeId) {
+      setProducerFavorite(false);
+      return;
+    }
+    let mounted = true;
+    apiJson<{ is_favorite?: boolean; is_favourite?: boolean }>(`/api/orders/producers/${producerScopeId}/favorite/`)
+      .then((status) => {
+        if (mounted) {
+          setProducerFavorite(Boolean(status.is_favorite ?? status.is_favourite));
+        }
+      })
+      .catch(() => {
+        if (mounted) {
+          setProducerFavorite(false);
+        }
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [producerScopeId, user]);
+
+  useEffect(() => {
+    if (!user || !scopedProducerUserId) {
+      setProducerReported(false);
+      return;
+    }
+    let mounted = true;
+    fetchMyModerationReportStatus('producer_account', scopedProducerUserId)
+      .then((status) => {
+        if (mounted) {
+          setProducerReported(Boolean(status.reported));
+        }
+      })
+      .catch(() => {
+        if (mounted) {
+          setProducerReported(false);
+        }
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [scopedProducerUserId, user]);
 
   const handleCategoryToggle = (category: string) => {
     if (category === 'All') {
@@ -440,6 +604,52 @@ export function MarketplacePage() {
   const retryLoad = () => {
     setHasError(false);
     setReloadKey((value) => value + 1);
+  };
+
+  const handleToggleProducerFavorite = async () => {
+    if (!user) {
+      navigate('/login');
+      return;
+    }
+    if (!producerScopeId || producerFavoriteSaving) {
+      return;
+    }
+    setProducerFavoriteSaving(true);
+    try {
+      if (producerFavorite) {
+        await apiJson<null>(`/api/orders/producers/${producerScopeId}/favorite/`, { method: 'DELETE' });
+        setProducerFavorite(false);
+        toast.success('Producer removed from saved producers.');
+      } else {
+        await apiJson<{ is_favorite?: boolean }>(`/api/orders/producers/${producerScopeId}/favorite/`, { method: 'POST' });
+        setProducerFavorite(true);
+        toast.success('Producer saved.');
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to update saved producer.');
+    } finally {
+      setProducerFavoriteSaving(false);
+    }
+  };
+
+  const handleReportProducer = async () => {
+    if (!user) {
+      navigate('/login');
+      return;
+    }
+    if (!scopedProducerUserId || producerReporting || producerReported) {
+      return;
+    }
+    setProducerReporting(true);
+    try {
+      await reportModerationTarget('producer_account', scopedProducerUserId, `Reported producer from marketplace page: ${scopedProducerName}`);
+      setProducerReported(true);
+      toast.success('Producer reported for moderation.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to report producer.');
+    } finally {
+      setProducerReporting(false);
+    }
   };
 
 /**
@@ -638,7 +848,11 @@ export function MarketplacePage() {
         showSearch
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
-        searchPlaceholder="Search products, producers, categories... (Press / to focus)"
+        searchPlaceholder={
+          producerScopeId
+            ? `Search ${scopedProducerName} products... (Press / to focus)`
+            : 'Search products, producers, categories... (Press / to focus)'
+        }
       />
 
       <div className="max-w-7xl mx-auto px-4 py-6">
@@ -658,6 +872,69 @@ export function MarketplacePage() {
 
           {/* Main Content */}
           <main className="flex-1">
+            {producerScopeId ? (
+              <Card className="mb-4 overflow-hidden border-[#dfe8d8] bg-white">
+                <CardContent className="p-5">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="flex items-start gap-4">
+                      <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-[color-mix(in_srgb,var(--forest-green)_10%,white)] text-[var(--forest-green)]">
+                        <Store className="size-5" />
+                      </span>
+                      <div className="min-w-0">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="-ml-3 mb-2"
+                          onClick={() => navigate('/marketplace')}
+                        >
+                          <ArrowLeft className="size-4" />
+                          Back to marketplace
+                        </Button>
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[oklch(0.42_0.07_145)]">
+                          Producer marketplace
+                        </p>
+                        <h1 className="mt-1 text-3xl font-semibold text-[oklch(0.23_0.03_145)]">{scopedProducerName}</h1>
+                        <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-600">
+                          {scopedProducerProduct?.producerDescription || `Browse every currently available product from ${scopedProducerName}.`}
+                        </p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Badge variant="outline" className="gap-1">
+                            <MapPin className="size-3" />
+                            {scopedProducer?.postcode || scopedProducerProduct?.producerPostcode || scopedProducerProduct?.producerLocation || 'Bristol'}
+                          </Badge>
+                          <Badge variant="secondary">{products.length} product{products.length === 1 ? '' : 's'}</Badge>
+                          <Badge variant="outline">{scopedProducer?.lead_time_hours || scopedProducerProduct?.producerDeliveryLeadTime || 48}h lead time</Badge>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2 lg:justify-end">
+                      <Button
+                        type="button"
+                        variant={producerFavorite ? 'default' : 'outline'}
+                        disabled={producerFavoriteSaving}
+                        onClick={handleToggleProducerFavorite}
+                      >
+                        <Heart className={`size-4 ${producerFavorite ? 'fill-current' : ''}`} />
+                        {producerFavorite ? 'Saved producer' : producerFavoriteSaving ? 'Saving...' : user ? 'Save producer' : 'Sign in to save'}
+                      </Button>
+                      {scopedProducerUserId ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={producerReporting || producerReported}
+                          onClick={handleReportProducer}
+                        >
+                          <Flag className="size-4" />
+                          {producerReported ? 'Producer reported' : producerReporting ? 'Reporting...' : 'Report'}
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : null}
+
             {isBulkBuyer && (
               <Card className="mb-4 overflow-hidden border-[oklch(0.82_0.07_145)] bg-[linear-gradient(135deg,rgba(240,248,241,0.98),rgba(255,255,255,0.96))]">
                 <CardContent className="flex flex-col gap-4 p-5 lg:flex-row lg:items-start lg:justify-between">
@@ -734,6 +1011,19 @@ export function MarketplacePage() {
               </div>
 
               <div className="flex items-center gap-3 w-full sm:w-auto">
+                {!producerScopeId && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0 focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
+                    onClick={() => navigate('/producer-search?view=saved')}
+                  >
+                    <Heart className="size-4" />
+                    Saved Producers
+                  </Button>
+                )}
+
                 {/* H) Improved Sort Dropdown */}
                 <Select
                   value={sortBy}
@@ -788,6 +1078,47 @@ export function MarketplacePage() {
                 </Sheet>
               </div>
             </div>
+
+            {matchingProducers.length > 0 ? (
+              <Card className="mb-4 border-[#dfe8d8] bg-white">
+                <CardContent className="p-4">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-[oklch(0.24_0.03_145)]">Producer matches</p>
+                      <p className="text-xs text-gray-500">Open a producer to view all products from that business.</p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => navigate(`/producer-search?q=${encodeURIComponent(debouncedSearchQuery)}`)}
+                    >
+                      Show more
+                    </Button>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    {matchingProducers.map((producer) => (
+                      <button
+                        key={producer.id}
+                        type="button"
+                        onClick={() => navigate(`/producers/${producer.id}`)}
+                        className="flex items-start gap-3 rounded-lg border border-[#e4e1d8] bg-[#fffefa] p-3 text-left transition-colors hover:border-[var(--forest-green)] hover:bg-[color-mix(in_srgb,var(--forest-green)_5%,white)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600"
+                      >
+                        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--forest-green)_10%,white)] text-[var(--forest-green)]">
+                          <Store className="size-4" />
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-semibold text-[oklch(0.24_0.03_145)]">{producer.business_name}</span>
+                          <span className="mt-1 block text-xs text-gray-500">
+                            {producer.postcode || 'Bristol'} · {producer.lead_time_hours || 48}h lead time
+                          </span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            ) : null}
 
             {/* A) Applied Filters Chips - Enhanced */}
             {activeFiltersCount > 0 && (
@@ -921,8 +1252,8 @@ export function MarketplacePage() {
             {isLoading || isFilterChanging ? (
               <div className="grid grid-cols-1 auto-rows-fr gap-6 sm:grid-cols-2 lg:grid-cols-3">
                 {Array.from({ length: 6 }).map((_, index) => (
-                  <Card key={index} className="overflow-hidden">
-                    <div className="aspect-video relative overflow-hidden bg-gray-100">
+                  <Card key={index} className="h-full overflow-hidden">
+                    <div className="relative h-44 overflow-hidden bg-gray-100 sm:h-48">
                       <Skeleton className="w-full h-full" />
                     </div>
                     <CardContent className="p-4 space-y-3">
@@ -1004,7 +1335,7 @@ export function MarketplacePage() {
  * Keep role checks, API coordination, and cross-page side effects visible here
  * so future contributors can trace behavior during sprint reviews.
  */
-function ProductCard({
+export function ProductCard({
   product,
   handleAddToCart,
   handleBuyNow,
@@ -1071,19 +1402,19 @@ function ProductCard({
 
   return (
     <Card
-      className="group h-full gap-0 overflow-hidden cursor-pointer hover:shadow-lg transition-shadow focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
+      className="group flex h-full min-h-[31rem] cursor-pointer flex-col gap-0 overflow-hidden transition-shadow hover:shadow-lg focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
       onClick={() => navigate(`/product/${product.id}`)}
       tabIndex={0}
       onKeyDown={(e) => e.key === 'Enter' && navigate(`/product/${product.id}`)}
     >
-      {/* E) Standardized card structure */}
-      <div className="relative h-56 overflow-hidden bg-[linear-gradient(180deg,#f8faf8_0%,#edf3ea_100%)] sm:h-60">
+      {/* product cards keep fixed sections so all rows line up */}
+      <div className="relative h-36 shrink-0 overflow-hidden bg-[linear-gradient(180deg,#f8faf8_0%,#edf3ea_100%)] sm:h-40">
         <img
           src={product.imageUrl}
           alt={product.name}
           className="h-full w-full object-cover object-center transition-transform duration-300 group-hover:scale-[1.03]"
         />
-        {/* Badges row (consistent position) */}
+        {/* badges stay over image so text area height does not change */}
         <div className="absolute right-3 top-3 flex flex-col gap-1">
           <AvailabilityBadge availability={product.availability} />
           {product.isOrganic && <OrganicBadge />}
@@ -1091,14 +1422,13 @@ function ProductCard({
         </div>
       </div>
 
-      <CardContent className="flex flex-1 flex-col justify-between px-4 pb-3.5 pt-4">
-          {/* Title and allergen warning stay compact so cards remain equal height. */}
-          <div className="space-y-2">
+      <CardContent className="flex min-h-0 flex-1 flex-col justify-between px-4 pb-3.5 pt-4">
+          {/* top details get a minimum height so price row does not jump */}
+          <div className="min-h-[9.5rem] space-y-1.5">
           <div className="mb-1 flex items-start gap-2">
             <h3 className="line-clamp-2 flex-1 font-semibold leading-tight">{product.name}</h3>
             {hasAllergens && (
-              /* The card shows only a warning icon; the full allergen text is
-                 available on hover/focus so product cards stay visually tidy. */
+              /* warning icon keep cards tidy but still gives allergen context */
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
@@ -1118,11 +1448,21 @@ function ProductCard({
             )}
           </div>
 
-          {/* Producer */}
-          <p className="mb-1 line-clamp-1 text-sm text-gray-600">{product.producerName}</p>
-          <p className="mb-2 line-clamp-1 text-xs text-gray-500">{product.category}</p>
+          {/* producer name is clickable without opening the product card */}
+          <button
+            type="button"
+            className="mb-1 line-clamp-1 text-left text-sm font-medium text-[var(--forest-green)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600"
+            onClick={(event) => {
+              event.stopPropagation();
+              navigate(`/producers/${product.producerId}`);
+            }}
+            onKeyDown={(event) => event.stopPropagation()}
+          >
+            {product.producerName}
+          </button>
+          <p className="line-clamp-1 text-xs text-gray-500">{product.category}</p>
 
-          {/* Bulk-buyer cards use badges to shorten dense logistics metadata. */}
+          {/* bulk buyers see compact supply metadata because they compare many items */}
           {isBulkBuyer ? (
             <div className="space-y-1.5 text-xs text-gray-600">
               <div className="flex flex-wrap items-center gap-2">
@@ -1143,14 +1483,16 @@ function ProductCard({
               </p>
             </div>
           ) : (
-            <div className="space-y-1 text-xs text-gray-600">
-              <p className="line-clamp-1">{product.producerLocation} • Food Miles: {product.foodMiles.toFixed(2)} miles • Go Green</p>
-              <p className="line-clamp-1">
-                {new Date(product.harvestDate).toDateString() === new Date().toDateString()
-                  ? 'Harvested today'
-                  : 'Harvested this week'}
-              </p>
-              <p className="line-clamp-1 font-medium text-green-700">Available: {product.seasonalDates || 'Current season'}</p>
+            <div className="flex flex-wrap items-center gap-1.5 text-xs text-gray-600">
+              <Badge variant="outline" className="px-2 py-0.5 text-[11px] font-medium">
+                {product.producerLocation}
+              </Badge>
+              <Badge variant="outline" className="px-2 py-0.5 text-[11px] font-medium">
+                {product.foodMiles.toFixed(1)} mi
+              </Badge>
+              <Badge variant="secondary" className="px-2 py-0.5 text-[11px] font-medium">
+                {product.seasonalDates || 'Current season'}
+              </Badge>
             </div>
           )}
           {product.averageRating !== undefined && product.reviewCount ? (
@@ -1162,36 +1504,43 @@ function ProductCard({
               <span className="text-gray-500">
                 {product.reviewCount} review{product.reviewCount === 1 ? '' : 's'}
               </span>
-              {product.verifiedReviewCount ? (
-                <span className="text-gray-500">{product.verifiedReviewCount} verified</span>
-              ) : null}
             </div>
           ) : (
             <p className="mt-2 min-h-5 text-sm text-gray-500">No customer ratings yet</p>
           )}
         </div>
 
-        <div className="space-y-2.5 pt-2">
+        <div className="space-y-2.5 pt-3">
           {!isAvailable && (
             <Badge variant="secondary" className="text-xs">
               Out of stock
             </Badge>
           )}
 
-          {/* Price and quantity share one row to avoid the large vertical gaps
-              that previously made users scroll within a single product card. */}
+          {/* price and quantity share one row so card bottoms stay even */}
           <div className="space-y-1">
             <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3">
               {product.isSurplus && product.surplusDiscount && product.surplusOriginalPrice && product.surplusExpiresAt && product.surplusBestBefore ? (
-                <div className="min-w-0 flex-1">
-                  <SurplusInfo
-                    discount={product.surplusDiscount}
-                    originalPrice={product.surplusOriginalPrice}
-                    currentPrice={product.price}
-                    expiresAt={product.surplusExpiresAt}
-                    bestBefore={product.surplusBestBefore}
-                    unit={product.unit}
-                  />
+                <div className="min-w-0 space-y-1">
+                  {/* surplus labels sit above price so price baseline matches normal cards */}
+                  <div className="flex flex-wrap gap-1 text-[11px] text-gray-600">
+                    <Badge variant="destructive" className="px-2 py-0.5 text-[11px] font-semibold">
+                      {product.surplusDiscount}% off
+                    </Badge>
+                    <Badge variant="outline" className="px-2 py-0.5 text-[11px]">
+                      Ends {new Date(product.surplusExpiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                    </Badge>
+                    <Badge variant="outline" className="px-2 py-0.5 text-[11px]">
+                      Best before {product.surplusBestBefore}
+                    </Badge>
+                  </div>
+                  <div className="flex min-w-0 flex-wrap items-baseline gap-2">
+                    <span className="text-lg font-semibold text-green-700">£{product.price.toFixed(2)}</span>
+                    <span className="text-sm text-gray-500">/{product.unit}</span>
+                    <span className="text-xs text-gray-500 line-through">
+                      £{product.surplusOriginalPrice.toFixed(2)}/{product.unit}
+                    </span>
+                  </div>
                 </div>
               ) : (
                 <div className="flex min-w-0 items-baseline gap-1">
@@ -1304,11 +1653,6 @@ function ProductCard({
                   {activeAction === 'buy' ? 'Preparing...' : 'Buy now'}
                 </Button>
               </div>
-              {isBulkBuyer && (
-                <p className="text-xs text-gray-500">
-                  Large-order mode. Each product is capped by the producer&apos;s live available stock.
-                </p>
-              )}
             </div>
           )}
         </div>

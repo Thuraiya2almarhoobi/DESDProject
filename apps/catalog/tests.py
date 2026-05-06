@@ -224,6 +224,21 @@ class ProductApiTests(APITestCase):
         self.assertEqual(len(response.data), 1)
         self.assertEqual(response.data[0]["name"], "Organic Tomatoes")
 
+    def test_products_support_typo_tolerant_search(self):
+        tomato_response = self.client.get("/api/products", {"search": "tomatos"})
+        self.assertEqual(tomato_response.status_code, 200)
+        self.assertEqual(len(tomato_response.data), 1)
+        self.assertEqual(tomato_response.data[0]["name"], "Organic Tomatoes")
+
+        producer_response = self.client.get("/api/products", {"search": "gren valey"})
+        self.assertEqual(producer_response.status_code, 200)
+        self.assertEqual(len(producer_response.data), 1)
+        self.assertEqual(producer_response.data[0]["name"], "Organic Tomatoes")
+
+        empty_response = self.client.get("/api/products", {"search": "zzzz"})
+        self.assertEqual(empty_response.status_code, 200)
+        self.assertEqual(len(empty_response.data), 0)
+
     def test_products_support_organic_boolean_filter_values(self):
         organic_response = self.client.get("/api/products", {"organic": "true"})
         self.assertEqual(organic_response.status_code, 200)

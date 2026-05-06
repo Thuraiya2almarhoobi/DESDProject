@@ -15,11 +15,25 @@ Implementation notes:
     the code itself.
 """
 
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.validators import URLValidator
 from rest_framework import serializers
 
 from apps.orders.models import Producer, Product
 
 from .models import FarmStory, GeneratedContentSuggestion, Recipe, RecipeProduct, SavedRecipe
+
+url_validator = URLValidator(schemes=["http", "https"])
+
+
+def _validate_optional_url(value: str) -> str:
+    normalized = (value or "").strip()
+    if normalized:
+        try:
+            url_validator(normalized)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError("Image URL must start with http:// or https://.") from exc
+    return normalized
 
 
 class RecipeProductMiniSerializer(serializers.ModelSerializer):
@@ -81,6 +95,29 @@ class RecipeSerializer(serializers.ModelSerializer):
             return False
         return SavedRecipe.objects.filter(user=request.user, recipe=obj).exists()
 
+    def validate(self, attrs):
+        if self.instance is None:
+            product_ids = attrs.get("product_ids") or []
+            if not product_ids:
+                raise serializers.ValidationError({"product_ids": "Link at least one product to the recipe."})
+        errors = {}
+        text_rules = {
+            "title": (3, 1, "Recipe title must be at least 3 characters."),
+            "description": (10, 3, "Recipe description must include a short customer-facing summary."),
+            "ingredients": (10, 3, "Ingredients must include enough detail for the recipe."),
+            "instructions": (15, 8, "Cooking instructions must include enough detail for a customer to follow them."),
+        }
+        for field, (min_chars, min_words, message) in text_rules.items():
+            value = str(attrs.get(field, getattr(self.instance, field, "") if self.instance else "") or "").strip()
+            if len(value) < min_chars or len(value.split()) < min_words:
+                errors[field] = message
+        if errors:
+            raise serializers.ValidationError(errors)
+        return attrs
+
+    def validate_image_url(self, value: str) -> str:
+        return _validate_optional_url(value)
+
     def create(self, validated_data):
         product_ids = validated_data.pop("product_ids", [])
         recipe = super().create(validated_data)
@@ -127,6 +164,23 @@ class FarmStorySerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = ["created_at"]
+
+    def validate(self, attrs):
+        errors = {}
+        text_rules = {
+            "title": (3, 1, "Story title must be at least 3 characters."),
+            "body": (20, 12, "Farm story body must include at least twelve words."),
+        }
+        for field, (min_chars, min_words, message) in text_rules.items():
+            value = str(attrs.get(field, getattr(self.instance, field, "") if self.instance else "") or "").strip()
+            if len(value) < min_chars or len(value.split()) < min_words:
+                errors[field] = message
+        if errors:
+            raise serializers.ValidationError(errors)
+        return attrs
+
+    def validate_image_url(self, value: str) -> str:
+        return _validate_optional_url(value)
 
 
 class GeneratedContentSuggestionSerializer(serializers.ModelSerializer):

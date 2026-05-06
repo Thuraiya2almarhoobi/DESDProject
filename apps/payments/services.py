@@ -21,13 +21,14 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import requests
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
-from apps.orders.models import Order, PaymentTransaction
+from apps.orders.models import Order, PaymentTransaction, ProducerSubOrder
 from apps.orders.services import (
     clear_checked_out_cart_items,
     create_order_notifications,
@@ -49,6 +50,7 @@ STRIPE_FAILURE_EVENT_TYPES = {
     "checkout.session.async_payment_failed",
     "checkout.session.expired",
 }
+STRIPE_CHECKOUT_SESSION_ID_PLACEHOLDER = "{CHECKOUT_SESSION_ID}"
 
 
 @dataclass(frozen=True)
@@ -259,8 +261,43 @@ def _build_stripe_line_items(order: Order) -> list[dict[str, Any]]:
     return line_items
 
 
+def _absolute_http_url(value: str | None) -> str | None:
+    if not value:
+        return None
+    parsed = urlsplit(value.strip())
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return None
+    return value.strip()
+
+
+def _success_url_with_session_placeholder(url: str) -> str:
+    if STRIPE_CHECKOUT_SESSION_ID_PLACEHOLDER in url:
+        return url
+
+    parsed = urlsplit(url)
+    query = parse_qsl(parsed.query, keep_blank_values=True)
+    query.append(("session_id", STRIPE_CHECKOUT_SESSION_ID_PLACEHOLDER))
+    encoded_query = urlencode(query).replace("%7BCHECKOUT_SESSION_ID%7D", STRIPE_CHECKOUT_SESSION_ID_PLACEHOLDER)
+    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, encoded_query, parsed.fragment))
+
+
+def _stripe_checkout_redirect_urls(
+    *,
+    success_url: str | None = None,
+    cancel_url: str | None = None,
+) -> tuple[str, str]:
+    resolved_success_url = _absolute_http_url(success_url) or settings.STRIPE_SUCCESS_URL
+    resolved_cancel_url = _absolute_http_url(cancel_url) or settings.STRIPE_CANCEL_URL
+    return _success_url_with_session_placeholder(resolved_success_url), resolved_cancel_url
+
+
 @transaction.atomic
-def create_stripe_checkout_session_for_order(order: Order) -> StripeCheckoutSessionResult:
+def create_stripe_checkout_session_for_order(
+    order: Order,
+    *,
+    success_url: str | None = None,
+    cancel_url: str | None = None,
+) -> StripeCheckoutSessionResult:
     """
     Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
 
@@ -273,6 +310,11 @@ def create_stripe_checkout_session_for_order(order: Order) -> StripeCheckoutSess
     if order.payment_status == Order.PaymentStatus.PAID:
         raise ValueError("Order is already paid.")
 
+    redirect_success_url, redirect_cancel_url = _stripe_checkout_redirect_urls(
+        success_url=success_url,
+        cancel_url=cancel_url,
+    )
+
     session = _payment_service_request(
         "/stripe/checkout-sessions",
         {
@@ -283,8 +325,8 @@ def create_stripe_checkout_session_for_order(order: Order) -> StripeCheckoutSess
                 "order_id": str(order.id),
                 "order_number": order.order_number,
             },
-            "success_url": settings.STRIPE_SUCCESS_URL,
-            "cancel_url": settings.STRIPE_CANCEL_URL,
+            "success_url": redirect_success_url,
+            "cancel_url": redirect_cancel_url,
         },
     )
 
@@ -709,7 +751,7 @@ def process_weekly_settlements(reference_date: date | None = None) -> list[Weekl
     # grouped by supplier, a 5% platform commission is retained, and the net 95%
     # becomes the producer payout for that weekly settlement.
     week_range = get_previous_week_range(reference_date)
-    candidate_orders = (
+    legacy_orders = (
         ProducerOrder.objects.select_related("producer")
         .filter(
             status=OrderStatus.DELIVERED,
@@ -719,15 +761,34 @@ def process_weekly_settlements(reference_date: date | None = None) -> list[Weekl
         )
         .order_by("producer_id", "delivery_date", "id")
     )
+    marketplace_sub_orders = (
+        ProducerSubOrder.objects.select_related("producer__user", "order", "order__customer")
+        .filter(
+            status=Order.Status.DELIVERED,
+            settlement_processed=False,
+            order__payment_status=Order.PaymentStatus.PAID,
+            delivery_date__gte=week_range.start,
+            delivery_date__lte=week_range.end,
+            producer__user__isnull=False,
+        )
+        .order_by("producer__user_id", "delivery_date", "id")
+    )
 
-    by_producer: dict[int, list[ProducerOrder]] = {}
-    for order in candidate_orders:
-        by_producer.setdefault(order.producer_id, []).append(order)
+    by_producer: dict[int, dict[str, list]] = {}
+    for order in legacy_orders:
+        by_producer.setdefault(order.producer_id, {"legacy": [], "marketplace": []})["legacy"].append(order)
+    for sub_order in marketplace_sub_orders:
+        by_producer.setdefault(sub_order.producer.user_id, {"legacy": [], "marketplace": []})["marketplace"].append(sub_order)
 
     settlements: list[WeeklySettlement] = []
 
-    for producer_id, orders in by_producer.items():
-        gross_total = _money(sum((order.total_value for order in orders), Decimal("0.00")))
+    for producer_id, rows in by_producer.items():
+        orders = rows["legacy"]
+        sub_orders = rows["marketplace"]
+        gross_total = _money(
+            sum((order.total_value for order in orders), Decimal("0.00"))
+            + sum((sub_order.subtotal_amount for sub_order in sub_orders), Decimal("0.00"))
+        )
         commission_total = _money(gross_total * COMMISSION_RATE)
         net_total = _money(gross_total - commission_total)
 
@@ -761,6 +822,18 @@ def process_weekly_settlements(reference_date: date | None = None) -> list[Weekl
             )
             order.settlement_processed = True
             order.save(update_fields=["settlement_processed", "updated_at"])
+
+        for sub_order in sub_orders:
+            SettlementOrderLine.objects.create(
+                settlement=settlement,
+                sub_order=sub_order,
+                customer_name=(sub_order.order.customer.email or "Customer"),
+                gross_amount=sub_order.subtotal_amount,
+                commission_amount=sub_order.commission_amount,
+                net_amount=sub_order.payout_amount,
+            )
+            sub_order.settlement_processed = True
+            sub_order.save(update_fields=["settlement_processed", "updated_at"])
 
         settlements.append(settlement)
 

@@ -79,7 +79,9 @@ class AccountsRegistrationTests(APITestCase):
                     "email": "customer1@example.com",
                     "password": "StrongPass123!",
                     "confirm_password": "StrongPass123!",
-                    "full_name": "Customer One",
+                    "first_name": "Customer",
+                    "middle_name": "Demo",
+                    "last_name": "One",
                     "phone": "07111111111",
                     "delivery_address": "45 Park Street, Bristol",
                     "postcode": "BS1 5JG",
@@ -157,6 +159,9 @@ class AccountsRegistrationTests(APITestCase):
                     profile = CustomerProfile.objects.get(user=user)
                     self.assertIsNotNone(profile.default_address)
                     self.assertEqual(profile.default_address.postcode, payload["postcode"])
+                    self.assertEqual(profile.first_name, "Customer")
+                    self.assertEqual(profile.middle_name, "Demo")
+                    self.assertEqual(profile.last_name, "One")
 
                 if expected_role == User.Role.PRODUCER:
                     profile = ProducerProfile.objects.get(user=user)
@@ -286,7 +291,7 @@ class AccountsRegistrationTests(APITestCase):
         user = UserModel.objects.get(email="strong-password@example.com")
         self.assertTrue(user.check_password("VeryStrongPass#2026"))
 
-    def test_customer_registration_requires_full_name(self):
+    def test_customer_registration_requires_customer_name_fields(self):
         response = self.client.post(
             reverse("register-customer"),
             {
@@ -302,7 +307,8 @@ class AccountsRegistrationTests(APITestCase):
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("full_name", response.data)
+        self.assertIn("first_name", response.data)
+        self.assertIn("last_name", response.data)
 
     def test_registration_rejects_password_mismatch(self):
         response = self.client.post(
@@ -475,6 +481,8 @@ class AccountsEditableProfileBootstrapTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["profile"]["full_name"], "Editable Customer")
+        self.assertEqual(response.data["profile"]["first_name"], "Editable")
+        self.assertEqual(response.data["profile"]["last_name"], "Customer")
         self.assertTrue(CustomerProfile.objects.filter(user=user).exists())
 
         patch_response = self.client.patch(

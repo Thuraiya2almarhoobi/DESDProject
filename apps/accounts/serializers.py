@@ -28,9 +28,11 @@ from rest_framework import serializers
 from .models import (
     Address,
     CommunityGroupProfile,
+    compose_customer_full_name,
     CustomerProfile,
     ProducerProfile,
     RestaurantProfile,
+    split_customer_full_name,
     User,
 )
 
@@ -49,6 +51,67 @@ def _infer_city_from_address(address_line: str) -> str:
     if len(parts) >= 2:
         return parts[-1]
     return "Bristol"
+
+
+def _compose_address_lines(line1: str, line2: str) -> str:
+    return ", ".join(part.strip() for part in [line1, line2] if part and part.strip())
+
+
+PHONE_RE = re.compile(r"^(?:\+44\s?7\d{3}|\(?07\d{3}\)?|\+44\s?\d{2,4}|0\d{2,4})[\s-]?\d{3,4}[\s-]?\d{3,4}$")
+
+
+def _validate_phone_number(value: str) -> str:
+    normalized = re.sub(r"\s+", " ", str(value or "").strip().replace("(", "").replace(")", "").replace(".", ""))
+    digits = re.sub(r"\D", "", normalized)
+    if not PHONE_RE.match(normalized) or not 10 <= len(digits) <= 13:
+        raise serializers.ValidationError("Enter a valid UK phone number, for example 07123 456789 or +44 7123 456789.")
+    return normalized
+
+
+def _extract_split_address(profile_data: dict[str, Any], *, combined_key: str, line1_key: str, line2_key: str) -> tuple[str, str]:
+    combined = str(profile_data.pop(combined_key, "") or "").strip()
+    line1 = str(profile_data.pop(line1_key, "") or "").strip()
+    line2 = str(profile_data.pop(line2_key, "") or "").strip()
+    if line1:
+        return line1, line2
+    return combined, line2
+
+
+def _sync_contact_name_attrs(attrs: dict[str, Any], *, existing: Any = None, require_name: bool = False) -> dict[str, Any]:
+    contact_name = attrs.get("contact_name", getattr(existing, "contact_name", ""))
+    first_name = attrs.get("contact_first_name", getattr(existing, "contact_first_name", ""))
+    middle_name = attrs.get("contact_middle_name", getattr(existing, "contact_middle_name", ""))
+    last_name = attrs.get("contact_last_name", getattr(existing, "contact_last_name", ""))
+    split_keys_present = any(key in attrs for key in ("contact_first_name", "contact_middle_name", "contact_last_name"))
+
+    if split_keys_present:
+        if not str(first_name).strip() or not str(last_name).strip():
+            raise serializers.ValidationError(
+                {
+                    "contact_first_name": "Contact first name is required.",
+                    "contact_last_name": "Contact last name is required.",
+                }
+            )
+        attrs["contact_name"] = compose_customer_full_name(first_name, middle_name, last_name)
+        return attrs
+
+    if "contact_name" in attrs and str(contact_name).strip():
+        parsed_first, parsed_middle, parsed_last = split_customer_full_name(contact_name)
+        if require_name and (not parsed_first or not parsed_last):
+            raise serializers.ValidationError({"contact_name": "Enter at least a contact first name and last name."})
+        attrs["contact_first_name"] = parsed_first
+        attrs["contact_middle_name"] = parsed_middle
+        attrs["contact_last_name"] = parsed_last
+        return attrs
+
+    if require_name and not str(contact_name).strip():
+        raise serializers.ValidationError(
+            {
+                "contact_first_name": "Contact first name is required.",
+                "contact_last_name": "Contact last name is required.",
+            }
+        )
+    return attrs
 
 
 def _validate_password_complexity(password: str):
@@ -151,12 +214,47 @@ class CustomerProfileSerializer(_ProfileAddressValidationMixin, serializers.Mode
     It keeps related behavior grouped so the accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
     can be changed without spreading the same responsibility across unrelated files.
     """
+    full_name = serializers.CharField(required=False, allow_blank=True)
+    first_name = serializers.CharField(required=False, allow_blank=True, max_length=100)
+    middle_name = serializers.CharField(required=False, allow_blank=True, max_length=100)
+    last_name = serializers.CharField(required=False, allow_blank=True, max_length=100)
+
     class Meta:
         model = CustomerProfile
-        fields = ("full_name", "phone", "allergies_text", "preferences_text", "default_address")
+        fields = (
+            "full_name",
+            "first_name",
+            "middle_name",
+            "last_name",
+            "phone",
+            "allergies_text",
+            "preferences_text",
+            "default_address",
+        )
 
     def validate_default_address(self, value):
         return self._validate_address(value)
+
+    def validate_phone(self, value):
+        return _validate_phone_number(value)
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        instance = getattr(self, "instance", None)
+        full_name = attrs.get("full_name", getattr(instance, "full_name", ""))
+        first_name = attrs.get("first_name", getattr(instance, "first_name", ""))
+        middle_name = attrs.get("middle_name", getattr(instance, "middle_name", ""))
+        last_name = attrs.get("last_name", getattr(instance, "last_name", ""))
+        split_keys_present = any(key in attrs for key in ("first_name", "middle_name", "last_name"))
+
+        if "full_name" in attrs and not split_keys_present:
+            parsed_first, parsed_middle, parsed_last = split_customer_full_name(full_name)
+            attrs["first_name"] = parsed_first
+            attrs["middle_name"] = parsed_middle
+            attrs["last_name"] = parsed_last
+        elif any(part.strip() for part in (first_name, middle_name, last_name)):
+            attrs["full_name"] = compose_customer_full_name(first_name, middle_name, last_name)
+        return attrs
 
 
 class ProducerProfileSerializer(_ProfileAddressValidationMixin, serializers.ModelSerializer):
@@ -169,10 +267,26 @@ class ProducerProfileSerializer(_ProfileAddressValidationMixin, serializers.Mode
     """
     class Meta:
         model = ProducerProfile
-        fields = ("business_name", "contact_name", "phone", "farm_origin_text", "lead_time_hours", "address")
+        fields = (
+            "business_name",
+            "contact_name",
+            "contact_first_name",
+            "contact_middle_name",
+            "contact_last_name",
+            "phone",
+            "farm_origin_text",
+            "lead_time_hours",
+            "address",
+        )
 
     def validate_address(self, value):
         return self._validate_address(value)
+
+    def validate_phone(self, value):
+        return _validate_phone_number(value)
+
+    def validate(self, attrs):
+        return _sync_contact_name_attrs(super().validate(attrs), existing=getattr(self, "instance", None), require_name=True)
 
 
 class CommunityGroupProfileSerializer(_ProfileAddressValidationMixin, serializers.ModelSerializer):
@@ -185,10 +299,25 @@ class CommunityGroupProfileSerializer(_ProfileAddressValidationMixin, serializer
     """
     class Meta:
         model = CommunityGroupProfile
-        fields = ("organisation_name", "org_type", "contact_name", "phone", "delivery_address")
+        fields = (
+            "organisation_name",
+            "org_type",
+            "contact_name",
+            "contact_first_name",
+            "contact_middle_name",
+            "contact_last_name",
+            "phone",
+            "delivery_address",
+        )
 
     def validate_delivery_address(self, value):
         return self._validate_address(value)
+
+    def validate_phone(self, value):
+        return _validate_phone_number(value)
+
+    def validate(self, attrs):
+        return _sync_contact_name_attrs(super().validate(attrs), existing=getattr(self, "instance", None), require_name=True)
 
 
 class RestaurantProfileSerializer(_ProfileAddressValidationMixin, serializers.ModelSerializer):
@@ -201,10 +330,24 @@ class RestaurantProfileSerializer(_ProfileAddressValidationMixin, serializers.Mo
     """
     class Meta:
         model = RestaurantProfile
-        fields = ("business_name", "contact_name", "phone", "delivery_address")
+        fields = (
+            "business_name",
+            "contact_name",
+            "contact_first_name",
+            "contact_middle_name",
+            "contact_last_name",
+            "phone",
+            "delivery_address",
+        )
 
     def validate_delivery_address(self, value):
         return self._validate_address(value)
+
+    def validate_phone(self, value):
+        return _validate_phone_number(value)
+
+    def validate(self, attrs):
+        return _sync_contact_name_attrs(super().validate(attrs), existing=getattr(self, "instance", None), require_name=True)
 
 
 PROFILE_SERIALIZER_BY_ROLE = {
@@ -285,9 +428,14 @@ class CustomerRegistrationSerializer(BaseRegistrationSerializer):
     """
     user_role = User.Role.CUSTOMER
 
-    full_name = serializers.CharField(max_length=255)
+    full_name = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    first_name = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    middle_name = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    last_name = serializers.CharField(max_length=100, required=False, allow_blank=True)
     phone = serializers.CharField(max_length=30)
-    delivery_address = serializers.CharField(max_length=255)
+    delivery_address = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    delivery_address_line1 = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    delivery_address_line2 = serializers.CharField(max_length=255, required=False, allow_blank=True)
     postcode = serializers.CharField(max_length=20)
     accept_terms = serializers.BooleanField()
 
@@ -296,18 +444,54 @@ class CustomerRegistrationSerializer(BaseRegistrationSerializer):
             raise serializers.ValidationError("You must accept terms and conditions.")
         return value
 
+    def validate_phone(self, value):
+        return _validate_phone_number(value)
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        first_name = attrs.get("first_name", "")
+        middle_name = attrs.get("middle_name", "")
+        last_name = attrs.get("last_name", "")
+        full_name = attrs.get("full_name", "")
+
+        has_split_name = bool(first_name.strip() or middle_name.strip() or last_name.strip())
+        if has_split_name:
+            if not first_name.strip():
+                raise serializers.ValidationError({"first_name": "First name is required."})
+            if not last_name.strip():
+                raise serializers.ValidationError({"last_name": "Last name is required."})
+            attrs["full_name"] = compose_customer_full_name(first_name, middle_name, last_name)
+        elif full_name.strip():
+            parsed_first, parsed_middle, parsed_last = split_customer_full_name(full_name)
+            if not parsed_first or not parsed_last:
+                raise serializers.ValidationError({"full_name": "Enter at least a first name and last name."})
+            attrs["first_name"] = parsed_first
+            attrs["middle_name"] = parsed_middle
+            attrs["last_name"] = parsed_last
+        else:
+            raise serializers.ValidationError({"first_name": "First name is required.", "last_name": "Last name is required."})
+        return attrs
+
     def create_profile(self, user, profile_data):
         # Customers store delivery address data both as a reusable Address and
         # as the profile's default address reference for checkout/account pages.
-        delivery_address = profile_data.pop("delivery_address")
+        delivery_address_line1, delivery_address_line2 = _extract_split_address(
+            profile_data,
+            combined_key="delivery_address",
+            line1_key="delivery_address_line1",
+            line2_key="delivery_address_line2",
+        )
+        if not delivery_address_line1:
+            raise serializers.ValidationError({"delivery_address_line1": "Address line 1 is required."})
         postcode = profile_data.pop("postcode")
         profile_data.pop("accept_terms", None)
 
-        city = _infer_city_from_address(delivery_address)
+        city = _infer_city_from_address(_compose_address_lines(delivery_address_line1, delivery_address_line2))
         address = Address.objects.create(
             user=user,
             label="Delivery Address",
-            line1=delivery_address,
+            line1=delivery_address_line1,
+            line2=delivery_address_line2,
             city=city,
             postcode=postcode,
             is_default=True,
@@ -327,25 +511,44 @@ class ProducerRegistrationSerializer(BaseRegistrationSerializer):
     user_role = User.Role.PRODUCER
 
     business_name = serializers.CharField(max_length=255)
-    contact_name = serializers.CharField(max_length=255)
+    contact_name = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    contact_first_name = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    contact_middle_name = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    contact_last_name = serializers.CharField(max_length=100, required=False, allow_blank=True)
     phone = serializers.CharField(max_length=30)
-    business_address = serializers.CharField(max_length=255)
+    business_address = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    business_address_line1 = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    business_address_line2 = serializers.CharField(max_length=255, required=False, allow_blank=True)
     postcode = serializers.CharField(max_length=20)
     farm_origin_text = serializers.CharField(required=False, allow_blank=True)
     lead_time_hours = serializers.IntegerField(required=False, min_value=1, default=48)
+
+    def validate_phone(self, value):
+        return _validate_phone_number(value)
+
+    def validate(self, attrs):
+        return _sync_contact_name_attrs(super().validate(attrs), require_name=True)
 
     def create_profile(self, user, profile_data):
         # Producer registration captures the business address and lead time used
         # later by product pages, delivery-date validation, and producer profile
         # editing.
-        business_address = profile_data.pop("business_address")
+        business_address_line1, business_address_line2 = _extract_split_address(
+            profile_data,
+            combined_key="business_address",
+            line1_key="business_address_line1",
+            line2_key="business_address_line2",
+        )
+        if not business_address_line1:
+            raise serializers.ValidationError({"business_address_line1": "Address line 1 is required."})
         postcode = profile_data.pop("postcode")
 
-        city = _infer_city_from_address(business_address)
+        city = _infer_city_from_address(_compose_address_lines(business_address_line1, business_address_line2))
         address = Address.objects.create(
             user=user,
             label="Business Address",
-            line1=business_address,
+            line1=business_address_line1,
+            line2=business_address_line2,
             city=city,
             postcode=postcode,
             is_default=True,
@@ -366,22 +569,41 @@ class CommunityRegistrationSerializer(BaseRegistrationSerializer):
 
     organisation_name = serializers.CharField(max_length=255)
     org_type = serializers.CharField(max_length=100)
-    contact_name = serializers.CharField(max_length=255)
+    contact_name = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    contact_first_name = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    contact_middle_name = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    contact_last_name = serializers.CharField(max_length=100, required=False, allow_blank=True)
     phone = serializers.CharField(max_length=30)
-    delivery_address = serializers.CharField(max_length=255)
+    delivery_address = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    delivery_address_line1 = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    delivery_address_line2 = serializers.CharField(max_length=255, required=False, allow_blank=True)
     postcode = serializers.CharField(max_length=20)
+
+    def validate_phone(self, value):
+        return _validate_phone_number(value)
+
+    def validate(self, attrs):
+        return _sync_contact_name_attrs(super().validate(attrs), require_name=True)
 
     def create_profile(self, user, profile_data):
         # Community accounts behave as bulk buyers, so their delivery address is
         # stored as the default address used by bulk checkout and near-me lookup.
-        delivery_address = profile_data.pop("delivery_address")
+        delivery_address_line1, delivery_address_line2 = _extract_split_address(
+            profile_data,
+            combined_key="delivery_address",
+            line1_key="delivery_address_line1",
+            line2_key="delivery_address_line2",
+        )
+        if not delivery_address_line1:
+            raise serializers.ValidationError({"delivery_address_line1": "Address line 1 is required."})
         postcode = profile_data.pop("postcode")
 
-        city = _infer_city_from_address(delivery_address)
+        city = _infer_city_from_address(_compose_address_lines(delivery_address_line1, delivery_address_line2))
         address = Address.objects.create(
             user=user,
             label="Delivery Address",
-            line1=delivery_address,
+            line1=delivery_address_line1,
+            line2=delivery_address_line2,
             city=city,
             postcode=postcode,
             is_default=True,
@@ -401,22 +623,41 @@ class RestaurantRegistrationSerializer(BaseRegistrationSerializer):
     user_role = User.Role.RESTAURANT
 
     business_name = serializers.CharField(max_length=255)
-    contact_name = serializers.CharField(max_length=255)
+    contact_name = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    contact_first_name = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    contact_middle_name = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    contact_last_name = serializers.CharField(max_length=100, required=False, allow_blank=True)
     phone = serializers.CharField(max_length=30)
-    delivery_address = serializers.CharField(max_length=255)
+    delivery_address = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    delivery_address_line1 = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    delivery_address_line2 = serializers.CharField(max_length=255, required=False, allow_blank=True)
     postcode = serializers.CharField(max_length=20)
+
+    def validate_phone(self, value):
+        return _validate_phone_number(value)
+
+    def validate(self, attrs):
+        return _sync_contact_name_attrs(super().validate(attrs), require_name=True)
 
     def create_profile(self, user, profile_data):
         # Restaurant accounts share the buyer-side address model but route to
         # recurring-order capable checkout screens after login.
-        delivery_address = profile_data.pop("delivery_address")
+        delivery_address_line1, delivery_address_line2 = _extract_split_address(
+            profile_data,
+            combined_key="delivery_address",
+            line1_key="delivery_address_line1",
+            line2_key="delivery_address_line2",
+        )
+        if not delivery_address_line1:
+            raise serializers.ValidationError({"delivery_address_line1": "Address line 1 is required."})
         postcode = profile_data.pop("postcode")
 
-        city = _infer_city_from_address(delivery_address)
+        city = _infer_city_from_address(_compose_address_lines(delivery_address_line1, delivery_address_line2))
         address = Address.objects.create(
             user=user,
             label="Delivery Address",
-            line1=delivery_address,
+            line1=delivery_address_line1,
+            line2=delivery_address_line2,
             city=city,
             postcode=postcode,
             is_default=True,

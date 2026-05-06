@@ -19,6 +19,7 @@ import { AdminLayout } from './components/admin/AdminLayout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { RoleProtectedRoute } from './components/RoleProtectedRoute';
 import { SiteShell } from './components/SiteShell';
+import { AnimatedOutlet } from './components/motion/Motion';
 
 // Pages
 import { LandingPage } from './pages/LandingPage';
@@ -42,15 +43,20 @@ import { SettingsPage } from './pages/SettingsPage';
 import { ProducerDashboardPage } from './pages/producer/ProducerDashboardPage';
 import { ProducerOrdersPage } from './pages/producer/ProducerOrdersPage';
 import { ProducerInventoryPage } from './pages/producer/ProducerInventoryPage';
+import { ProducerNotificationsPage } from './pages/producer/ProducerNotificationsPage';
 import { ProducerPaymentsPage } from './pages/producer/ProducerPaymentsPage';
 import { AdminCommissionPage } from './pages/admin/AdminCommissionPage';
 import { AdminDashboardPage } from './pages/admin/AdminDashboardPage';
 import { AdminLoginPage } from './pages/admin/AdminLoginPage';
+import { AdminModerationPage } from './pages/admin/AdminModerationPage';
 import { CommunityDashboardPage } from './pages/community/CommunityDashboardPage';
 import { PortalSelectPage } from './pages/portal/PortalSelectPage';
 import { RoleRegisterPage } from './pages/portal/RoleRegisterPage';
 import { StakeholderPortalPage } from './pages/portal/StakeholderPortalPage';
 import { ProducersPage } from './pages/ProducersPage';
+import { ProducerProfilePage } from './pages/ProducerProfilePage';
+import { ProducerSearchPage } from './pages/ProducerSearchPage';
+import { LegalPage } from './pages/LegalPage';
 import { RestaurantDashboardPage } from './pages/restaurant/RestaurantDashboardPage';
 import { RestaurantRecurringOrdersPage } from './pages/restaurant/RestaurantRecurringOrdersPage';
 
@@ -87,6 +93,14 @@ export const router = createBrowserRouter([
             element: <ProducersPage />,
           },
           {
+            path: '/producer-search',
+            element: <ProducerSearchPage />,
+          },
+          {
+            path: '/producers/:producerId',
+            element: <ProducerProfilePage />,
+          },
+          {
             path: '/browse',
             element: <PublicBrowsePage />,
           },
@@ -103,12 +117,20 @@ export const router = createBrowserRouter([
             element: <LandingPage />,
           },
           {
+            path: '/terms',
+            element: <LegalPage kind="terms" />,
+          },
+          {
+            path: '/privacy',
+            element: <LegalPage kind="privacy" />,
+          },
+          {
             path: '/portal/customer',
             element: <StakeholderPortalPage role="CUSTOMER" />,
           },
           {
             path: '/portal/producer',
-            element: <StakeholderPortalPage role="PRODUCER" />,
+            element: <Navigate to="/login" replace />,
           },
           {
             path: '/portal/community',
@@ -230,39 +252,163 @@ export const router = createBrowserRouter([
           },
         ],
       },
-      // Standalone authentication routes sit outside SiteShell because they
-      // use focused layouts rather than the main marketplace chrome.
       {
-        path: '/login',
-        element: <LoginPage />,
-      },
-      {
-        path: '/login/customer',
-        element: <Navigate to="/login" replace />,
-      },
-      {
-        path: '/login/producer',
-        element: <Navigate to="/login" replace />,
-      },
-      {
-        path: '/login/community',
-        element: <Navigate to="/login" replace />,
-      },
-      {
-        path: '/login/restaurant',
-        element: <Navigate to="/login" replace />,
-      },
-      {
-        path: '/login/admin',
-        element: <Navigate to="/admin/login" replace />,
+        element: <AnimatedOutlet />,
+        children: [
+          // Standalone authentication routes sit outside SiteShell because they
+          // use focused layouts rather than the main marketplace chrome.
+          {
+            path: '/login',
+            element: <LoginPage />,
+          },
+          {
+            path: '/login/customer',
+            element: <Navigate to="/login" replace />,
+          },
+          {
+            path: '/login/producer',
+            element: <Navigate to="/login" replace />,
+          },
+          {
+            path: '/login/community',
+            element: <Navigate to="/login" replace />,
+          },
+          {
+            path: '/login/restaurant',
+            element: <Navigate to="/login" replace />,
+          },
+          {
+            path: '/login/admin',
+            element: <Navigate to="/admin/login" replace />,
+          },
+          {
+            path: '/admin/login',
+            element: <AdminLoginPage />,
+          },
+          {
+            path: '/register',
+            element: <Navigate to="/select-portal?mode=register" replace />,
+          },
+          {
+            path: '/register/customer',
+            element: <RoleRegisterPage role="CUSTOMER" />,
+          },
+          {
+            path: '/register/producer',
+            element: <RoleRegisterPage role="PRODUCER" />,
+          },
+          {
+            path: '/register/community',
+            element: <RoleRegisterPage role="COMMUNITY" />,
+          },
+          {
+            path: '/register/restaurant',
+            element: <RoleRegisterPage role="RESTAURANT" />,
+          },
+          {
+            path: '/verify-email',
+            element: <VerifyEmailPage />,
+          },
+          {
+            path: '/forgot-password',
+            element: <ForgotPasswordPage />,
+          },
+          {
+            path: '/reset-password',
+            element: <ResetPasswordPage />,
+          },
+          {
+            path: '/access-denied',
+            element: <AccessDeniedPage />,
+          },
+          // Producer workspace routes.
+          {
+            path: '/producer/dashboard',
+            element: (
+              <RoleProtectedRoute requiredRole="PRODUCER">
+                <ProducerDashboardPage />
+              </RoleProtectedRoute>
+            ),
+          },
+          {
+            path: '/producer/publish',
+            element: (
+              <RoleProtectedRoute requiredRole="PRODUCER">
+                <ContentFeedPage mode="publish" />
+              </RoleProtectedRoute>
+            ),
+          },
+          {
+            path: '/producer/content',
+            element: (
+              <RoleProtectedRoute requiredRole="PRODUCER">
+                <Navigate to="/producer/publish" replace />
+              </RoleProtectedRoute>
+            ),
+          },
+          {
+            path: '/producer/orders',
+            element: (
+              <RoleProtectedRoute requiredRole="PRODUCER">
+                <ProducerOrdersPage />
+              </RoleProtectedRoute>
+            ),
+          },
+          {
+            path: '/producer/inventory',
+            element: (
+              <RoleProtectedRoute requiredRole="PRODUCER">
+                <ProducerInventoryPage />
+              </RoleProtectedRoute>
+            ),
+          },
+          {
+            path: '/producer/notifications',
+            element: (
+              <RoleProtectedRoute requiredRole="PRODUCER">
+                <ProducerNotificationsPage />
+              </RoleProtectedRoute>
+            ),
+          },
+          {
+            path: '/producer/payments',
+            element: (
+              <RoleProtectedRoute requiredRole="PRODUCER">
+                <ProducerPaymentsPage />
+              </RoleProtectedRoute>
+            ),
+          },
+          // Community workspace routes.
+          {
+            path: '/community/dashboard',
+            element: (
+              <RoleProtectedRoute requiredRole="COMMUNITY">
+                <CommunityDashboardPage />
+              </RoleProtectedRoute>
+            ),
+          },
+          // Restaurant workspace routes.
+          {
+            path: '/restaurant/dashboard',
+            element: (
+              <RoleProtectedRoute requiredRole="RESTAURANT">
+                <RestaurantDashboardPage />
+              </RoleProtectedRoute>
+            ),
+          },
+          {
+            path: '/restaurant/recurring-orders',
+            element: (
+              <RoleProtectedRoute requiredRole="RESTAURANT">
+                <RestaurantRecurringOrdersPage />
+              </RoleProtectedRoute>
+            ),
+          },
+        ],
       },
       {
         path: '/admin',
         element: <Navigate to="/admin/login" replace />,
-      },
-      {
-        path: '/admin/login',
-        element: <AdminLoginPage />,
       },
       // Custom admin SPA. This is intentionally separate from Django's stock
       // table-based admin, which lives under /django-admin/.
@@ -282,113 +428,14 @@ export const router = createBrowserRouter([
             element: <AdminCommissionPage />,
           },
           {
+            path: '/admin/moderation',
+            element: <AdminModerationPage />,
+          },
+          {
             path: '/admin/commission',
             element: <Navigate to="/admin/financial-reports" replace />,
           },
         ],
-      },
-      {
-        path: '/register',
-        element: <Navigate to="/select-portal?mode=register" replace />,
-      },
-      {
-        path: '/register/customer',
-        element: <RoleRegisterPage role="CUSTOMER" />,
-      },
-      {
-        path: '/register/producer',
-        element: <RoleRegisterPage role="PRODUCER" />,
-      },
-      {
-        path: '/register/community',
-        element: <RoleRegisterPage role="COMMUNITY" />,
-      },
-      {
-        path: '/register/restaurant',
-        element: <RoleRegisterPage role="RESTAURANT" />,
-      },
-      {
-        path: '/verify-email',
-        element: <VerifyEmailPage />,
-      },
-      {
-        path: '/forgot-password',
-        element: <ForgotPasswordPage />,
-      },
-      {
-        path: '/reset-password',
-        element: <ResetPasswordPage />,
-      },
-      {
-        path: '/access-denied',
-        element: <AccessDeniedPage />,
-      },
-      // Producer workspace routes.
-      {
-        path: '/producer/dashboard',
-        element: (
-          <RoleProtectedRoute requiredRole="PRODUCER">
-            <ProducerDashboardPage />
-          </RoleProtectedRoute>
-        ),
-      },
-      {
-        path: '/producer/publish',
-        element: (
-          <RoleProtectedRoute requiredRole="PRODUCER">
-            <ContentFeedPage mode="publish" />
-          </RoleProtectedRoute>
-        ),
-      },
-      {
-        path: '/producer/orders',
-        element: (
-          <RoleProtectedRoute requiredRole="PRODUCER">
-            <ProducerOrdersPage />
-          </RoleProtectedRoute>
-        ),
-      },
-      {
-        path: '/producer/inventory',
-        element: (
-          <RoleProtectedRoute requiredRole="PRODUCER">
-            <ProducerInventoryPage />
-          </RoleProtectedRoute>
-        ),
-      },
-      {
-        path: '/producer/payments',
-        element: (
-          <RoleProtectedRoute requiredRole="PRODUCER">
-            <ProducerPaymentsPage />
-          </RoleProtectedRoute>
-        ),
-      },
-      // Community workspace routes.
-      {
-        path: '/community/dashboard',
-        element: (
-          <RoleProtectedRoute requiredRole="COMMUNITY">
-            <CommunityDashboardPage />
-          </RoleProtectedRoute>
-        ),
-      },
-      // Restaurant workspace routes.
-      {
-        path: '/restaurant/dashboard',
-        element: (
-          <RoleProtectedRoute requiredRole="RESTAURANT">
-            <RestaurantDashboardPage />
-          </RoleProtectedRoute>
-        ),
-      },
-      {
-        path: '/restaurant/recurring-orders',
-        element: (
-          <RoleProtectedRoute requiredRole="RESTAURANT">
-            <RestaurantRecurringOrdersPage />
-          </RoleProtectedRoute>
-        ),
       },
       {
         path: '*',

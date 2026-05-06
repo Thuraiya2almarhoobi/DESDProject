@@ -38,6 +38,7 @@ export interface Product {
   price: number;
   unit: ProductUnit;
   producerId: string;
+  producerUserId?: string;
   producerName: string;
   producerLocation: string;
   producerDescription?: string;
@@ -70,7 +71,9 @@ export interface Product {
   surplusOriginalPrice?: number;
   surplusExpiresAt?: string; // ISO date string
   surplusBestBefore?: string; // e.g., "3 days"
+  surplusNote?: string;
   storageTips?: string;
+  storageTipsAiGenerated?: boolean;
   recipeIdeas?: string[];
   averageRating?: number;
   reviewCount?: number;
@@ -105,6 +108,7 @@ export interface ReviewEligibility {
   isAuthenticated: boolean;
   canRespond: boolean;
   responseReason: string;
+  existingReview?: ProductReview;
 }
 
 // Cart Types

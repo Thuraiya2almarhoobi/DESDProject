@@ -57,6 +57,7 @@ urlpatterns = [
     path("api/delivery/", include("apps.delivery.urls")),
     path("api/geo/", include("apps.geo.urls")),
     path("api/content/", include("apps.content.urls")),
+    path("api/moderation/", include("apps.moderation.urls")),
     path("api/accounts/", include("apps.accounts.urls")),
     # Keep Django's table-based admin on a separate route so /admin/* belongs
     # to the custom React administrator experience.

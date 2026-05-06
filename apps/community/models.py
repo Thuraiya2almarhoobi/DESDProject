@@ -74,7 +74,7 @@ class ProductReview(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=["user", "product"],
-                condition=Q(user__isnull=False),
+                condition=Q(user__isnull=False, moderation_status__in=["published", "pending"]),
                 name="community_unique_review_per_user_product",
             )
         ]

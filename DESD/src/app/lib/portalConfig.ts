@@ -88,7 +88,7 @@ export const portalDefinitions: PortalDefinition[] = [
     registerHeading: 'Create a producer account',
     registerDescription:
       'Register your farm or supply business so you can list products and receive marketplace orders.',
-    portalPath: '/portal/producer',
+    portalPath: '/login',
     loginPath: '/login',
     registerPath: '/register/producer',
     landingCta: 'Continue as Producer',

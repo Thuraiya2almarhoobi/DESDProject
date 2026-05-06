@@ -51,6 +51,7 @@ from .auth_tokens import (
 )
 from .email_utils import send_email_verification_message, send_password_reset_message
 from .models import Address, CustomerProfile, LoginAttempt, ProducerProfile
+from .models import split_customer_full_name
 from .permissions import IsAdmin, IsCommunity, IsCustomer, IsProducer, IsRestaurant
 from .serializers import (
     AddressSerializer,
@@ -286,9 +287,14 @@ def _bootstrap_customer_profile(user):
             is_default=True,
         )
 
+    legacy_full_name = legacy_profile.full_name if legacy_profile and legacy_profile.full_name else _infer_display_name_from_email(user.email)
+    first_name, middle_name, last_name = split_customer_full_name(legacy_full_name)
     return CustomerProfile.objects.create(
         user=user,
-        full_name=(legacy_profile.full_name if legacy_profile and legacy_profile.full_name else _infer_display_name_from_email(user.email)),
+        full_name=legacy_full_name,
+        first_name=first_name,
+        middle_name=middle_name,
+        last_name=last_name,
         phone=legacy_profile.phone if legacy_profile else "",
         allergies_text="",
         preferences_text="",

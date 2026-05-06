@@ -26,6 +26,7 @@ from rest_framework.views import APIView
 
 from apps.orders.models import Order
 from apps.orders.serializers import OrderDetailSerializer
+from bristol_marketplace.export_utils import build_simple_pdf, build_simple_xlsx
 
 from .models import WeeklySettlement
 from .serializers import (
@@ -61,7 +62,11 @@ class StripeCheckoutSessionCreateAPIView(APIView):
         )
 
         try:
-            checkout_session = create_stripe_checkout_session_for_order(order)
+            checkout_session = create_stripe_checkout_session_for_order(
+                order,
+                success_url=serializer.validated_data.get("success_url"),
+                cancel_url=serializer.validated_data.get("cancel_url"),
+            )
         except ValueError as exc:
             return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -161,7 +166,11 @@ class WeeklySettlementListAPIView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return WeeklySettlement.objects.filter(producer=self.request.user).prefetch_related("lines", "lines__order")
+        return WeeklySettlement.objects.filter(producer=self.request.user).prefetch_related(
+            "lines",
+            "lines__order",
+            "lines__sub_order__order",
+        )
 
 
 class WeeklySettlementDetailAPIView(generics.RetrieveAPIView):
@@ -171,45 +180,46 @@ class WeeklySettlementDetailAPIView(generics.RetrieveAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return WeeklySettlement.objects.filter(producer=self.request.user).prefetch_related("lines", "lines__order")
+        return WeeklySettlement.objects.filter(producer=self.request.user).prefetch_related(
+            "lines",
+            "lines__order",
+            "lines__sub_order__order",
+        )
 
 
 class WeeklySettlementExportCSVAPIView(APIView):
-    """Export a producer settlement as CSV for reporting/accounting workflows."""
+    """Export a producer settlement for reporting/accounting workflows."""
 
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, pk: int):
         settlement = get_object_or_404(
-            WeeklySettlement.objects.prefetch_related("lines", "lines__order"),
+            WeeklySettlement.objects.prefetch_related("lines", "lines__order", "lines__sub_order__order"),
             pk=pk,
             producer=request.user,
         )
-        csv_response = HttpResponse(content_type="text/csv")
-        csv_response["Content-Disposition"] = (
-            f'attachment; filename="settlement-{settlement.week_start}-{settlement.week_end}.csv"'
-        )
-        writer = csv.writer(csv_response)
-        writer.writerow(
-            [
-                "Transaction Reference",
-                "Week Start",
-                "Week End",
-                "Order Number",
-                "Customer Name",
-                "Gross Amount",
-                "Commission (5%)",
-                "Net Amount",
-                "Status",
-            ]
-        )
+        export_format = (request.query_params.get("format") or "csv").strip().lower()
+        filename_base = f"settlement-{settlement.week_start}-{settlement.week_end}"
+        headers = [
+            "Transaction Reference",
+            "Week Start",
+            "Week End",
+            "Order Number",
+            "Customer Name",
+            "Gross Amount",
+            "Commission (5%)",
+            "Net Amount",
+            "Status",
+        ]
+        rows = []
         for line in settlement.lines.all():
-            writer.writerow(
+            order_number = line.order.order_number if line.order_id else line.sub_order.order.order_number
+            rows.append(
                 [
                     settlement.transaction_reference,
                     settlement.week_start.isoformat(),
                     settlement.week_end.isoformat(),
-                    line.order.order_number,
+                    order_number,
                     line.customer_name,
                     f"{line.gross_amount:.2f}",
                     f"{line.commission_amount:.2f}",
@@ -217,6 +227,28 @@ class WeeklySettlementExportCSVAPIView(APIView):
                     settlement.status,
                 ]
             )
+
+        if export_format == "pdf":
+            pdf_response = HttpResponse(
+                build_simple_pdf(f"Settlement {settlement.transaction_reference}", [headers, *rows]),
+                content_type="application/pdf",
+            )
+            pdf_response["Content-Disposition"] = f'attachment; filename="{filename_base}.pdf"'
+            return pdf_response
+
+        if export_format in {"xlsx", "excel"}:
+            xlsx_response = HttpResponse(
+                build_simple_xlsx(headers, rows),
+                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+            xlsx_response["Content-Disposition"] = f'attachment; filename="{filename_base}.xlsx"'
+            return xlsx_response
+
+        csv_response = HttpResponse(content_type="text/csv")
+        csv_response["Content-Disposition"] = f'attachment; filename="{filename_base}.csv"'
+        writer = csv.writer(csv_response)
+        writer.writerow(headers)
+        writer.writerows(rows)
         return csv_response
 
 

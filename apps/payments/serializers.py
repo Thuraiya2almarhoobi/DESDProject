@@ -34,6 +34,8 @@ class StripeCheckoutSessionRequestSerializer(serializers.Serializer):
     can be changed without spreading the same responsibility across unrelated files.
     """
     order_id = serializers.IntegerField(min_value=1)
+    success_url = serializers.CharField(required=False, allow_blank=True, max_length=2048)
+    cancel_url = serializers.CharField(required=False, allow_blank=True, max_length=2048)
 
 
 class StripeCheckoutSessionConfirmSerializer(serializers.Serializer):
@@ -66,14 +68,17 @@ class SettlementOrderLineSerializer(serializers.ModelSerializer):
     It keeps related behavior grouped so the payments domain: stripe checkout, settlement records, commission capture, and payment-service integration.
     can be changed without spreading the same responsibility across unrelated files.
     """
-    order_number = serializers.CharField(source="order.order_number", read_only=True)
-    delivery_date = serializers.DateTimeField(source="order.delivery_date", read_only=True)
+    order_number = serializers.SerializerMethodField()
+    delivery_date = serializers.SerializerMethodField()
+    source_type = serializers.SerializerMethodField()
 
     class Meta:
         model = SettlementOrderLine
         fields = [
             "id",
             "order_id",
+            "sub_order_id",
+            "source_type",
             "order_number",
             "customer_name",
             "delivery_date",
@@ -81,6 +86,23 @@ class SettlementOrderLineSerializer(serializers.ModelSerializer):
             "commission_amount",
             "net_amount",
         ]
+
+    def get_order_number(self, obj: SettlementOrderLine) -> str:
+        if obj.order_id:
+            return obj.order.order_number
+        if obj.sub_order_id:
+            return obj.sub_order.order.order_number
+        return ""
+
+    def get_delivery_date(self, obj: SettlementOrderLine):
+        if obj.order_id:
+            return obj.order.delivery_date
+        if obj.sub_order_id:
+            return obj.sub_order.delivery_date
+        return None
+
+    def get_source_type(self, obj: SettlementOrderLine) -> str:
+        return "legacy" if obj.order_id else "marketplace"
 
 
 class WeeklySettlementSerializer(serializers.ModelSerializer):

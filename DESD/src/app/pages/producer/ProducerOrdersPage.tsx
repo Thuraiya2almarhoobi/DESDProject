@@ -14,6 +14,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router';
 import {
   AlertCircle,
   ArrowLeft,
@@ -50,6 +51,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/ca
 import { Badge } from '../../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Separator } from '../../components/ui/separator';
+import { OrderHistoryPage } from '../OrderHistoryPage';
 
 type ProducerOrderStatus = 'pending' | 'confirmed' | 'ready' | 'delivered' | 'cancelled';
 /**
@@ -84,6 +86,14 @@ interface ProducerSubOrderApi {
   customer_postcode: string;
   lead_time_hours: number;
   order_created_at: string;
+  notes?: string;
+  status_history?: Array<{
+    id: number;
+    previous_status: string;
+    new_status: string;
+    note: string;
+    created_at: string;
+  }>;
   items: ProducerSubOrderItemApi[];
   delivery?: ApiDeliveryInfo | null;
 }
@@ -120,11 +130,18 @@ function isOrderUrgent(order: ProducerSubOrderApi): boolean {
  * so future contributors can trace behavior during sprint reviews.
  */
 export function ProducerOrdersPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const goBack = useSafeBack('/producer/dashboard');
+  const activeOrdersView = new URLSearchParams(location.search).get('view') === 'purchases' ? 'purchases' : 'sales';
+  const searchQuery = new URLSearchParams(location.search).get('q') || '';
   const [orders, setOrders] = useState<ProducerSubOrderApi[]>([]);
   const [loading, setLoading] = useState(true);
   const [simulationNow, setSimulationNow] = useState(() => Date.now());
   const [statusFilter, setStatusFilter] = useState<ProducerOrderStatus | 'all'>('all');
+  const [customerFilter, setCustomerFilter] = useState('all');
+  const [fromDateFilter, setFromDateFilter] = useState('');
+  const [toDateFilter, setToDateFilter] = useState('');
   const [updatingOrderId, setUpdatingOrderId] = useState<number | null>(null);
   const [deliveryActionOrderId, setDeliveryActionOrderId] = useState<number | null>(null);
   const [deliveryErrors, setDeliveryErrors] = useState<Record<number, string>>({});
@@ -186,10 +203,42 @@ export function ProducerOrdersPage() {
   );
 
   const urgentOrders = useMemo(() => orders.filter((order) => isOrderUrgent(order)), [orders]);
-  const filteredOrders = useMemo(
-    () => (statusFilter === 'all' ? orders : orders.filter((order) => order.status === statusFilter)),
-    [orders, statusFilter],
+  const customerOptions = useMemo(
+    () => Array.from(new Set(orders.map((order) => order.customer_name).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [orders],
   );
+  const filteredOrders = useMemo(() => {
+    const normalizedSearch = searchQuery.trim().toLowerCase();
+    return orders.filter((order) => {
+      if (statusFilter !== 'all' && order.status !== statusFilter) {
+        return false;
+      }
+      if (customerFilter !== 'all' && order.customer_name !== customerFilter) {
+        return false;
+      }
+      if (fromDateFilter && order.delivery_date < fromDateFilter) {
+        return false;
+      }
+      if (toDateFilter && order.delivery_date > toDateFilter) {
+        return false;
+      }
+      if (!normalizedSearch) {
+        return true;
+      }
+      const searchableText = [
+        order.order_number,
+        order.status,
+        order.customer_name,
+        order.customer_email,
+        order.delivery_address,
+        order.customer_postcode,
+        ...order.items.map((item) => `${item.product_name} ${item.quantity} ${item.unit}`),
+      ]
+        .join(' ')
+        .toLowerCase();
+      return searchableText.includes(normalizedSearch);
+    });
+  }, [customerFilter, fromDateFilter, orders, searchQuery, statusFilter, toDateFilter]);
 
   const updateOrderStatus = async (order: ProducerSubOrderApi, nextStatus: ProducerOrderStatus) => {
     if (nextStatus === order.status) {
@@ -436,12 +485,37 @@ export function ProducerOrdersPage() {
     };
   }, [filteredOrders, loadOrders, simulationNow]);
 
+  const ordersViewToggle = (
+    <div className="inline-flex rounded-xl border border-[#d7dfd0] bg-white p-1 shadow-sm">
+      <Button
+        type="button"
+        variant={activeOrdersView === 'sales' ? 'default' : 'ghost'}
+        size="sm"
+        onClick={() => navigate('/producer/orders?view=sales')}
+      >
+        Sales
+      </Button>
+      <Button
+        type="button"
+        variant={activeOrdersView === 'purchases' ? 'default' : 'ghost'}
+        size="sm"
+        onClick={() => navigate('/producer/orders?view=purchases')}
+      >
+        Purchases
+      </Button>
+    </div>
+  );
+
+  if (activeOrdersView === 'purchases') {
+    return <OrderHistoryPage producerOrdersMode />;
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-[oklch(0.98_0.01_145)] to-[oklch(0.96_0.02_150)]">
-      <SiteHeader />
+      <SiteHeader searchPlaceholder="Search sales by order, customer, product, postcode..." />
 
       <main className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-5 lg:min-h-[calc(100svh-60px)] lg:px-6">
-        <div className="mb-6">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <Button
             variant="ghost"
             onClick={goBack}
@@ -450,6 +524,7 @@ export function ProducerOrdersPage() {
             <ArrowLeft className="size-4 mr-2" />
             Back to Dashboard
           </Button>
+          {ordersViewToggle}
         </div>
 
         <div className="mb-6 flex flex-col gap-4 rounded-2xl border border-[#e4e1d8] bg-[#fffefa] p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
@@ -504,9 +579,10 @@ export function ProducerOrdersPage() {
 
         <Card className="mb-6">
           <CardContent className="p-6">
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="text-sm font-medium text-gray-700">Filter by status:</span>
-              <div className="flex flex-wrap gap-2">
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-sm font-medium text-gray-700">Filter by status:</span>
+                <div className="flex flex-wrap gap-2">
                 <Badge
                   variant={statusFilter === 'all' ? 'default' : 'outline'}
                   className="cursor-pointer"
@@ -549,7 +625,63 @@ export function ProducerOrdersPage() {
                 >
                   Cancelled ({statusCounts.cancelled})
                 </Badge>
+                </div>
               </div>
+              <div className="grid gap-3 md:grid-cols-4">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">Customer</label>
+                  <Select value={customerFilter} onValueChange={setCustomerFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="All customers" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All customers</SelectItem>
+                      {customerOptions.map((name) => (
+                        <SelectItem key={name} value={name}>
+                          {name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">From date</label>
+                  <input
+                    type="date"
+                    value={fromDateFilter}
+                    onChange={(event) => setFromDateFilter(event.target.value)}
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">To date</label>
+                  <input
+                    type="date"
+                    value={toDateFilter}
+                    onChange={(event) => setToDateFilter(event.target.value)}
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  />
+                </div>
+                <div className="flex items-end">
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => {
+                      setStatusFilter('all');
+                      setCustomerFilter('all');
+                      setFromDateFilter('');
+                      setToDateFilter('');
+                    }}
+                  >
+                    Clear filters
+                  </Button>
+                </div>
+              </div>
+              {searchQuery && (
+                <p className="text-sm text-gray-600">
+                  Search: <span className="font-medium text-gray-900">{searchQuery}</span>
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>

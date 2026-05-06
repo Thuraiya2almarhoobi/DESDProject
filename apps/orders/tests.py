@@ -29,7 +29,11 @@ from apps.community.models import ProductReview
 from apps.producer_portal.models import ProducerProduct, ProductAvailability
 
 from .marketplace_sync import get_or_create_catalog_product_mirror
-from .models import Cart, CustomerProfile, Order, OrderItem, Producer, ProducerSubOrder, Product
+from apps.content.models import FarmStory, Recipe
+from apps.moderation.models import ModerationAction
+
+from .models import Cart, CustomerProfile, FavoriteProducer, Order, OrderItem, Producer, ProducerSubOrder, Product
+from .models import ProductAllergenAcknowledgement, ProducerSubOrderStatusHistory, UserNotification
 
 
 User = get_user_model()
@@ -136,6 +140,12 @@ class OrdersCriticalFlowTests(APITestCase):
         )
         self.payment_service_patcher.start()
         self.addCleanup(self.payment_service_patcher.stop)
+        self.delivery_service_patcher = patch(
+            "apps.delivery.services._service_request",
+            side_effect=self._mock_delivery_service_request,
+        )
+        self.delivery_service_patcher.start()
+        self.addCleanup(self.delivery_service_patcher.stop)
 
     def _mock_payment_service_post(self, url, json=None, headers=None, timeout=None):
         if url.endswith("/stripe/checkout-sessions"):
@@ -150,6 +160,23 @@ class OrdersCriticalFlowTests(APITestCase):
                 },
             )
         raise AssertionError(f"Unexpected payment service request: {url}")
+
+    def _mock_delivery_service_request(self, path, payload):
+        if path == "/stuart/jobs":
+            client_reference = str((payload or {}).get("client_reference") or "delivery")
+            return {
+                "job_id": f"job_{client_reference}",
+                "package_id": f"pkg_{client_reference}",
+                "client_reference": client_reference,
+                "status": "created",
+                "tracking_url": f"https://tracking.stuart.test/{client_reference}",
+                "client_tracking_url": f"https://client.stuart.test/{client_reference}",
+                "eta_to_dropoff": (timezone.now() + timedelta(minutes=45)).isoformat(),
+                "courier_name": "Sandbox Courier",
+                "courier_transport_type": "bike",
+                "test_mode": True,
+            }
+        raise AssertionError(f"Unexpected Stuart delivery service request: {path}")
 
     def _add_to_cart(self, product: Product, quantity: str):
         return self.client.post(
@@ -202,6 +229,19 @@ class OrdersCriticalFlowTests(APITestCase):
         )
         return order
 
+    def test_saved_producers_endpoint_returns_authenticated_user_favorites(self):
+        FavoriteProducer.objects.create(user=self.customer, producer=self.producer_a)
+
+        res = self.client.get("/api/orders/producers/favorites/")
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res.data), 1)
+        self.assertEqual(res.data[0]["business_name"], "Bristol Valley Farm")
+        self.assertEqual(res.data[0]["user_id"], self.producer_user_a.id)
+
+        self.client.force_authenticate(user=None)
+        anon_res = self.client.get("/api/orders/producers/favorites/")
+        self.assertEqual(anon_res.status_code, status.HTTP_401_UNAUTHORIZED)
+
     def test_tc006_add_and_manage_cart(self):
         add_a = self._add_to_cart(self.product_a1, "2")
         self.assertEqual(add_a.status_code, status.HTTP_200_OK)
@@ -249,16 +289,16 @@ class OrdersCriticalFlowTests(APITestCase):
 
         order = Order.objects.get(id=order_id)
         self.assertEqual(order.status, Order.Status.PENDING)
-        self.assertEqual(order.payment_status, Order.PaymentStatus.PENDING)
+        self.assertEqual(order.payment_status, Order.PaymentStatus.PAID)
         self.assertEqual(order.sub_orders.count(), 1)
 
         expected_subtotal = Decimal("2.50") * Decimal("2.00") + Decimal("3.00") * Decimal("1.00")
         self.assertEqual(order.subtotal_amount, expected_subtotal.quantize(Decimal("0.01")))
         self.assertEqual(order.commission_amount, (expected_subtotal * Decimal("0.05")).quantize(Decimal("0.01")))
-        self.assertEqual(order.payment.provider, "stripe")
-        self.assertEqual(order.payment.status, "pending")
+        self.assertEqual(order.payment.provider, "mock")
+        self.assertEqual(order.payment.status, "succeeded")
         self.assertEqual(order.sub_orders.first().producer, self.producer_a)
-        self.assertEqual(order.payment.provider_reference, f"cs_test_order_{order_id}")
+        self.assertTrue(order.payment.provider_reference.startswith("PAY-"))
 
     def test_tc008_multi_producer_split_checkout(self):
         self._add_to_cart(self.product_a1, "2")
@@ -339,7 +379,41 @@ class OrdersCriticalFlowTests(APITestCase):
         self.assertEqual(order.items.first().product, self.product_a1)
 
         cart = Cart.objects.get(customer=self.customer)
-        self.assertEqual(cart.items.count(), 2)
+        self.assertEqual(cart.items.count(), 1)
+        self.assertEqual(cart.items.first().product, self.product_b1)
+
+    def test_checkout_rejects_unacknowledged_allergen_products_then_allows_acknowledged_items(self):
+        self.product_a1.allergen_info = "Nuts"
+        self.product_a1.save(update_fields=["allergen_info", "updated_at"])
+
+        self._add_to_cart(self.product_a1, "1")
+        checkout_payload = {
+            "delivery_address": "45 Park Street, Bristol",
+            "customer_postcode": "BS1 5JG",
+            "delivery_date": (timezone.localdate() + timedelta(days=2)).isoformat(),
+            "payment_method": "test_card",
+            "payment_token": "tok_allergen",
+        }
+        blocked_response = self.client.post("/api/orders/checkout/", checkout_payload, format="json")
+        self.assertEqual(blocked_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("Review allergen information", blocked_response.data["detail"])
+
+        ack_response = self.client.post(
+            f"/api/orders/products/{self.product_a1.id}/allergen-acknowledgement/",
+            {},
+            format="json",
+        )
+        self.assertEqual(ack_response.status_code, status.HTTP_200_OK)
+        self.assertTrue(ack_response.data["acknowledged"])
+        self.assertTrue(
+            ProductAllergenAcknowledgement.objects.filter(
+                user=self.customer,
+                product=self.product_a1,
+            ).exists()
+        )
+
+        checkout_response = self.client.post("/api/orders/checkout/", checkout_payload, format="json")
+        self.assertEqual(checkout_response.status_code, status.HTTP_201_CREATED)
 
     def test_order_history_receipt_and_reorder(self):
         self._add_to_cart(self.product_a1, "1")
@@ -363,6 +437,8 @@ class OrdersCriticalFlowTests(APITestCase):
         self.assertGreaterEqual(len(history_res.data), 1)
         self.assertEqual(history_res.data[0]["delivery_date_from"], delivery_date)
         self.assertEqual(history_res.data[0]["delivery_date_to"], delivery_date)
+        self.assertEqual(history_res.data[0]["sub_orders"][0]["status"], Order.Status.PENDING)
+        self.assertIn("delivery", history_res.data[0]["sub_orders"][0])
 
         filter_res = self.client.get(
             "/api/orders/history/",
@@ -383,6 +459,29 @@ class OrdersCriticalFlowTests(APITestCase):
         self.assertEqual(len(reorder_res.data["unavailable_items"]), 1)
 
     def test_orders_product_routes_use_checkout_product_ids_for_marketplace_and_reviews(self):
+        ProducerProduct.objects.create(
+            producer=self.producer_user_a,
+            name=self.product_a1.name,
+            description="Fresh local carrots",
+            category=self.product_a1.category,
+            unit=self.product_a1.unit,
+            price=self.product_a1.price,
+            stock_quantity=10,
+            availability=ProductAvailability.IN_SEASON,
+            season_start_month=1,
+            season_end_month=3,
+            harvest_date=timezone.localdate(),
+            storage_tips="Keep carrots chilled in a breathable bag.",
+            storage_tips_ai_generated=True,
+            is_organic=True,
+            organic_certification="Soil Association GB-ORG-05",
+            is_surplus=True,
+            surplus_discount_percent=30,
+            surplus_expires_at=timezone.now() + timedelta(hours=30),
+            surplus_best_before="Best before tomorrow",
+            surplus_note="Short-dated carrots, still crisp and quality checked.",
+        )
+
         list_response = self.client.get("/api/orders/products/", {"available": "true"})
         self.assertEqual(list_response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(list_response.data), 3)
@@ -394,6 +493,20 @@ class OrdersCriticalFlowTests(APITestCase):
         self.assertEqual(detail_response.data["name"], self.product_a1.name)
         self.assertEqual(detail_response.data["producer_name"], self.producer_a.business_name)
         self.assertIn("image_url", detail_response.data)
+        self.assertEqual(detail_response.data["storage_tips"], "Keep carrots chilled in a breathable bag.")
+        self.assertTrue(detail_response.data["storage_tips_ai_generated"])
+        self.assertTrue(detail_response.data["is_organic"])
+        self.assertEqual(detail_response.data["organic_certification"], "Soil Association GB-ORG-05")
+        self.assertTrue(detail_response.data["is_surplus"])
+        self.assertEqual(detail_response.data["surplus_discount"], 30)
+        self.assertEqual(detail_response.data["surplus_best_before"], "Best before tomorrow")
+        self.assertEqual(detail_response.data["surplus_note"], "Short-dated carrots, still crisp and quality checked.")
+
+        organic_response = self.client.get("/api/orders/products/", {"available": "true", "organic": "true"})
+        self.assertEqual(organic_response.status_code, status.HTTP_200_OK)
+        organic_ids = {product["id"] for product in organic_response.data}
+        self.assertIn(self.product_a1.id, organic_ids)
+        self.assertNotIn(self.product_a2.id, organic_ids)
 
         reviews_response = self.client.get(f"/api/orders/products/{self.product_a1.id}/reviews/")
         self.assertEqual(reviews_response.status_code, status.HTTP_200_OK)
@@ -416,6 +529,48 @@ class OrdersCriticalFlowTests(APITestCase):
         reviewed_product = next(product for product in updated_list_response.data if product["id"] == self.product_a1.id)
         self.assertEqual(reviewed_product["review_count"], 1)
         self.assertEqual(reviewed_product["average_rating"], 5.0)
+
+    def test_organic_filter_uses_inference_when_synced_portal_product_is_unflagged(self):
+        self.product_a2.description = "Naturally organic parsnips harvested locally."
+        self.product_a2.save(update_fields=["description"])
+        ProducerProduct.objects.create(
+            producer=self.producer_user_a,
+            name=self.product_a2.name,
+            description=self.product_a2.description,
+            category=self.product_a2.category,
+            unit=self.product_a2.unit,
+            price=self.product_a2.price,
+            stock_quantity=10,
+            availability=ProductAvailability.IN_SEASON,
+            harvest_date=timezone.localdate(),
+            is_organic=False,
+            organic_certification="",
+        )
+
+        organic_response = self.client.get("/api/orders/products/", {"available": "true", "organic": "true"})
+        self.assertEqual(organic_response.status_code, status.HTTP_200_OK)
+        organic_ids = {product["id"] for product in organic_response.data}
+        self.assertIn(self.product_a2.id, organic_ids)
+
+        detail_response = self.client.get(f"/api/orders/products/{self.product_a2.id}/")
+        self.assertEqual(detail_response.status_code, status.HTTP_200_OK)
+        self.assertTrue(detail_response.data["is_organic"])
+        self.assertEqual(detail_response.data["organic_certification"], "Organic")
+
+    def test_marketplace_product_search_handles_common_typos(self):
+        product_response = self.client.get("/api/orders/products/", {"available": "true", "search": "orgnic carots"})
+        self.assertEqual(product_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(product_response.data), 1)
+        self.assertEqual(product_response.data[0]["name"], "Organic Carrots")
+
+        producer_response = self.client.get("/api/orders/products/", {"available": "true", "search": "hilsde dary"})
+        self.assertEqual(producer_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(producer_response.data), 1)
+        self.assertEqual(producer_response.data[0]["name"], "Fresh Milk")
+
+        empty_response = self.client.get("/api/orders/products/", {"available": "true", "search": "zzzz"})
+        self.assertEqual(empty_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(empty_response.data), 0)
 
     def test_orders_product_list_heals_duplicate_catalog_mirrors(self):
         catalog_product = get_or_create_catalog_product_mirror(self.product_b1)
@@ -496,7 +651,7 @@ class OrdersCriticalFlowTests(APITestCase):
         self.assertFalse(response.data["is_authenticated"])
         self.assertIn("sign in", response.data["reason"].lower())
 
-    def test_suspicious_review_is_held_for_moderation_and_hidden_from_public_list(self):
+    def test_suspicious_review_is_published_until_reported(self):
         self._seed_delivered_purchase(self.product_a1)
 
         response = self.client.post(
@@ -508,15 +663,16 @@ class OrdersCriticalFlowTests(APITestCase):
             },
             format="json",
         )
-        self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
-        self.assertEqual(response.data["moderation_status"], "pending")
-        self.assertIn("approval", response.data["moderation_reason"].lower())
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["moderation_status"], "published")
+        self.assertEqual(response.data["moderation_reason"], "")
 
         reviews_response = self.client.get(f"/api/orders/products/{self.product_a1.id}/reviews/")
         self.assertEqual(reviews_response.status_code, status.HTTP_200_OK)
-        self.assertEqual(reviews_response.data, [])
+        self.assertEqual(len(reviews_response.data), 1)
+        self.assertEqual(reviews_response.data[0]["id"], response.data["id"])
 
-    def test_admin_can_publish_review_and_verified_label_depends_on_order_history(self):
+    def test_admin_can_remove_reported_review_and_verified_label_depends_on_order_history(self):
         self._seed_delivered_purchase(self.product_a1)
         review_response = self.client.post(
             f"/api/orders/products/{self.product_a1.id}/reviews/",
@@ -527,9 +683,16 @@ class OrdersCriticalFlowTests(APITestCase):
             },
             format="json",
         )
-        self.assertEqual(review_response.status_code, status.HTTP_202_ACCEPTED)
+        self.assertEqual(review_response.status_code, status.HTTP_201_CREATED)
         review_id = review_response.data["id"]
         self.assertTrue(review_response.data["verified_purchase"])
+
+        report_response = self.client.post(
+            "/api/moderation/reports/",
+            {"target_type": "review", "object_id": review_id, "reason": "Reported by customer."},
+            format="json",
+        )
+        self.assertEqual(report_response.status_code, status.HTTP_201_CREATED)
 
         admin_user = User.objects.create_user(
             email="admin-review@example.com",
@@ -539,30 +702,38 @@ class OrdersCriticalFlowTests(APITestCase):
         admin_client = APIClient()
         admin_client.force_authenticate(admin_user)
         moderation_response = admin_client.post(
-            f"/api/orders/products/{self.product_a1.id}/reviews/{review_id}/moderate/",
-            {"moderation_status": "published", "moderation_reason": "Approved"},
+            f"/api/moderation/reports/{report_response.data['id']}/remove/",
+            {"note": "Removed by moderator."},
             format="json",
         )
-        self.assertEqual(moderation_response.status_code, status.HTTP_200_OK)
-        self.assertEqual(moderation_response.data["moderation_status"], "published")
-        self.assertTrue(moderation_response.data["verified_purchase"])
+        self.assertEqual(moderation_response.status_code, status.HTTP_200_OK, moderation_response.data)
+        self.assertEqual(moderation_response.data["status"], "removed")
 
         reviews_response = self.client.get(f"/api/orders/products/{self.product_a1.id}/reviews/")
         self.assertEqual(reviews_response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(reviews_response.data), 1)
-        self.assertTrue(reviews_response.data[0]["verified_purchase"])
+        self.assertEqual(reviews_response.data, [])
 
-    def test_admin_moderation_queue_shows_current_purchase_label_for_pending_reviews(self):
+        removed_review = ProductReview.objects.get(id=review_id)
+        self.assertEqual(removed_review.moderation_status, ProductReview.ModerationStatus.REJECTED)
+
+    def test_admin_moderation_reports_show_reporter_and_target_snapshot(self):
         self._seed_delivered_purchase(self.product_a1)
-        self.client.post(
+        review_response = self.client.post(
             f"/api/orders/products/{self.product_a1.id}/reviews/",
             {
                 "rating": 4,
-                "title": "Pending until approval",
+                "title": "Reported review",
                 "comment": "BUY NOW!!! Visit https://spam.example for my full review!!!!!!",
             },
             format="json",
         )
+        self.assertEqual(review_response.status_code, status.HTTP_201_CREATED)
+        report_response = self.client.post(
+            "/api/moderation/reports/",
+            {"target_type": "review", "object_id": review_response.data["id"], "reason": "Looks promotional."},
+            format="json",
+        )
+        self.assertEqual(report_response.status_code, status.HTTP_201_CREATED)
 
         admin_user = User.objects.create_user(
             email="admin-queue@example.com",
@@ -571,16 +742,221 @@ class OrdersCriticalFlowTests(APITestCase):
         )
         admin_client = APIClient()
         admin_client.force_authenticate(admin_user)
-        queue_response = admin_client.get("/api/orders/reviews/moderation-queue/")
+        queue_response = admin_client.get("/api/moderation/reports/?status=open")
 
         self.assertEqual(queue_response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(queue_response.data), 1)
-        self.assertEqual(queue_response.data[0]["product_name"], self.product_a1.name)
-        self.assertTrue(queue_response.data[0]["has_verified_purchase"])
-        self.assertEqual(queue_response.data[0]["purchase_label"], "Verified purchase")
+        self.assertEqual(queue_response.data[0]["target_type"], "review")
+        self.assertEqual(queue_response.data[0]["reported_by"], self.customer.id)
+        self.assertEqual(queue_response.data[0]["target_snapshot"]["title"], "Reported review")
+        self.assertEqual(queue_response.data[0]["target_snapshot"]["reviewer_email"], self.customer.email)
+        self.assertEqual(queue_response.data[0]["target_context"]["profile"]["product"], self.product_a1.name)
+        self.assertEqual(queue_response.data[0]["target_context"]["profile"]["reviewer_user_id"], self.customer.id)
+        self.assertEqual(queue_response.data[0]["reason"], "Looks promotional.")
 
-    def test_non_admin_cannot_access_review_moderation_queue(self):
-        response = self.client.get("/api/orders/reviews/moderation-queue/")
+        users_response = admin_client.get("/api/moderation/users/", {"q": self.customer.email})
+        self.assertEqual(users_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(users_response.data[0]["email"], self.customer.email)
+        self.assertTrue(users_response.data[0]["moderation_context"]["related_items"])
+
+        deactivate_response = admin_client.post(
+            f"/api/moderation/users/{self.customer.id}/action/",
+            {"action": "deactivate"},
+            format="json",
+        )
+        self.assertEqual(deactivate_response.status_code, status.HTTP_200_OK)
+        self.customer.refresh_from_db()
+        self.assertFalse(self.customer.is_active)
+
+    def test_admin_can_browse_and_directly_action_core_moderation_items(self):
+        self._seed_delivered_purchase(self.product_a1)
+        review_response = self.client.post(
+            f"/api/orders/products/{self.product_a1.id}/reviews/",
+            {"rating": 4, "title": "Useful review", "comment": "Fresh produce and clear collection."},
+            format="json",
+        )
+        self.assertEqual(review_response.status_code, status.HTTP_201_CREATED)
+        recipe = Recipe.objects.create(
+            producer=self.producer_a,
+            title="Carrot soup",
+            description="Seasonal carrot recipe",
+            ingredients="Carrots",
+            instructions="Cook slowly.",
+        )
+        story = FarmStory.objects.create(
+            producer=self.producer_a,
+            title="Spring harvest",
+            body="A story about the farm.",
+        )
+        admin_user = User.objects.create_user(
+            email="admin-items@example.com",
+            password="pass1234",
+            role=User.Role.ADMIN,
+        )
+        admin_client = APIClient()
+        admin_client.force_authenticate(admin_user)
+
+        producer_search = admin_client.get("/api/moderation/items/", {"q": "Bristol Valley", "type": "producer_account"})
+        self.assertEqual(producer_search.status_code, status.HTTP_200_OK, producer_search.data)
+        self.assertGreaterEqual(producer_search.data["count"], 1)
+        self.assertEqual(producer_search.data["results"][0]["target_type"], "producer_account")
+
+        product_search = admin_client.get("/api/moderation/items/", {"q": "Organic Carrots", "type": "product"})
+        self.assertEqual(product_search.status_code, status.HTTP_200_OK, product_search.data)
+        self.assertEqual(product_search.data["results"][0]["label"], "Organic Carrots")
+
+        recipe_search = admin_client.get("/api/moderation/items/", {"q": "Carrot soup", "type": "recipe"})
+        self.assertEqual(recipe_search.status_code, status.HTTP_200_OK, recipe_search.data)
+        self.assertEqual(recipe_search.data["results"][0]["object_id"], recipe.id)
+
+        story_detail = admin_client.get(f"/api/moderation/items/farm_story/{story.id}/")
+        self.assertEqual(story_detail.status_code, status.HTTP_200_OK, story_detail.data)
+        self.assertEqual(story_detail.data["label"], "Spring harvest")
+        self.assertEqual(story_detail.data["reports"], [])
+
+        missing_note = admin_client.post(
+            f"/api/moderation/items/product/{self.product_a1.id}/action/",
+            {"action": "remove", "note": ""},
+            format="json",
+        )
+        self.assertEqual(missing_note.status_code, status.HTTP_400_BAD_REQUEST)
+
+        remove_product = admin_client.post(
+            f"/api/moderation/items/product/{self.product_a1.id}/action/",
+            {"action": "remove", "note": "Listing is not suitable."},
+            format="json",
+        )
+        self.assertEqual(remove_product.status_code, status.HTTP_200_OK, remove_product.data)
+        self.product_a1.refresh_from_db()
+        self.assertFalse(self.product_a1.is_available)
+        self.assertTrue(
+            ModerationAction.objects.filter(
+                target_type="product",
+                object_id=self.product_a1.id,
+                action="remove",
+                note="Listing is not suitable.",
+            ).exists()
+        )
+        removed_filter = admin_client.get("/api/moderation/items/", {"reported": "removed"})
+        self.assertEqual(removed_filter.status_code, status.HTTP_200_OK, removed_filter.data)
+        self.assertTrue(
+            any(
+                item["target_type"] == "product" and item["object_id"] == self.product_a1.id
+                for item in removed_filter.data["results"]
+            )
+        )
+
+        report_response = self.client.post(
+            "/api/moderation/reports/",
+            {"target_type": "product", "object_id": self.product_b1.id, "reason": "Check this listing."},
+            format="json",
+        )
+        self.assertEqual(report_response.status_code, status.HTTP_201_CREATED, report_response.data)
+        keep_response = admin_client.post(
+            f"/api/moderation/reports/{report_response.data['id']}/keep/",
+            {"note": "Listing is acceptable."},
+            format="json",
+        )
+        self.assertEqual(keep_response.status_code, status.HTTP_200_OK, keep_response.data)
+        kept_filter = admin_client.get("/api/moderation/items/", {"reported": "kept"})
+        self.assertEqual(kept_filter.status_code, status.HTTP_200_OK, kept_filter.data)
+        self.assertTrue(
+            any(
+                item["target_type"] == "product" and item["object_id"] == self.product_b1.id
+                for item in kept_filter.data["results"]
+            )
+        )
+        remove_kept_item = admin_client.post(
+            f"/api/moderation/items/product/{self.product_b1.id}/action/",
+            {"action": "remove", "note": "Removed after being kept live."},
+            format="json",
+        )
+        self.assertEqual(remove_kept_item.status_code, status.HTTP_200_OK, remove_kept_item.data)
+        kept_after_removed_filter = admin_client.get("/api/moderation/items/", {"reported": "kept"})
+        self.assertEqual(kept_after_removed_filter.status_code, status.HTTP_200_OK, kept_after_removed_filter.data)
+        self.assertTrue(
+            any(
+                item["target_type"] == "product" and item["object_id"] == self.product_b1.id and item["visibility"] == "removed"
+                for item in kept_after_removed_filter.data["results"]
+            )
+        )
+        removed_after_kept_filter = admin_client.get("/api/moderation/items/", {"reported": "removed"})
+        self.assertEqual(removed_after_kept_filter.status_code, status.HTTP_200_OK, removed_after_kept_filter.data)
+        self.assertTrue(
+            any(
+                item["target_type"] == "product" and item["object_id"] == self.product_b1.id
+                for item in removed_after_kept_filter.data["results"]
+            )
+        )
+        visibility_removed_filter = admin_client.get("/api/moderation/items/", {"visibility": "removed"})
+        self.assertEqual(visibility_removed_filter.status_code, status.HTTP_200_OK, visibility_removed_filter.data)
+        self.assertTrue(
+            any(
+                item["target_type"] == "product" and item["object_id"] == self.product_b1.id
+                for item in visibility_removed_filter.data["results"]
+            )
+        )
+
+        restore_recipe = admin_client.post(
+            f"/api/moderation/items/recipe/{recipe.id}/action/",
+            {"action": "remove", "note": "Temporarily unpublish."},
+            format="json",
+        )
+        self.assertEqual(restore_recipe.status_code, status.HTTP_200_OK, restore_recipe.data)
+        recipe.refresh_from_db()
+        self.assertFalse(recipe.is_published)
+        restore_recipe = admin_client.post(
+            f"/api/moderation/items/recipe/{recipe.id}/action/",
+            {"action": "restore", "note": "Content reviewed."},
+            format="json",
+        )
+        self.assertEqual(restore_recipe.status_code, status.HTTP_200_OK, restore_recipe.data)
+        recipe.refresh_from_db()
+        self.assertTrue(recipe.is_published)
+
+        deactivate_user = admin_client.post(
+            f"/api/moderation/items/customer_account/{self.customer.id}/action/",
+            {"action": "deactivate", "note": "Account issue."},
+            format="json",
+        )
+        self.assertEqual(deactivate_user.status_code, status.HTTP_200_OK, deactivate_user.data)
+        self.customer.refresh_from_db()
+        self.assertFalse(self.customer.is_active)
+
+        blocked_admin_action = admin_client.post(
+            f"/api/moderation/items/customer_account/{admin_user.id}/action/",
+            {"action": "deactivate", "note": "Should not work."},
+            format="json",
+        )
+        self.assertIn(blocked_admin_action.status_code, {status.HTTP_400_BAD_REQUEST, status.HTTP_404_NOT_FOUND})
+
+    def test_customer_cannot_report_same_product_twice(self):
+        first_response = self.client.post(
+            "/api/moderation/reports/",
+            {"target_type": "product", "object_id": self.product_a1.id, "reason": "Product listing issue."},
+            format="json",
+        )
+        self.assertEqual(first_response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(first_response.data["target_type"], "product")
+
+        status_response = self.client.get(
+            "/api/moderation/reports/my-status/",
+            {"target_type": "product", "object_id": self.product_a1.id},
+        )
+        self.assertEqual(status_response.status_code, status.HTTP_200_OK)
+        self.assertTrue(status_response.data["reported"])
+        self.assertEqual(status_response.data["status"], "open")
+
+        duplicate_response = self.client.post(
+            "/api/moderation/reports/",
+            {"target_type": "product", "object_id": self.product_a1.id, "reason": "Reporting again."},
+            format="json",
+        )
+        self.assertEqual(duplicate_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("already reported", str(duplicate_response.data).lower())
+
+    def test_non_admin_cannot_access_moderation_reports(self):
+        response = self.client.get("/api/moderation/reports/")
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_producer_can_respond_to_published_review_for_own_product(self):
@@ -628,6 +1004,64 @@ class OrdersCriticalFlowTests(APITestCase):
         )
         self.assertEqual(duplicate_response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("already reviewed", str(duplicate_response.data).lower())
+
+    def test_customer_can_edit_existing_review_without_creating_duplicate(self):
+        self._seed_delivered_purchase(self.product_a1)
+        create_response = self.client.post(
+            f"/api/orders/products/{self.product_a1.id}/reviews/",
+            {"rating": 4, "title": "Good carrots", "comment": "Fresh and clean."},
+            format="json",
+        )
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+        review_id = create_response.data["id"]
+
+        eligibility_response = self.client.get(
+            f"/api/orders/products/{self.product_a1.id}/reviews/eligibility/"
+        )
+        self.assertEqual(eligibility_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(eligibility_response.data["existing_review"]["id"], review_id)
+
+        update_response = self.client.patch(
+            f"/api/orders/products/{self.product_a1.id}/reviews/{review_id}/",
+            {"rating": 5, "title": "Excellent carrots", "comment": "Updated after cooking."},
+            format="json",
+        )
+        self.assertEqual(update_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(update_response.data["rating"], 5)
+        self.assertEqual(update_response.data["title"], "Excellent carrots")
+
+        catalog_product = get_or_create_catalog_product_mirror(self.product_a1)
+        self.assertEqual(ProductReview.objects.filter(user=self.customer, product=catalog_product).count(), 1)
+
+    def test_rejected_review_does_not_block_customer_from_writing_again(self):
+        self._seed_delivered_purchase(self.product_a1)
+        catalog_product = get_or_create_catalog_product_mirror(self.product_a1)
+        ProductReview.objects.create(
+            product=catalog_product,
+            user=self.customer,
+            reviewer_name="Robert Johnson",
+            rating=1,
+            title="Removed review",
+            comment="This was removed after a report.",
+            verified_purchase=True,
+            moderation_status=ProductReview.ModerationStatus.REJECTED,
+            moderation_reason="Removed after report.",
+        )
+
+        eligibility_response = self.client.get(
+            f"/api/orders/products/{self.product_a1.id}/reviews/eligibility/"
+        )
+        self.assertEqual(eligibility_response.status_code, status.HTTP_200_OK)
+        self.assertTrue(eligibility_response.data["can_submit"])
+        self.assertFalse(eligibility_response.data["has_existing_review"])
+
+        response = self.client.post(
+            f"/api/orders/products/{self.product_a1.id}/reviews/",
+            {"rating": 5, "title": "Fresh replacement", "comment": "This review should be accepted."},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["moderation_status"], ProductReview.ModerationStatus.PUBLISHED)
 
     def test_orders_marketplace_read_routes_are_public(self):
         anonymous_client = APIClient()
@@ -700,11 +1134,12 @@ class OrdersCriticalFlowTests(APITestCase):
 
         confirm_res = producer_client.patch(
             f"/api/orders/producer/sub-orders/{sub_order.id}/status/",
-            {"status": Order.Status.CONFIRMED},
+            {"status": Order.Status.CONFIRMED, "note": "Accepted for prep."},
             format="json",
         )
         self.assertEqual(confirm_res.status_code, status.HTTP_200_OK)
         self.assertEqual(confirm_res.data["status"], Order.Status.CONFIRMED)
+        self.assertEqual(confirm_res.data["status_history"][0]["note"], "Accepted for prep.")
 
         ready_res = producer_client.patch(
             f"/api/orders/producer/sub-orders/{sub_order.id}/status/",
@@ -735,6 +1170,17 @@ class OrdersCriticalFlowTests(APITestCase):
 
         producer_product.refresh_from_db()
         self.assertEqual(producer_product.stock_quantity, 8)
+        self.assertEqual(
+            ProducerSubOrderStatusHistory.objects.filter(sub_order=sub_order).count(),
+            3,
+        )
+        self.assertTrue(
+            UserNotification.objects.filter(
+                user=self.customer,
+                category="order_status",
+                metadata__sub_order_id=sub_order.id,
+            ).exists()
+        )
 
     def test_out_of_season_products_are_hidden_and_blocked_from_cart(self):
         today = timezone.localdate()

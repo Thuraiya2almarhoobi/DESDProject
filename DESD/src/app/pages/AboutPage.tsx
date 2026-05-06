@@ -27,6 +27,7 @@ import trackImage from '../../assets/about/WhatsApp Image 2026-04-29 at 21.27.33
 import publicBrowsingImage from '../../assets/about/WhatsApp Image 2026-04-29 at 21.27.33 (15).jpeg';
 import producerRoleImage from '../../assets/about/WhatsApp Image 2026-04-29 at 21.27.34 (7).jpeg';
 import { MarketingImageCard } from '../components/MarketingImageCard';
+import { AnimatedText, Reveal, RevealGroup } from '../components/motion/Motion';
 import { SiteHeader } from '../components/SiteHeader';
 import { Button } from '../components/ui/button';
 
@@ -142,10 +143,12 @@ export function AboutPage() {
           </div>
 
           <div className="relative z-10 mx-auto max-w-7xl px-4 py-16 sm:py-20">
-            <div className="max-w-3xl space-y-6 lg:min-h-[30rem] lg:content-center lg:py-8">
-              <h1 className="market-section-title max-w-4xl text-[oklch(0.23_0.034_87)]">
-                A local-food system that keeps the operational detail visible.
-              </h1>
+            <RevealGroup className="max-w-3xl space-y-6 lg:min-h-[30rem] lg:content-center lg:py-8" stagger={0.12}>
+              <AnimatedText
+                as="h1"
+                text="A local-food system that keeps the operational detail visible."
+                className="market-section-title max-w-4xl text-[oklch(0.23_0.034_87)]"
+              />
               <p className="market-copy max-w-2xl">
                 Local Food Marketplace is designed for direct local-food ordering without hiding where food comes from,
                 how it moves, or who is responsible for fulfilment.
@@ -161,19 +164,21 @@ export function AboutPage() {
                   <Link to="/select-portal?mode=register">Create account</Link>
                 </Button>
               </div>
-            </div>
+            </RevealGroup>
           </div>
         </section>
 
         <section className="market-section market-section-white">
           <div className="mx-auto max-w-7xl px-4 py-16 sm:py-20">
-            <div className="max-w-3xl space-y-4">
-              <h2 className="text-4xl font-bold leading-tight text-[oklch(0.23_0.034_87)] sm:text-5xl">
-                One marketplace base, several buying patterns.
-              </h2>
-            </div>
+            <Reveal className="max-w-3xl space-y-4">
+              <AnimatedText
+                as="h2"
+                text="One marketplace base, several buying patterns."
+                className="text-4xl font-bold leading-tight text-[oklch(0.23_0.034_87)] sm:text-5xl"
+              />
+            </Reveal>
 
-            <div className="mt-10 grid gap-6 lg:grid-cols-3">
+            <RevealGroup className="mt-10 grid gap-6 lg:grid-cols-3" stagger={0.1}>
               {operatingPrinciples.map((principle) => (
                 <MarketingImageCard
                   key={principle.title}
@@ -186,21 +191,25 @@ export function AboutPage() {
                   imagePosition={principle.imagePosition}
                 />
               ))}
-            </div>
+            </RevealGroup>
           </div>
         </section>
 
         <section className="market-section market-section-green">
           <div className="mx-auto max-w-7xl px-4 py-16 sm:py-20">
-            <div className="max-w-3xl space-y-5">
-              <h2 className="market-section-title max-w-3xl">From inspection to receipt, the flow stays explicit.</h2>
+            <Reveal className="max-w-3xl space-y-5">
+              <AnimatedText
+                as="h2"
+                text="From inspection to receipt, the flow stays explicit."
+                className="market-section-title max-w-3xl"
+              />
               <p className="market-copy max-w-2xl text-white/82">
                 The platform supports household ordering, community bulk buying, restaurant demand planning, and
                 producer stock management without repeating the same generic marketplace steps on every page.
               </p>
-            </div>
+            </Reveal>
 
-            <div className="mt-10 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+            <RevealGroup className="mt-10 grid gap-5 md:grid-cols-2 xl:grid-cols-4" stagger={0.11}>
               {timeline.map((step) => (
                 <article
                   key={step.label}
@@ -220,14 +229,18 @@ export function AboutPage() {
                   </div>
                 </article>
               ))}
-            </div>
+            </RevealGroup>
           </div>
         </section>
 
         <section className="market-section market-section-brown">
           <div className="mx-auto grid max-w-7xl gap-8 px-4 py-16 sm:py-20 lg:grid-cols-[0.92fr_1.08fr] lg:items-start">
-            <div className="space-y-5">
-              <h2 className="market-section-title max-w-4xl">Start with public browsing, then choose the role you need.</h2>
+            <Reveal className="space-y-5">
+              <AnimatedText
+                as="h2"
+                text="Start with public browsing, then choose the role you need."
+                className="market-section-title max-w-4xl"
+              />
               <p className="market-copy max-w-2xl">
                 Visitors can inspect products, producers, and marketplace quality before signing in. Ordering remains
                 gated behind authenticated buyer accounts so real purchases keep clean records.
@@ -240,9 +253,9 @@ export function AboutPage() {
                   <Link to="/producers">Producer information</Link>
                 </Button>
               </div>
-            </div>
+            </Reveal>
 
-            <div className="grid gap-4 sm:grid-cols-2">
+            <RevealGroup className="grid gap-4 sm:grid-cols-2" stagger={0.11}>
               {roleVisuals.map((visual) => (
                 <article
                   key={visual.label}
@@ -258,7 +271,7 @@ export function AboutPage() {
                   </div>
                 </article>
               ))}
-            </div>
+            </RevealGroup>
           </div>
         </section>
       </main>

@@ -102,6 +102,17 @@ function clearPendingStripeCheckout(): void {
   window.sessionStorage.removeItem(LEGACY_PENDING_STRIPE_ORDER_STORAGE_KEY);
 }
 
+function currentStripeRedirectUrls(): { success_url: string; cancel_url: string } | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  return {
+    success_url: `${window.location.origin}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${window.location.origin}/checkout/cancel`,
+  };
+}
+
 function minDeliveryDate(leadHours: number): string {
   const minHours = Math.max(48, leadHours || 48);
   const minDays = Math.ceil(minHours / 24);
@@ -368,6 +379,9 @@ export function CheckoutPage() {
         payment_token: '',
         selected_cart_item_ids: selectedCartItemIds.map((cartItemId) => Number(cartItemId)),
       };
+      if (usesStripeCheckout) {
+        Object.assign(payload, currentStripeRedirectUrls());
+      }
       if (specialInstructions.trim()) {
         payload.special_instructions = specialInstructions.trim();
       }

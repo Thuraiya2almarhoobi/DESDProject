@@ -102,7 +102,11 @@ class RestaurantRecurringOrderListCreateAPIView(APIView):
             if use_stripe_checkout:
                 from apps.payments.services import create_stripe_checkout_session_for_order
 
-                checkout_session = create_stripe_checkout_session_for_order(initial_order)
+                checkout_session = create_stripe_checkout_session_for_order(
+                    initial_order,
+                    success_url=serializer.validated_data.get("success_url"),
+                    cancel_url=serializer.validated_data.get("cancel_url"),
+                )
         except ValueError as exc:
             if use_stripe_checkout and template is not None and initial_order is not None:
                 try:

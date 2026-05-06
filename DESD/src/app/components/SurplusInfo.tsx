@@ -24,6 +24,7 @@ interface SurplusInfoProps {
   expiresAt: string;
   bestBefore: string;
   unit: string;
+  note?: string;
 }
 
 /**
@@ -34,7 +35,7 @@ interface SurplusInfoProps {
  * Keep role checks, API coordination, and cross-page side effects visible here
  * so future contributors can trace behavior during sprint reviews.
  */
-export function SurplusInfo({ discount, originalPrice, currentPrice, expiresAt, bestBefore, unit }: SurplusInfoProps) {
+export function SurplusInfo({ discount, originalPrice, currentPrice, expiresAt, bestBefore, unit, note }: SurplusInfoProps) {
   const expiryDate = new Date(expiresAt);
   const now = new Date();
   const hoursUntilExpiry = Math.max(0, (expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60));
@@ -66,6 +67,12 @@ export function SurplusInfo({ discount, originalPrice, currentPrice, expiresAt, 
         <Calendar className="size-3" />
         <span>Best before: {bestBefore}</span>
       </div>
+
+      {note?.trim() ? (
+        <p className="rounded-xl bg-orange-50 px-3 py-2 text-xs leading-5 text-orange-800">
+          {note.trim()}
+        </p>
+      ) : null}
     </div>
   );
 }

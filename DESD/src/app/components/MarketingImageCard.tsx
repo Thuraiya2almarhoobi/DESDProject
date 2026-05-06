@@ -14,6 +14,7 @@
  */
 
 import type { LucideIcon } from 'lucide-react';
+import { motion, useReducedMotion } from 'motion/react';
 
 import { cn } from './ui/utils';
 
@@ -50,17 +51,38 @@ export function MarketingImageCard({
   minHeightClassName = 'min-h-[20rem]',
   bodyClassName,
 }: MarketingImageCardProps) {
+  const prefersReducedMotion = useReducedMotion();
+
   return (
-    <article
+    <motion.article
       className={cn(
         'relative overflow-hidden rounded-[1.35rem] border border-white/20 bg-[oklch(0.21_0.028_124)] shadow-[0_18px_38px_rgba(18,28,20,0.12)]',
         minHeightClassName,
         className,
       )}
+      initial={prefersReducedMotion ? false : { opacity: 0, y: 14 }}
+      whileInView={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.24 }}
+      transition={{ duration: 0.72, ease: [0.16, 1, 0.3, 1] }}
     >
-      <img src={image} alt={alt} className={cn('absolute inset-0 h-full w-full object-cover', imagePosition)} />
+      <motion.img
+        src={image}
+        alt={alt}
+        loading="lazy"
+        className={cn('absolute inset-0 h-full w-full object-cover', imagePosition)}
+        initial={prefersReducedMotion ? false : { scale: 1.035, opacity: 0.72 }}
+        whileInView={prefersReducedMotion ? undefined : { scale: 1, opacity: 1 }}
+        viewport={{ once: true, amount: 0.24 }}
+        transition={{ duration: 1.05, ease: [0.16, 1, 0.3, 1] }}
+      />
       <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(15,31,20,0.24)_0%,rgba(15,31,20,0.48)_45%,rgba(15,31,20,0.88)_100%)]" />
-      <div className="relative z-10 flex h-full flex-col justify-between p-5 text-white">
+      <motion.div
+        className="relative z-10 flex h-full flex-col justify-between p-5 text-white"
+        initial={prefersReducedMotion ? false : { opacity: 0, y: 10 }}
+        whileInView={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}
+        viewport={{ once: true, amount: 0.24 }}
+        transition={{ duration: 0.68, delay: 0.12, ease: [0.16, 1, 0.3, 1] }}
+      >
         <div className="flex items-start justify-between gap-3">
           <span className="rounded-full bg-white/14 px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-white/92 backdrop-blur-sm">
             {label}
@@ -74,7 +96,7 @@ export function MarketingImageCard({
           <h3 className="text-2xl font-semibold tracking-tight text-white">{title}</h3>
           <p className={cn('max-w-md text-sm leading-7 text-white/82', bodyClassName)}>{body}</p>
         </div>
-      </div>
-    </article>
+      </motion.div>
+    </motion.article>
   );
 }

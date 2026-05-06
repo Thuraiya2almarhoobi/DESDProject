@@ -153,6 +153,54 @@ class Product(models.Model):
         return f"{self.name} ({self.producer.business_name})"
 
 
+class ProductAllergenAcknowledgement(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="product_allergen_acknowledgements",
+    )
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="allergen_acknowledgements")
+    acknowledged_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-acknowledged_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "product"],
+                name="orders_unique_user_product_allergen_ack",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user_id}:{self.product_id}"
+
+
+class FavoriteProducer(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="favorite_producers",
+    )
+    producer = models.ForeignKey(Producer, on_delete=models.CASCADE, related_name="favorited_by")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "producer"],
+                name="orders_unique_user_favorite_producer",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["producer", "created_at"], name="orders_favprod_producer_idx"),
+            models.Index(fields=["user", "created_at"], name="orders_favprod_user_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user_id}:{self.producer_id}"
+
+
 class Cart(models.Model):
     """
     Documents the `Cart` boundary for this module.
@@ -237,7 +285,7 @@ class Order(models.Model):
     )
     recurring_scheduled_for = models.DateField(null=True, blank=True)
     is_recurring_instance = models.BooleanField(default=False)
-    order_number = models.CharField(max_length=20, unique=True, default=_generate_order_number)
+    order_number = models.CharField(max_length=32, unique=True, default=_generate_order_number)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
     payment_status = models.CharField(
         max_length=20, choices=PaymentStatus.choices, default=PaymentStatus.PAID
@@ -280,6 +328,7 @@ class ProducerSubOrder(models.Model):
     commission_amount = models.DecimalField(max_digits=12, decimal_places=2)
     payout_amount = models.DecimalField(max_digits=12, decimal_places=2)
     notes = models.TextField(blank=True)
+    settlement_processed = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -292,6 +341,31 @@ class ProducerSubOrder(models.Model):
 
     def __str__(self) -> str:
         return f"{self.order.order_number} -> {self.producer.business_name}"
+
+
+class ProducerSubOrderStatusHistory(models.Model):
+    sub_order = models.ForeignKey(
+        ProducerSubOrder,
+        on_delete=models.CASCADE,
+        related_name="status_history",
+    )
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="producer_sub_order_status_changes",
+    )
+    previous_status = models.CharField(max_length=20, choices=Order.Status.choices)
+    new_status = models.CharField(max_length=20, choices=Order.Status.choices)
+    note = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at", "id"]
+
+    def __str__(self) -> str:
+        return f"{self.sub_order_id}:{self.previous_status}->{self.new_status}"
 
 
 class OrderItem(models.Model):
@@ -499,10 +573,17 @@ class ProducerNotification(models.Model):
     """
     producer = models.ForeignKey(Producer, on_delete=models.CASCADE, related_name="notifications")
     sub_order = models.ForeignKey(
-        ProducerSubOrder, on_delete=models.CASCADE, related_name="notifications"
+        ProducerSubOrder,
+        on_delete=models.CASCADE,
+        related_name="notifications",
+        null=True,
+        blank=True,
     )
+    category = models.CharField(max_length=50, default="order")
     message = models.CharField(max_length=255)
+    metadata = models.JSONField(default=dict, blank=True)
     is_read = models.BooleanField(default=False)
+    resolved_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
