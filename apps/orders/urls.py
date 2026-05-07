@@ -17,6 +17,7 @@ Implementation notes:
 
 from django.urls import path
 
+from .recurring_views import ProducerRecurringDemandAPIView
 from .views import (
     CartAPIView,
     CartItemAddAPIView,
@@ -42,6 +43,7 @@ from .views import (
     ProductReviewResponseAPIView,
     ProductListCreateAPIView,
     ProductReviewsAPIView,
+    UserNotificationListAPIView,
 )
 
 urlpatterns = [
@@ -91,7 +93,13 @@ urlpatterns = [
     path("history/<int:order_id>/", OrderDetailAPIView.as_view(), name="orders-history-detail"),
     path("history/<int:order_id>/reorder/", OrderReorderAPIView.as_view(), name="orders-reorder"),
     path("history/<int:order_id>/receipt/", OrderReceiptAPIView.as_view(), name="orders-receipt"),
+    path("notifications/", UserNotificationListAPIView.as_view(), name="orders-user-notifications"),
     path("producer/sub-orders/", ProducerSubOrderListAPIView.as_view(), name="orders-producer-sub-orders"),
+    path(
+        "producer/recurring-demand/",
+        ProducerRecurringDemandAPIView.as_view(),
+        name="orders-producer-recurring-demand",
+    ),
     path(
         "producer/sub-orders/<int:sub_order_id>/status/",
         ProducerSubOrderStatusUpdateAPIView.as_view(),

@@ -25,6 +25,7 @@ from .views import (
     ProducerOrdersInboxAPIView,
     ProducerOrderStatusUpdateAPIView,
     ProducerProductDetailAPIView,
+    ProducerProductHistoryAPIView,
     ProducerProductListCreateAPIView,
     ProducerSurplusDealAPIView,
 )
@@ -35,6 +36,7 @@ urlpatterns = [
     path("public/products/<int:pk>/", PublicMarketplaceProductDetailAPIView.as_view(), name="public-marketplace-product-detail"),
     path("products/", ProducerProductListCreateAPIView.as_view(), name="producer-product-list-create"),
     path("products/<int:pk>/", ProducerProductDetailAPIView.as_view(), name="producer-product-detail"),
+    path("products/<int:pk>/history/", ProducerProductHistoryAPIView.as_view(), name="producer-product-history"),
     path("products/<int:pk>/surplus/", ProducerSurplusDealAPIView.as_view(), name="producer-product-surplus"),
     path("inventory/low-stock/", ProducerLowStockAlertsAPIView.as_view(), name="producer-low-stock-alerts"),
     path("orders/", ProducerOrdersInboxAPIView.as_view(), name="producer-orders-inbox"),

@@ -16,6 +16,7 @@
 import { Product, AvailabilityType } from '../types';
 import { resolveApiPathBase } from '../lib/apiBase';
 import { apiJson } from '../lib/api';
+import { DEFAULT_PRODUCT_IMAGE_URL } from '../api/catalog';
 
 /**
  * Marketplace and producer-product API helpers.
@@ -50,6 +51,7 @@ interface BackendProduct {
   is_organic?: boolean;
   organic_certification?: string;
   allergen_information: string | string[];
+  no_known_allergens_confirmed?: boolean;
   storage_tips?: string;
   storage_tips_ai_generated?: boolean;
   harvest_date: string;
@@ -73,6 +75,7 @@ interface ProducerCreatePayload {
   isOrganic?: boolean;
   organicCertification?: string;
   allergens?: string[];
+  noKnownAllergensConfirmed?: boolean;
   storageTips?: string;
   storageTipsAiGenerated?: boolean;
   harvestDate: string;
@@ -84,6 +87,24 @@ interface ProducerCreatePayload {
   surplusExpiresAt?: string;
   surplusBestBefore?: string;
   surplusNote?: string;
+}
+
+export interface ProducerProductHistoryEvent {
+  id: number;
+  product_id: number;
+  product_name: string;
+  actor_email?: string;
+  actor_role?: string;
+  event_type: string;
+  previous_stock_quantity?: number | null;
+  new_stock_quantity?: number | null;
+  previous_availability?: string;
+  new_availability?: string;
+  changed_fields: string[];
+  previous_values: Record<string, unknown>;
+  new_values: Record<string, unknown>;
+  note: string;
+  created_at: string;
 }
 
 const configuredBase = resolveApiPathBase(import.meta.env.VITE_API_BASE_URL, '/api');
@@ -162,7 +183,7 @@ export function backendProductToFrontend(product: BackendProduct): Product {
     isOrganic: Boolean(product.is_organic),
     organicCertification: product.organic_certification || undefined,
     allergens,
-    imageUrl: product.image_url || 'https://images.unsplash.com/photo-1563636619-e9143da7973b?w=800',
+    imageUrl: product.image_url || DEFAULT_PRODUCT_IMAGE_URL,
     stock: product.stock_quantity,
     lowStockThreshold: product.low_stock_threshold ?? 10,
     foodMiles: 12,
@@ -221,6 +242,7 @@ export async function createProducerProductInApi(
     is_organic: Boolean(payload.isOrganic),
     organic_certification: payload.isOrganic ? payload.organicCertification?.trim() ?? '' : '',
     allergen_information: serializeAllergens(payload.allergens),
+    no_known_allergens_confirmed: Boolean(payload.noKnownAllergensConfirmed || !payload.allergens || payload.allergens.length === 0),
     storage_tips: payload.storageTips?.trim() ?? '',
     storage_tips_ai_generated: Boolean(payload.storageTips?.trim() && payload.storageTipsAiGenerated),
     harvest_date: payload.harvestDate,
@@ -264,6 +286,9 @@ export async function patchProducerProductInApi(
     body.organic_certification = partialPayload.isOrganic === false ? '' : partialPayload.organicCertification.trim();
   }
   if (partialPayload.allergens !== undefined) body.allergen_information = serializeAllergens(partialPayload.allergens);
+  if (partialPayload.noKnownAllergensConfirmed !== undefined) {
+    body.no_known_allergens_confirmed = partialPayload.noKnownAllergensConfirmed;
+  }
   if (partialPayload.storageTips !== undefined) body.storage_tips = partialPayload.storageTips.trim();
   if (partialPayload.storageTipsAiGenerated !== undefined) {
     body.storage_tips_ai_generated = Boolean(partialPayload.storageTips?.trim() && partialPayload.storageTipsAiGenerated);
@@ -297,4 +322,20 @@ export async function patchProducerProductInApi(
     body: JSON.stringify(body),
   });
   return backendProductToFrontend(product);
+}
+
+export async function deleteProducerProductInApi(
+  productId: string,
+  demoUserEmail: string,
+): Promise<void> {
+  void demoUserEmail;
+  await apiJson<null>(`/api/producer/products/${productId}/`, {
+    method: 'DELETE',
+  });
+}
+
+export async function fetchProducerProductHistoryFromApi(
+  productId: string,
+): Promise<ProducerProductHistoryEvent[]> {
+  return apiJson<ProducerProductHistoryEvent[]>(`/api/producer/products/${productId}/history/`);
 }

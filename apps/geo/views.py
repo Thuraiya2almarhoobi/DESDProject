@@ -17,6 +17,7 @@ Implementation notes:
 
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework import status
 from rest_framework.views import APIView
 
 from .services import get_cart_food_miles, get_producers_near_postcode, get_user_default_postcode
@@ -54,5 +55,19 @@ class CartFoodMilesAPIView(APIView):
 
     def get(self, request):
         postcode = request.query_params.get("postcode")
-        payload = get_cart_food_miles(request.user, postcode=postcode)
+        raw_cart_item_ids = request.query_params.getlist("cart_item_id")
+        selected_cart_item_ids = None
+        if raw_cart_item_ids:
+            try:
+                selected_cart_item_ids = [int(item_id) for item_id in raw_cart_item_ids]
+            except (TypeError, ValueError):
+                return Response(
+                    {"detail": "cart_item_id values must be numbers."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        payload = get_cart_food_miles(
+            request.user,
+            postcode=postcode,
+            selected_cart_item_ids=selected_cart_item_ids,
+        )
         return Response(payload)

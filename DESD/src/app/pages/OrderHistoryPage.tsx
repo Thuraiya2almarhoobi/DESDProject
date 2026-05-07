@@ -13,7 +13,7 @@
  *   unless they communicate an important layout or accessibility choice.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import {
   ArrowLeft,
@@ -33,6 +33,7 @@ import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { ApiDeliveryInfo, ApiOrderDetail, ApiOrderSummary, apiBlob, apiJson } from '../lib/api';
 import { getDeliverySimulationPollMs } from '../lib/deliverySimulation';
+import { formatPercentRate } from '../lib/numberFormat';
 import {
   getEffectiveDeliveryEta,
   getEffectiveDeliveryStatus,
@@ -65,6 +66,7 @@ import { cn } from '../components/ui/utils';
 const CURRENT_ORDER_STATUSES = new Set([
   'pending',
   'confirmed',
+  'preparing',
   'ready',
   'created',
   'assigned',
@@ -131,6 +133,8 @@ function getTrackingMessage(status: string, deliveryStatus?: string | null): str
       return 'Order placed. The producer still needs to confirm and prepare the delivery.';
     case 'confirmed':
       return 'The producer has confirmed the order and is getting it ready for dispatch.';
+    case 'preparing':
+      return 'The producer is preparing this order for dispatch.';
     case 'ready':
       return 'The order is ready and currently in the delivery stage.';
     case 'delivered':
@@ -163,6 +167,8 @@ function getTrackingStepIndex(status: string, deliveryStatus?: string | null): n
       return 0;
     case 'confirmed':
       return 1;
+    case 'preparing':
+      return 1;
     case 'ready':
       return 1;
     case 'delivered':
@@ -178,6 +184,8 @@ function getStatusBadgeClass(status: string): string {
       return 'bg-amber-100 text-amber-800 border-amber-200';
     case 'confirmed':
       return 'bg-blue-100 text-blue-800 border-blue-200';
+    case 'preparing':
+      return 'bg-indigo-100 text-indigo-800 border-indigo-200';
     case 'ready':
       return 'bg-green-100 text-green-800 border-green-200';
     case 'delivered':
@@ -263,6 +271,7 @@ function getPrimaryDeliveryStatus(
 }
 
 function getOrderDisplayStatus(detail: ApiOrderDetail, nowMs: number): string {
+  // parent display status follows the most active producer sub order
   const statuses = detail.sub_orders.map((subOrder) => getSubOrderDisplayStatus(subOrder, nowMs));
   if (statuses.length === 0) {
     return detail.status;
@@ -283,6 +292,9 @@ function getOrderDisplayStatus(detail: ApiOrderDetail, nowMs: number): string {
   if (statuses.some((status) => status === 'ready')) {
     return 'ready';
   }
+  if (statuses.some((status) => status === 'preparing')) {
+    return 'preparing';
+  }
   if (statuses.some((status) => status === 'confirmed')) {
     return 'confirmed';
   }
@@ -296,6 +308,7 @@ function getOrderDisplayStatus(detail: ApiOrderDetail, nowMs: number): string {
 }
 
 function getOrderSummaryDisplayStatus(order: ApiOrderSummary, nowMs: number): string {
+  // summaries reuse detail status logic so cards and panels speak the same language
   if (!order.sub_orders || order.sub_orders.length === 0) {
     return order.status;
   }
@@ -310,11 +323,13 @@ function getOrderSummaryDisplayStatus(order: ApiOrderSummary, nowMs: number): st
       customer_postcode: '',
       special_instructions: '',
       subtotal_amount: order.subtotal_amount,
-      commission_rate: '0',
+      commission_rate: order.commission_rate || '5',
       commission_amount: order.commission_amount,
       producer_payout_total: '0',
       total_amount: order.total_amount,
       payment_method: '',
+      payment_terms: order.payment_terms,
+      purchase_order_number: order.purchase_order_number,
       payment_reference: '',
       created_at: order.created_at,
       sub_orders: order.sub_orders,
@@ -322,6 +337,17 @@ function getOrderSummaryDisplayStatus(order: ApiOrderSummary, nowMs: number): st
     },
     nowMs,
   );
+}
+
+function formatPaymentTerms(value?: string): string {
+  // stored payment terms are compact values but users need readable labels
+  if (value === 'invoice_terms_may_apply') {
+    return 'Invoice terms may apply';
+  }
+  if (value === 'recurring_card_payment_per_instance') {
+    return 'Recurring card payment per instance';
+  }
+  return 'Online payment at checkout';
 }
 
 function getDeliveryStatusBadgeClass(status?: string | null): string {
@@ -361,14 +387,19 @@ export function OrderHistoryPage({ producerOrdersMode = false }: OrderHistoryPag
   const navigate = useNavigate();
   const location = useLocation();
   const goBack = useSafeBack(producerOrdersMode ? '/producer/dashboard' : '/marketplace');
-  const searchQuery = new URLSearchParams(location.search).get('q') || '';
+  const searchParams = new URLSearchParams(location.search);
+  const searchQuery = searchParams.get('q') || '';
+  const orderIdFromQuery = Number(searchParams.get('order') || 0);
   const [orders, setOrders] = useState<ApiOrderSummary[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<ApiOrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [activeOrderId, setActiveOrderId] = useState<number | null>(null);
   const [activeOrderView, setActiveOrderView] = useState<'details' | 'tracking' | null>(null);
+  // guard detail panel requests so old responses cannot reopen wrong orders
+  const detailRequestIdRef = useRef(0);
   const [producerNameFilter, setProducerNameFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [fromDateFilter, setFromDateFilter] = useState('');
   const [toDateFilter, setToDateFilter] = useState('');
   const [producerOptions, setProducerOptions] = useState<string[]>([]);
@@ -392,9 +423,15 @@ export function OrderHistoryPage({ producerOrdersMode = false }: OrderHistoryPag
     </div>
   );
 
-  const hasActiveFilters = producerNameFilter !== 'all' || Boolean(fromDateFilter) || Boolean(toDateFilter) || Boolean(searchQuery.trim());
+  const hasActiveFilters =
+    producerNameFilter !== 'all' ||
+    statusFilter !== 'all' ||
+    Boolean(fromDateFilter) ||
+    Boolean(toDateFilter) ||
+    Boolean(searchQuery.trim());
 
   const queryString = useMemo(() => {
+    // keep api filtering separate from the visible search box filter
     const query = new URLSearchParams();
     if (producerNameFilter !== 'all') {
       query.set('producer_name', producerNameFilter);
@@ -451,12 +488,16 @@ export function OrderHistoryPage({ producerOrdersMode = false }: OrderHistoryPag
     };
   }, [queryString]);
 
-  const loadOrderDetail = useCallback(async (orderId: number, background = false) => {
+  const loadOrderDetail = useCallback(async (orderId: number, background = false, requestId?: number) => {
+    // background refreshes update silently while manual opens show the loader
     if (!background) {
       setDetailLoading(true);
     }
     try {
       const detail = await apiJson<ApiOrderDetail>(`/api/orders/history/${orderId}/`);
+      if (requestId && requestId !== detailRequestIdRef.current) {
+        return detail;
+      }
       setSelectedOrder(detail);
       setOrders((previous) =>
         previous.map((order) =>
@@ -471,7 +512,7 @@ export function OrderHistoryPage({ producerOrdersMode = false }: OrderHistoryPag
       );
       return detail;
     } finally {
-      if (!background) {
+      if (!background && (!requestId || requestId === detailRequestIdRef.current)) {
         setDetailLoading(false);
       }
     }
@@ -486,6 +527,7 @@ export function OrderHistoryPage({ producerOrdersMode = false }: OrderHistoryPag
     }
 
     const intervalId = window.setInterval(() => {
+      // simulated delivery needs local ticking so the progress bar keeps moving
       setSimulationNow(Date.now());
     }, 500);
 
@@ -511,6 +553,7 @@ export function OrderHistoryPage({ producerOrdersMode = false }: OrderHistoryPag
     }
 
     const intervalId = window.setInterval(() => {
+      // live delivery jobs refresh from api while tracking is open
       void loadOrderDetail(activeOrderId, true);
     }, DELIVERY_POLL_MS);
 
@@ -543,32 +586,45 @@ export function OrderHistoryPage({ producerOrdersMode = false }: OrderHistoryPag
   }, [activeOrderId, activeOrderView, loadOrderDetail, selectedOrder, simulationNow]);
 
   const openOrderPanel = async (orderId: number, view: 'details' | 'tracking') => {
+    // one path handles button clicks card clicks and notification deep links
     if (activeOrderId === orderId && activeOrderView === view) {
+      detailRequestIdRef.current += 1;
       setActiveOrderId(null);
       setActiveOrderView(null);
       setSelectedOrder(null);
+      setDetailLoading(false);
       return;
     }
 
+    const alreadyLoaded = selectedOrder?.id === orderId;
+    const requestId = detailRequestIdRef.current + 1;
+    detailRequestIdRef.current = requestId;
     setActiveOrderId(orderId);
     setActiveOrderView(view);
 
-    if (selectedOrder?.id === orderId) {
+    if (alreadyLoaded) {
+      setDetailLoading(false);
       return;
     }
 
+    setSelectedOrder(null);
     try {
-      await loadOrderDetail(orderId, false);
+      await loadOrderDetail(orderId, false, requestId);
     } catch (error) {
+      if (requestId !== detailRequestIdRef.current) {
+        return;
+      }
       toast.error('Unable to load order details.');
       setActiveOrderId(null);
       setActiveOrderView(null);
       setSelectedOrder(null);
+      setDetailLoading(false);
     }
   };
 
   const reorderOrder = async (orderId: number) => {
     try {
+      // backend decides which historical items are still available to reorder
       const payload = await apiJson<{
         added_items: Array<{ product_name: string }>;
         unavailable_items: Array<{ product_name: string }>;
@@ -613,11 +669,16 @@ export function OrderHistoryPage({ producerOrdersMode = false }: OrderHistoryPag
   };
 
   const searchedOrders = useMemo(() => {
+    // search includes item producer delivery and payment text so cards filter predictably
     const normalizedSearch = searchQuery.trim().toLowerCase();
-    if (!normalizedSearch) {
-      return orders;
-    }
     return orders.filter((order) => {
+      const displayStatus = getOrderSummaryDisplayStatus(order, simulationNow);
+      if (statusFilter !== 'all' && displayStatus !== statusFilter) {
+        return false;
+      }
+      if (!normalizedSearch) {
+        return true;
+      }
       const searchableText = [
         order.order_number,
         order.status,
@@ -638,13 +699,24 @@ export function OrderHistoryPage({ producerOrdersMode = false }: OrderHistoryPag
             .filter(Boolean)
             .join(' '),
         ),
-        ...order.items_preview.map((item) => `${item.product_name} ${item.producer_name} ${item.quantity} ${item.unit}`),
+        ...(order.items_preview || []).map((item) => `${item.product_name} ${item.producer_name} ${item.quantity} ${item.unit}`),
       ]
         .join(' ')
         .toLowerCase();
       return searchableText.includes(normalizedSearch);
     });
-  }, [orders, searchQuery, simulationNow]);
+  }, [orders, searchQuery, simulationNow, statusFilter]);
+
+  useEffect(() => {
+    // notification deep links open the matching order once summaries have loaded
+    if (!orderIdFromQuery || activeOrderId === orderIdFromQuery || loading) {
+      return;
+    }
+    if (!orders.some((order) => order.id === orderIdFromQuery)) {
+      return;
+    }
+    void openOrderPanel(orderIdFromQuery, 'details');
+  }, [activeOrderId, loading, orderIdFromQuery, orders]);
 
   const currentOrders = useMemo(
     () => searchedOrders.filter((order) => isCurrentOrderStatus(getOrderSummaryDisplayStatus(order, simulationNow))),
@@ -812,9 +884,33 @@ export function OrderHistoryPage({ producerOrdersMode = false }: OrderHistoryPag
     const isDetailsOpen = activeOrderId === order.id && activeOrderView === 'details';
     const isTrackingOpen = activeOrderId === order.id && activeOrderView === 'tracking';
     const isPanelOpen = activeOrderId === order.id;
+    const handleCardClick = (event: MouseEvent<HTMLDivElement>) => {
+      const target = event.target as HTMLElement;
+      // ignore nested controls so receipts reorder and detail content keep own clicks
+      if (target.closest('button,a,input,select,textarea,[role="button"],[data-order-detail-panel="true"]')) {
+        return;
+      }
+      void openOrderPanel(order.id, 'details');
+    };
 
     return (
-      <Card key={order.id}>
+      <Card
+        key={order.id}
+        role="button"
+        tabIndex={0}
+        onClick={handleCardClick}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            void openOrderPanel(order.id, 'details');
+          }
+        }}
+        className={cn(
+          'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--forest-green)] focus-visible:ring-offset-2',
+          isPanelOpen && 'ring-1 ring-[var(--forest-green)]',
+        )}
+        aria-expanded={isPanelOpen}
+      >
         <CardHeader className="pb-3">
           <div className="flex flex-wrap gap-3 justify-between items-start">
             <div>
@@ -897,7 +993,7 @@ export function OrderHistoryPage({ producerOrdersMode = false }: OrderHistoryPag
           </div>
 
           {isPanelOpen && (
-            <>
+            <div data-order-detail-panel="true">
               <Separator />
               {detailLoading || !selectedOrder ? (
                 <PageLoadingSkeleton rows={2} cards={2} />
@@ -927,12 +1023,22 @@ export function OrderHistoryPage({ producerOrdersMode = false }: OrderHistoryPag
                       <div className="grid sm:grid-cols-3 gap-4 text-sm">
                         <div>
                           <p className="text-gray-500">Delivery Address</p>
+                          {selectedOrder.delivery_address_label && (
+                            <p className="font-medium">{selectedOrder.delivery_address_label}</p>
+                          )}
                           <p className="font-medium">{selectedOrder.delivery_address}</p>
                           <p className="text-gray-600">{selectedOrder.customer_postcode}</p>
+                          <p className="text-gray-600">
+                            Food miles: {Number(selectedOrder.total_food_miles || 0).toFixed(2)} total / {Number(selectedOrder.max_food_miles || 0).toFixed(2)} local-radius check
+                          </p>
                         </div>
                         <div>
                           <p className="text-gray-500">Payment Reference</p>
                           <p className="font-medium">{maskPaymentReference(selectedOrder.payment_reference)}</p>
+                          <p className="text-gray-600">{formatPaymentTerms(selectedOrder.payment_terms)}</p>
+                          {selectedOrder.purchase_order_number && (
+                            <p className="text-gray-600">PO: {selectedOrder.purchase_order_number}</p>
+                          )}
                         </div>
                         <div>
                           <p className="text-gray-500">{isCurrent ? 'Order Status' : 'Final Status'}</p>
@@ -944,11 +1050,18 @@ export function OrderHistoryPage({ producerOrdersMode = false }: OrderHistoryPag
                         <p className="mb-2 text-sm font-medium">Items</p>
                         <div className="space-y-2">
                           {selectedOrder.items.map((item) => (
-                            <div key={item.id} className="flex justify-between items-start rounded-md border bg-gray-50 p-3">
-                              <div>
+                            <div key={item.id} className="flex gap-3 rounded-md border bg-gray-50 p-3">
+                              {item.product_image_url && (
+                                <img src={item.product_image_url} alt={item.product_name} className="size-14 rounded object-cover" />
+                              )}
+                              <div className="min-w-0 flex-1">
                                 <p className="font-medium">{item.product_name}</p>
                                 <p className="text-xs text-gray-600">
                                   {item.producer_name} • {item.quantity} {item.unit} × £{Number(item.unit_price).toFixed(2)}
+                                </p>
+                                <p className="text-xs text-gray-600">
+                                  Allergens: {item.allergen_info || 'No common allergens'} • {item.is_organic ? item.organic_certification || 'Certified Organic' : 'Not Certified Organic'}
+                                  {item.is_surplus ? ` • Surplus ${item.surplus_discount_percent || 0}% off` : ''}
                                 </p>
                               </div>
                               <p className="font-medium">£{Number(item.line_total).toFixed(2)}</p>
@@ -1054,9 +1167,13 @@ export function OrderHistoryPage({ producerOrdersMode = false }: OrderHistoryPag
                               </div>
                               <div className="flex items-center justify-between">
                                 <span className="text-gray-600">
-                                  Commission ({Number(selectedOrder.commission_rate).toFixed(0)}%)
+                                  Commission ({formatPercentRate(selectedOrder.commission_rate)}, included)
                                 </span>
                                 <span className="font-medium">£{Number(selectedOrder.commission_amount).toFixed(2)}</span>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <span className="text-gray-600">Producer payout (95%)</span>
+                                <span className="font-medium">£{Number(selectedOrder.producer_payout_total).toFixed(2)}</span>
                               </div>
                               <div className="flex items-center justify-between border-t pt-2 text-base">
                                 <span className="font-semibold text-gray-900">Total Paid</span>
@@ -1116,7 +1233,7 @@ export function OrderHistoryPage({ producerOrdersMode = false }: OrderHistoryPag
                   )}
                 </>
               )}
-            </>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -1186,7 +1303,7 @@ export function OrderHistoryPage({ producerOrdersMode = false }: OrderHistoryPag
             <CardTitle className="text-lg">Filter Orders by Producer or Date Range</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid md:grid-cols-4 gap-4">
+            <div className="grid md:grid-cols-5 gap-4">
               <div>
                 <Label htmlFor="order-filter-producer">Producer</Label>
                 <Select value={producerNameFilter} onValueChange={setProducerNameFilter}>
@@ -1200,6 +1317,24 @@ export function OrderHistoryPage({ producerOrdersMode = false }: OrderHistoryPag
                         {producerName}
                       </SelectItem>
                     ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="order-filter-status">Status</Label>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger id="order-filter-status">
+                    <SelectValue placeholder="All statuses" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All statuses</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="confirmed">Confirmed</SelectItem>
+                    <SelectItem value="preparing">Preparing</SelectItem>
+                    <SelectItem value="ready">Ready</SelectItem>
+                    <SelectItem value="delivering">Out for Delivery</SelectItem>
+                    <SelectItem value="delivered">Delivered</SelectItem>
+                    <SelectItem value="cancelled">Cancelled</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1227,6 +1362,7 @@ export function OrderHistoryPage({ producerOrdersMode = false }: OrderHistoryPag
                   className="w-full"
                   onClick={() => {
                     setProducerNameFilter('all');
+                    setStatusFilter('all');
                     setFromDateFilter('');
                     setToDateFilter('');
                   }}
@@ -1253,6 +1389,7 @@ export function OrderHistoryPage({ producerOrdersMode = false }: OrderHistoryPag
                   variant="outline"
                   onClick={() => {
                     setProducerNameFilter('all');
+                    setStatusFilter('all');
                     setFromDateFilter('');
                     setToDateFilter('');
                   }}

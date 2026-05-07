@@ -69,6 +69,7 @@ class SettlementOrderLineSerializer(serializers.ModelSerializer):
     can be changed without spreading the same responsibility across unrelated files.
     """
     order_number = serializers.SerializerMethodField()
+    marketplace_order_id = serializers.SerializerMethodField()
     delivery_date = serializers.SerializerMethodField()
     source_type = serializers.SerializerMethodField()
 
@@ -79,6 +80,7 @@ class SettlementOrderLineSerializer(serializers.ModelSerializer):
             "order_id",
             "sub_order_id",
             "source_type",
+            "marketplace_order_id",
             "order_number",
             "customer_name",
             "delivery_date",
@@ -94,9 +96,14 @@ class SettlementOrderLineSerializer(serializers.ModelSerializer):
             return obj.sub_order.order.order_number
         return ""
 
+    def get_marketplace_order_id(self, obj: SettlementOrderLine) -> int | None:
+        if obj.sub_order_id:
+            return obj.sub_order.order_id
+        return None
+
     def get_delivery_date(self, obj: SettlementOrderLine):
         if obj.order_id:
-            return obj.order.delivery_date
+            return None
         if obj.sub_order_id:
             return obj.sub_order.delivery_date
         return None

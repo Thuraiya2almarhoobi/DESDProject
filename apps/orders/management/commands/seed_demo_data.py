@@ -60,7 +60,7 @@ from apps.orders.models import (
     UserNotification,
 )
 from apps.orders.services import create_order_notifications
-from apps.payments.models import SettlementOrderLine, WeeklySettlement
+from apps.payments.models import SettlementOrderLine, SettlementStatus, WeeklySettlement
 from apps.payments.services import get_previous_week_range, process_weekly_settlements
 from apps.producer_portal.models import (
     OrderStatus,
@@ -119,8 +119,8 @@ class DemoSeeder:
         self.seed_products()
         self.seed_carts_and_acknowledgements()
         self.seed_orders_and_payments()
-        self.seed_settlements()
         self.seed_recurring_orders()
+        self.seed_settlements()
         self.seed_content()
         self.seed_reviews()
         self.seed_favorites_notifications_and_inventory_events()
@@ -357,6 +357,7 @@ class DemoSeeder:
                     "is_organic": is_organic,
                     "organic_certification": certification,
                     "allergen_information": allergens,
+                    "no_known_allergens_confirmed": allergens.strip().lower() == "no common allergens",
                     "storage_tips": storage,
                     "storage_tips_ai_generated": storage_ai,
                     "harvest_date": today,
@@ -401,6 +402,7 @@ class DemoSeeder:
                     "is_organic": is_organic,
                     "organic_certification": certification,
                     "allergen_information": allergens,
+                    "no_known_allergens_confirmed": allergens.strip().lower() == "no common allergens",
                     "storage_tips": storage,
                     "storage_tips_ai_generated": storage_ai,
                     "harvest_date": today,
@@ -519,6 +521,15 @@ class DemoSeeder:
                     product=product,
                     product_name=product.name,
                     producer_name=producer.business_name,
+                    product_image_url=product.image_url,
+                    allergen_info=product.allergen_info,
+                    is_organic=product.is_organic,
+                    organic_certification=product.organic_certification,
+                    is_surplus=product.is_surplus,
+                    surplus_discount_percent=product.surplus_discount_percent,
+                    surplus_original_unit_price=product.price if product.is_surplus else None,
+                    surplus_best_before=product.surplus_best_before,
+                    surplus_note=product.surplus_note,
                     unit=product.unit,
                     quantity=quantity,
                     unit_price=unit_price,
@@ -734,26 +745,89 @@ class DemoSeeder:
         for sub_order in ProducerSubOrder.objects.all():
             sub_order.settlement_processed = False
             sub_order.save(update_fields=["settlement_processed", "updated_at"])
-        process_weekly_settlements(reference_date=timezone.localdate())
+
+        status_cycle = [
+            SettlementStatus.PAID,
+            SettlementStatus.PROCESSED,
+            SettlementStatus.PROCESSING,
+            SettlementStatus.PENDING_BANK_TRANSFER,
+            SettlementStatus.FAILED,
+        ]
+        grouped: dict[tuple[int, date, date], list[ProducerSubOrder]] = {}
+        sub_orders = (
+            ProducerSubOrder.objects.select_related("producer__user", "order", "order__customer")
+            .filter(order__payment_status=Order.PaymentStatus.PAID)
+            .order_by("order__created_at", "id")
+        )
+        for sub_order in sub_orders:
+            created_date = timezone.localtime(sub_order.order.created_at).date()
+            week_start = created_date - timedelta(days=created_date.weekday())
+            week_end = week_start + timedelta(days=6)
+            grouped.setdefault((sub_order.producer.user_id, week_start, week_end), []).append(sub_order)
+
+        for index, ((producer_user_id, week_start, week_end), lines) in enumerate(sorted(grouped.items(), key=lambda item: (item[0][1], item[0][0]))):
+            producer_user = self.User.objects.get(pk=producer_user_id)
+            gross = self.money(sum(line.subtotal_amount for line in lines))
+            commission = self.money(gross * COMMISSION_RATE)
+            net = self.money(gross - commission)
+            settlement = WeeklySettlement.objects.create(
+                producer=producer_user,
+                week_start=week_start,
+                week_end=week_end,
+                gross_amount=gross,
+                commission_amount=commission,
+                net_amount=net,
+                status=status_cycle[index % len(status_cycle)],
+                transaction_reference=f"SET-{week_start:%Y%m%d}-{producer_user_id}",
+            )
+            for sub_order in lines:
+                SettlementOrderLine.objects.create(
+                    settlement=settlement,
+                    sub_order=sub_order,
+                    customer_name=self.customer_display_name(sub_order.order.customer),
+                    gross_amount=sub_order.subtotal_amount,
+                    commission_amount=sub_order.commission_amount,
+                    net_amount=sub_order.payout_amount,
+                )
+                sub_order.settlement_processed = settlement.status in {SettlementStatus.PAID, SettlementStatus.PROCESSED}
+                sub_order.save(update_fields=["settlement_processed", "updated_at"])
+
+    def customer_display_name(self, user) -> str:
+        profile = getattr(user, "orders_customer_profile", None)
+        if profile and profile.full_name:
+            return profile.full_name
+        return (user.email or "Customer").split("@")[0].replace(".", " ").title()
 
     def seed_recurring_orders(self) -> None:
-        restaurant = self.users["chef@thecliftonkitchen.co.uk"]
-        template, _ = RecurringOrderTemplate.objects.update_or_create(
+        restaurant = self.users["restaurant@example.com"]
+        template_defaults = {
+            "frequency": RecurringOrderTemplate.Frequency.WEEKLY,
+            "order_day": 0,
+            "delivery_day": 2,
+            "next_order_date": timezone.localdate() + timedelta(days=(7 - timezone.localdate().weekday()) % 7),
+            "delivery_address": "Harbourside Restaurant, 14 Harbourside, Bristol, BS1 5UH",
+            "customer_postcode": "BS1 5UH",
+            "payment_method": "test_card",
+            "is_paused": False,
+            "is_cancelled": False,
+        }
+        template = RecurringOrderTemplate.objects.filter(
             restaurant=restaurant,
-            defaults={
-                "frequency": RecurringOrderTemplate.Frequency.WEEKLY,
-                "order_day": 0,
-                "delivery_day": 2,
-                "next_order_date": timezone.localdate() + timedelta(days=(7 - timezone.localdate().weekday()) % 7),
-                "delivery_address": "The Clifton Kitchen, The Mall, Clifton Village, Bristol, BS8 4JG",
-                "customer_postcode": "BS8 4JG",
-                "payment_method": "test_card",
-                "is_paused": False,
-                "is_cancelled": False,
-            },
-        )
+            delivery_address=template_defaults["delivery_address"],
+        ).first()
+        if template is None:
+            template = RecurringOrderTemplate.objects.create(restaurant=restaurant, **template_defaults)
+        else:
+            for field, value in template_defaults.items():
+                setattr(template, field, value)
+            template.save(update_fields=[*template_defaults.keys(), "updated_at"])
         RecurringOrderTemplateItem.objects.filter(template=template).delete()
-        for product_name, quantity in [("Fresh Milk", "12.00"), ("Cheddar Cheese", "3.00"), ("Sourdough Loaf", "8.00"), ("Baby Spinach", "6.00")]:
+        for product_name, quantity in [
+            ("Organic Tomatoes", "6.00"),
+            ("Organic Carrots", "12.00"),
+            ("Lettuce", "10.00"),
+            ("Sourdough Loaf", "8.00"),
+        ]:
             RecurringOrderTemplateItem.objects.create(template=template, product=self.products[product_name], default_quantity=Decimal(quantity))
         override, _ = RecurringOrderInstanceOverride.objects.update_or_create(
             template=template,
@@ -761,23 +835,77 @@ class DemoSeeder:
             defaults={"created_by": restaurant},
         )
         RecurringOrderInstanceOverrideItem.objects.filter(override=override).delete()
-        RecurringOrderInstanceOverrideItem.objects.create(override=override, product=self.products["Fresh Milk"], quantity=Decimal("18.00"))
-        RecurringOrderInstanceOverrideItem.objects.create(override=override, product=self.products["Baby Spinach"], quantity=Decimal("8.00"))
-        self.create_order(
-            order_number="ORD-RECUR-CLIFTON-1",
-            customer_email="chef@thecliftonkitchen.co.uk",
+        RecurringOrderInstanceOverrideItem.objects.create(override=override, product=self.products["Organic Tomatoes"], quantity=Decimal("8.00"))
+        RecurringOrderInstanceOverrideItem.objects.create(override=override, product=self.products["Lettuce"], quantity=Decimal("12.00"))
+        # keep recurring demo data on the main restaurant and producer accounts
+        recurring_order = self.create_order(
+            order_number="ORD-RECUR-HARBOURSIDE-1",
+            customer_email="restaurant@example.com",
             status=Order.Status.CONFIRMED,
             payment_status=Order.PaymentStatus.PAID,
-            payment_reference="PAY-RECUR-CLIFTON-1",
+            payment_reference="PAY-RECUR-HARBOURSIDE-1",
             delivery_address=template.delivery_address,
             postcode=template.customer_postcode,
-            special_instructions="Weekly standing order for Wednesday delivery.",
+            special_instructions="Weekly standing order for Wednesday restaurant prep.",
             created_at=timezone.now() - timedelta(days=4),
             recurring_template=template,
             is_recurring_instance=True,
             suborders=[
-                {"producer_email": "producer2@example.com", "delivery_date": timezone.localdate() + timedelta(days=2), "status": Order.Status.CONFIRMED, "subtotal": "44.10", "history": [(Order.Status.CONFIRMED, "Recurring dairy order accepted.")], "items": [{"product": "Fresh Milk", "quantity": "18.00", "unit_price": "1.95"}, {"product": "Cheddar Cheese", "quantity": "1.31", "unit_price": "6.90"}]},
+                {"producer_email": "producer@example.com", "delivery_date": timezone.localdate() + timedelta(days=2), "status": Order.Status.CONFIRMED, "subtotal": "64.00", "history": [(Order.Status.CONFIRMED, "Recurring Harbourside produce order accepted.")], "items": [{"product": "Organic Tomatoes", "quantity": "8.00", "unit_price": "4.50"}, {"product": "Organic Carrots", "quantity": "12.00", "unit_price": "1.80"}, {"product": "Lettuce", "quantity": "4.00", "unit_price": "1.60"}]},
                 {"producer_email": "harbour.bakery@example.com", "delivery_date": timezone.localdate() + timedelta(days=2), "status": Order.Status.CONFIRMED, "subtotal": "30.40", "history": [(Order.Status.CONFIRMED, "Recurring bakery order accepted.")], "items": [{"product": "Sourdough Loaf", "quantity": "8.00", "unit_price": "3.80"}]},
+            ],
+        )
+        recurring_order.payment_terms = "recurring_card_payment_per_instance"
+        recurring_order.save(update_fields=["payment_terms", "updated_at"])
+        producer_sub_order = recurring_order.sub_orders.filter(producer=self.orders_producers["producer@example.com"]).first()
+        if producer_sub_order:
+            ProducerNotification.objects.update_or_create(
+                producer=self.orders_producers["producer@example.com"],
+                sub_order=producer_sub_order,
+                category="recurring_order",
+                defaults={
+                    "message": (
+                        f"Advance notice: recurring restaurant order {recurring_order.order_number} "
+                        f"from Harbourside Restaurant is scheduled for {producer_sub_order.delivery_date}."
+                    ),
+                    "metadata": {
+                        "order_id": recurring_order.id,
+                        "template_id": template.id,
+                        "restaurant_email": "restaurant@example.com",
+                        "scheduled_order_date": recurring_order.recurring_scheduled_for.isoformat()
+                        if recurring_order.recurring_scheduled_for
+                        else "",
+                    },
+                    "is_read": False,
+                },
+            )
+
+        self.create_order(
+            order_number="ORD-PRODUCER-PURCHASE-1",
+            customer_email="producer@example.com",
+            status=Order.Status.DELIVERED,
+            payment_status=Order.PaymentStatus.PAID,
+            payment_reference="PAY-PRODUCER-PURCHASE-1",
+            delivery_address="Bristol Valley Farm, Unit 5 Farm Lane, Bristol, BS1 4DJ",
+            postcode="BS1 4DJ",
+            special_instructions="Producer demo purchase from other network suppliers.",
+            created_at=timezone.now() - timedelta(days=6),
+            suborders=[
+                {
+                    "producer_email": "producer2@example.com",
+                    "delivery_date": timezone.localdate() - timedelta(days=4),
+                    "status": Order.Status.DELIVERED,
+                    "subtotal": "23.09",
+                    "history": [
+                        (Order.Status.CONFIRMED, "Producer purchase confirmed by dairy supplier."),
+                        (Order.Status.READY, "Packed chilled for collection."),
+                        (Order.Status.DELIVERED, "Delivered to Bristol Valley Farm."),
+                    ],
+                    "items": [
+                        {"product": "Fresh Milk", "quantity": "6.00", "unit_price": "1.95"},
+                        {"product": "Cheddar Cheese", "quantity": "1.65", "unit_price": "6.90"},
+                    ],
+                }
             ],
         )
 
@@ -922,7 +1050,8 @@ class DemoSeeder:
             "ORD-DEMO-URGENT",
             "ORD-DEMO-PENDING",
             "ORD-BULK-STMARYS",
-            "ORD-RECUR-CLIFTON-1",
+            "ORD-RECUR-HARBOURSIDE-1",
+            "ORD-PRODUCER-PURCHASE-1",
         ]:
             order = Order.objects.filter(order_number=order_number).first()
             if order:
@@ -948,10 +1077,16 @@ class DemoSeeder:
                 "Bulk order ORD-BULK-STMARYS is confirmed across 3 producers.",
             ),
             (
-                "ORD-RECUR-CLIFTON-1",
-                "chef@thecliftonkitchen.co.uk",
+                "ORD-RECUR-HARBOURSIDE-1",
+                "restaurant@example.com",
                 "recurring_order",
-                "Recurring order ORD-RECUR-CLIFTON-1 is scheduled for Wednesday delivery.",
+                "Recurring order ORD-RECUR-HARBOURSIDE-1 is scheduled for Wednesday delivery.",
+            ),
+            (
+                "ORD-PRODUCER-PURCHASE-1",
+                "producer@example.com",
+                "order_status",
+                "Producer purchase ORD-PRODUCER-PURCHASE-1 has been delivered.",
             ),
         ]:
             order = Order.objects.filter(order_number=order_number).first()
@@ -1015,11 +1150,18 @@ class DemoSeeder:
                 message="Bristol Valley Farm has a surplus lettuce deal ending soon.",
                 defaults={"metadata": {"product": "Lettuce", "discount": 30}, "is_read": False},
             )
+        recurring_template = RecurringOrderTemplate.objects.filter(restaurant=self.users["restaurant@example.com"]).first()
         UserNotification.objects.get_or_create(
-            user=self.users["chef@thecliftonkitchen.co.uk"],
+            user=self.users["restaurant@example.com"],
             category="recurring_order",
-            message="Your Clifton Kitchen weekly order is scheduled for Wednesday delivery.",
-            defaults={"metadata": {"frequency": "weekly"}, "is_read": False},
+            message="Your Harbourside weekly recurring order is scheduled for Wednesday delivery.",
+            defaults={
+                "metadata": {
+                    "frequency": "weekly",
+                    "template_id": recurring_template.id if recurring_template else None,
+                },
+                "is_read": False,
+            },
         )
         for event_type, previous, new, note in [("stock_update", 50, 9, "Simulated orders reduced stock below threshold."), ("stock_replenished", 9, 40, "Producer replenished stock after low-stock alert.")]:
             ProducerProductInventoryEvent.objects.create(

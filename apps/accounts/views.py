@@ -80,9 +80,7 @@ ALLOWED_IMAGE_UPLOAD_TYPES = {
 MAX_IMAGE_UPLOAD_BYTES = 5 * 1024 * 1024
 IMAGE_UPLOAD_SCOPES = {"general", "products", "recipes", "stories"}
 
-# Accounts/authentication view module.
-# This file owns registration, login, email verification, password reset,
-# current-user profile retrieval, editable addresses, uploads, and RBAC probes.
+# accounts views own registration login profiles addresses uploads and rbac probes
 
 
 class RegisterAnonThrottle(AnonRateThrottle):
@@ -142,8 +140,7 @@ def _resolve_failed_login_context(email: str, password: str):
     or isolates a business rule that should remain easy to test. The wider
     context is: Accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
     """
-    # Keep the public login response safe, but still record whether the failure
-    # was a missing account, inactive user, or wrong password for admin audit.
+    # public login response stays generic while audit keeps the real reason
     normalized_email = UserModel.objects.normalize_email(email or "")
     if not normalized_email:
         return None, "invalid_credentials"
@@ -166,6 +163,7 @@ def _record_login_attempt(request, *, email: str, user, success: bool, reason: s
     or isolates a business rule that should remain easy to test. The wider
     context is: Accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
     """
+    # login attempts are stored so malicious inputs can be demonstrated safely
     LoginAttempt.objects.create(
         email=UserModel.objects.normalize_email(email or ""),
         user=user,
@@ -184,8 +182,7 @@ def _build_auth_payload(user, *, remember_me: bool = False):
     or isolates a business rule that should remain easy to test. The wider
     context is: Accounts and identity domain: registration, login, role-aware profiles, password reset, email flows, and access-control helpers.
     """
-    # SimpleJWT is preferred for API clients. The fallback keeps local/demo
-    # environments usable if the optional dependency is missing.
+    # simplejwt is preferred but fallback keeps local demo usable
     if RefreshToken is None:
         return {
             "access": "",

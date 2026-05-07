@@ -222,6 +222,54 @@ class ProducerPortalCriticalTestCases(APITestCase):
         self.assertEqual(create_response.data["storage_tips"], "")
         self.assertFalse(create_response.data["storage_tips_ai_generated"])
 
+    def test_tc_011_product_update_history_is_persisted_and_viewable(self):
+        current_month = timezone.localdate().month
+        create_response = self.client.post(
+            "/api/producer/products/",
+            {
+                "name": "History Carrots",
+                "category": "Vegetables",
+                "description": "Fresh carrots grown for local box customers.",
+                "price": "2.10",
+                "unit": "kg",
+                "availability": ProductAvailability.IN_SEASON,
+                "season_start_month": current_month,
+                "season_end_month": current_month,
+                "stock_quantity": 24,
+                "low_stock_threshold": 8,
+                "allergen_information": "No common allergens",
+                "harvest_date": timezone.localdate().isoformat(),
+            },
+            format="json",
+        )
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+        product_id = create_response.data["id"]
+
+        update_response = self.client.patch(
+            f"/api/producer/products/{product_id}/",
+            {
+                "stock_quantity": 6,
+                "price": "2.35",
+                "availability": ProductAvailability.YEAR_ROUND,
+            },
+            format="json",
+        )
+        self.assertEqual(update_response.status_code, status.HTTP_200_OK)
+
+        history_response = self.client.get(f"/api/producer/products/{product_id}/history/")
+        self.assertEqual(history_response.status_code, status.HTTP_200_OK)
+        self.assertGreaterEqual(len(history_response.data), 2)
+        latest = history_response.data[0]
+        self.assertEqual(latest["event_type"], "updated")
+        self.assertIn("stock_quantity", latest["changed_fields"])
+        self.assertIn("price", latest["changed_fields"])
+        self.assertEqual(latest["previous_values"]["stock_quantity"], 24)
+        self.assertEqual(latest["new_values"]["stock_quantity"], 6)
+
+        self.client.force_authenticate(self.other_producer)
+        forbidden_response = self.client.get(f"/api/producer/products/{product_id}/history/")
+        self.assertEqual(forbidden_response.status_code, status.HTTP_404_NOT_FOUND)
+
     def test_storage_guidance_has_server_side_character_limit(self):
         current_month = timezone.localdate().month
         response = self.client.post(

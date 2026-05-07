@@ -13,7 +13,7 @@
  *   unless they communicate an important layout or accessibility choice.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { ArrowLeft, CreditCard, CheckCircle, LoaderCircle, XCircle } from 'lucide-react';
 import { useCart } from '../contexts/CartContext';
@@ -21,6 +21,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSafeBack } from '../lib/navigation';
 import { isBuyerRole } from '../lib/ordering';
 import { SiteHeader } from '../components/SiteHeader';
+import { AddressLookupFields } from '../components/AddressLookupFields';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Input } from '../components/ui/input';
@@ -138,7 +139,7 @@ export function CheckoutPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const goBackToCart = useSafeBack('/cart');
-  const { user } = useAuth();
+  const { user, addresses } = useAuth();
   const {
     items,
     selectedItems,
@@ -149,15 +150,24 @@ export function CheckoutPage() {
   } = useCart();
 
   const [step, setStep] = useState<CheckoutStep>('address');
-  const [address, setAddress] = useState('');
+  const [addressLine1, setAddressLine1] = useState('');
+  const [addressLine2, setAddressLine2] = useState('');
   const [city, setCity] = useState('');
   const [postcode, setPostcode] = useState('');
+  const [selectedAddressId, setSelectedAddressId] = useState<number | null>(null);
+  const [deliveryAddressLabel, setDeliveryAddressLabel] = useState('');
+  const [foodMiles, setFoodMiles] = useState<{
+    total: number;
+    maxProducer: number;
+    withinTwentyMiles: boolean;
+  }>({ total: 0, maxProducer: 0, withinTwentyMiles: true });
   const [deliveryDates, setDeliveryDates] = useState<Record<string, string>>({});
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [makeRecurring, setMakeRecurring] = useState(false);
   const [recurringFrequency, setRecurringFrequency] = useState<'weekly' | 'fortnightly'>('weekly');
   const [orderDay, setOrderDay] = useState(0);
   const [deliveryDay, setDeliveryDay] = useState(2);
+  const [purchaseOrderNumber, setPurchaseOrderNumber] = useState('');
   const [createdRecurringTemplateId, setCreatedRecurringTemplateId] = useState<number | null>(null);
   const [paymentProcessing, setPaymentProcessing] = useState(false);
   const [paymentError, setPaymentError] = useState('');
@@ -168,7 +178,8 @@ export function CheckoutPage() {
   const cartByProducer = getSelectedCartByProducer();
   const grandTotal = getSelectedGrandTotal();
   const commission = grandTotal * 0.05;
-  const total = grandTotal + commission;
+  const producerPayout = grandTotal - commission;
+  const total = grandTotal;
   const isCustomerCheckout = user?.role === 'CUSTOMER';
   const isCommunityCheckout = user?.role === 'COMMUNITY';
   const isRestaurantCheckout = user?.role === 'RESTAURANT';
@@ -178,14 +189,39 @@ export function CheckoutPage() {
   const isStripeCancelReturn = location.pathname === '/checkout/cancel';
   const isStripeReturnPath = isStripeSuccessReturn || isStripeCancelReturn;
   const weekdayOptions = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  const savedAddressOptions = useMemo(() => addresses || [], [addresses]);
+  const selectedCartItemKey = useMemo(() => selectedCartItemIds.join(','), [selectedCartItemIds]);
+  const currentAccountTypeLabel = isCommunityCheckout
+    ? 'community organisation'
+    : isRestaurantCheckout
+      ? 'restaurant'
+      : 'customer';
   const backToCartButton = (
     <Button variant="ghost" onClick={goBackToCart}>
       <ArrowLeft className="mr-2 size-4" />
       Back to Cart
     </Button>
   );
+  const handleAddressFieldChange = (
+    field: 'line1' | 'line2' | 'city' | 'postcode',
+    value: string,
+  ) => {
+    // manual address edits detach the form from a saved address record
+    setSelectedAddressId(null);
+    setDeliveryAddressLabel('Lookup address');
+    if (field === 'line1') {
+      setAddressLine1(value);
+    } else if (field === 'line2') {
+      setAddressLine2(value);
+    } else if (field === 'city') {
+      setCity(value);
+    } else {
+      setPostcode(value);
+    }
+  };
 
   useEffect(() => {
+    // profile loading prefers saved structured addresses over legacy text address
     let mounted = true;
 
     const loadProfile = async () => {
@@ -199,18 +235,32 @@ export function CheckoutPage() {
           return;
         }
 
+        if (savedAddressOptions.length > 0) {
+          const defaultAddress = savedAddressOptions.find((entry) => entry.is_default) || savedAddressOptions[0];
+          setSelectedAddressId(defaultAddress.id);
+          setDeliveryAddressLabel(defaultAddress.label || 'Saved address');
+          setAddressLine1(defaultAddress.line1 || '');
+          setAddressLine2(defaultAddress.line2 || '');
+          setCity(defaultAddress.city || '');
+          setPostcode(defaultAddress.postcode || '');
+          return;
+        }
+
         const fullAddress = profile.delivery_address || '';
         if (fullAddress.includes(',')) {
           const parts = fullAddress.split(',').map((part) => part.trim()).filter(Boolean);
-          setAddress(parts[0] || '');
-          setCity(parts.slice(1).join(', '));
+          setAddressLine1(parts[0] || '');
+          setAddressLine2(parts.length > 2 ? parts.slice(1, -1).join(', ') : '');
+          setCity(parts.length > 1 ? parts[parts.length - 1] : '');
         } else {
-          setAddress(fullAddress);
+          setAddressLine1(fullAddress);
+          setAddressLine2('');
         }
         setPostcode(profile.postcode || '');
       } catch {
         if (mounted) {
-          setAddress('');
+          setAddressLine1('');
+          setAddressLine2('');
           setCity('');
           setPostcode('');
         }
@@ -222,13 +272,59 @@ export function CheckoutPage() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [savedAddressOptions]);
+
+  useEffect(() => {
+    if (!postcode.trim() || selectedItems.length === 0) {
+      setFoodMiles({ total: 0, maxProducer: 0, withinTwentyMiles: true });
+      return;
+    }
+
+    let mounted = true;
+    const loadFoodMiles = async () => {
+      try {
+        // food miles are recalculated from selected cart rows and the current postcode
+        const query = new URLSearchParams({ postcode: postcode.trim() });
+        selectedCartItemKey.split(',').filter(Boolean).forEach((cartItemId) => {
+          query.append('cart_item_id', String(cartItemId));
+        });
+        const payload = await apiJson<{
+          total_food_miles?: string | number;
+          max_producer_distance?: string | number;
+          within_twenty_miles?: boolean;
+        }>(`/api/geo/food-miles/cart/?${query.toString()}`);
+        if (!mounted) {
+          return;
+        }
+        const maxProducer = Number(payload.max_producer_distance || 0);
+        setFoodMiles({
+          total: Number(payload.total_food_miles || 0),
+          maxProducer,
+          withinTwentyMiles: payload.within_twenty_miles ?? maxProducer <= 20,
+        });
+      } catch {
+        if (mounted) {
+          setFoodMiles({ total: 0, maxProducer: 0, withinTwentyMiles: true });
+        }
+      }
+    };
+
+    const timeout = window.setTimeout(() => {
+      void loadFoodMiles();
+    }, 250);
+
+    return () => {
+      mounted = false;
+      window.clearTimeout(timeout);
+    };
+  }, [postcode, selectedCartItemKey, selectedItems.length]);
 
   useEffect(() => {
     if (cartByProducer.length === 0) {
       return;
     }
 
+    // each producer keeps its own delivery date because lead times differ
     setDeliveryDates((previous) => {
       const next: Record<string, string> = { ...previous };
       cartByProducer.forEach((group) => {
@@ -247,9 +343,7 @@ export function CheckoutPage() {
     const query = new URLSearchParams(location.search);
 
     const handleStripeReturn = async () => {
-      // The success/cancel pages are not separate routes in behavior; they are
-      // return states of checkout that reconcile Stripe, stock, cart, and order
-      // data before showing the final confirmation/error message.
+      // checkout return paths reconcile stripe stock cart and order state
       setStep('payment');
       setPaymentProcessing(true);
       setPaymentError('');
@@ -353,6 +447,12 @@ export function CheckoutPage() {
 
   const handleAddressSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!foodMiles.withinTwentyMiles) {
+      // the local food radius blocks checkout before payment starts
+      setPaymentError('This delivery address is outside the 20-mile local food network radius. Select a closer saved address before checkout.');
+      return;
+    }
+    setPaymentError('');
     setStep('delivery');
   };
 
@@ -368,14 +468,17 @@ export function CheckoutPage() {
     setPaymentNotice('');
 
     try {
-      const fullAddress = [address, city].filter(Boolean).join(', ');
+      const fullAddress = [addressLine1, addressLine2, city].filter(Boolean).join(', ');
 
-      // Selected cart item ids are included so buyers can checkout one producer
-      // group/item without losing the rest of their cart.
+      // selected cart item ids keep partial checkout separate from the rest of cart
       const payload: Record<string, unknown> = {
         delivery_address: fullAddress,
         customer_postcode: postcode,
+        delivery_address_label: deliveryAddressLabel || 'Checkout address',
+        selected_address_id: selectedAddressId,
         payment_method: usesStripeCheckout ? 'stripe_checkout' : 'test_card',
+        payment_terms: isCommunityCheckout || isRestaurantCheckout ? 'invoice_terms_may_apply' : 'pay_online_now',
+        purchase_order_number: isCommunityCheckout || isRestaurantCheckout ? purchaseOrderNumber.trim() : '',
         payment_token: '',
         selected_cart_item_ids: selectedCartItemIds.map((cartItemId) => Number(cartItemId)),
       };
@@ -386,9 +489,7 @@ export function CheckoutPage() {
         payload.special_instructions = specialInstructions.trim();
       }
 
-      // Single-producer checkout accepts one delivery date. Multi-producer
-      // checkout sends a producer-id keyed map so each supplier can satisfy
-      // their own lead-time requirement.
+      // multi producer checkout sends dates by producer so lead times can differ
       if (cartByProducer.length === 1) {
         payload.delivery_date = deliveryDates[cartByProducer[0].producerId];
       } else {
@@ -399,9 +500,7 @@ export function CheckoutPage() {
         payload.producer_delivery_dates = producerDates;
       }
 
-      // Role-specific endpoints keep the shared checkout UI thin while allowing
-      // restaurant recurring templates and community bulk orders to retain their
-      // own backend business rules.
+      // restaurant recurring checkout uses its own endpoint but shares the same cart payload
       if (isRestaurantCheckout && makeRecurring) {
         payload.frequency = recurringFrequency;
         payload.order_day = orderDay;
@@ -699,25 +798,75 @@ export function CheckoutPage() {
                         : 'Delivery Address'}
                   </CardTitle>
                   <p className="text-sm text-gray-600">
-                    Your saved delivery address is pre-filled here and can be edited before checkout.
+                    Select a saved delivery address. The 20-mile local network check updates before checkout.
                   </p>
                 </CardHeader>
                 <CardContent>
                   <form onSubmit={handleAddressSubmit} className="space-y-4">
-                    <div>
-                      <Label htmlFor="address">Street Address</Label>
-                      <Input id="address" value={address} onChange={(e) => setAddress(e.target.value)} required />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
+                    {savedAddressOptions.length > 0 && (
                       <div>
-                        <Label htmlFor="city">City</Label>
-                        <Input id="city" value={city} onChange={(e) => setCity(e.target.value)} required />
+                        <Label htmlFor="saved-address">Saved Address</Label>
+                        <select
+                          id="saved-address"
+                          value={selectedAddressId ?? ''}
+                          onChange={(event) => {
+                            const nextId = Number(event.target.value);
+                            const nextAddress = savedAddressOptions.find((entry) => entry.id === nextId);
+                            if (!nextAddress) {
+                              return;
+                            }
+                            setSelectedAddressId(nextAddress.id);
+                            setDeliveryAddressLabel(nextAddress.label || 'Saved address');
+                            setAddressLine1(nextAddress.line1 || '');
+                            setAddressLine2(nextAddress.line2 || '');
+                            setCity(nextAddress.city || '');
+                            setPostcode(nextAddress.postcode || '');
+                          }}
+                          className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        >
+                          {savedAddressOptions.map((entry) => (
+                            <option key={entry.id} value={entry.id}>
+                              {entry.label || 'Saved address'}{entry.is_default ? ' (default)' : ''} - {entry.postcode}
+                            </option>
+                          ))}
+                        </select>
                       </div>
-                      <div>
-                        <Label htmlFor="postcode">Postcode</Label>
-                        <Input id="postcode" value={postcode} onChange={(e) => setPostcode(e.target.value)} required />
-                      </div>
+                    )}
+                    <AddressLookupFields
+                      key={selectedAddressId ?? 'lookup-address'}
+                      idPrefix="checkout-delivery"
+                      line1={addressLine1}
+                      line2={addressLine2}
+                      city={city}
+                      postcode={postcode}
+                      onChange={handleAddressFieldChange}
+                      lookupLabel="Find delivery address or postcode"
+                      required
+                    />
+                    <div
+                      className={`rounded-md border p-3 text-sm ${
+                        foodMiles.withinTwentyMiles
+                          ? 'border-green-200 bg-green-50 text-green-900'
+                          : 'border-red-200 bg-red-50 text-red-900'
+                      }`}
+                    >
+                      <p className="font-medium">Food miles for this address</p>
+                      <p className="mt-1">
+                        Selected-order food miles: {foodMiles.total.toFixed(2)} miles. The local delivery
+                        radius is checked against the 20-mile network commitment.
+                      </p>
+                      {!foodMiles.withinTwentyMiles && (
+                        <p className="mt-1">
+                          Checkout is blocked because this address is outside the 20-mile local food network radius.
+                        </p>
+                      )}
                     </div>
+                    {paymentError && step === 'address' && (
+                      <Alert variant="destructive">
+                        <XCircle className="size-4" />
+                        <AlertDescription>{paymentError}</AlertDescription>
+                      </Alert>
+                    )}
                     <Button type="submit" className="w-full">Continue to Delivery</Button>
                   </form>
                 </CardContent>
@@ -902,7 +1051,32 @@ export function CheckoutPage() {
                               ? 'Producer contacts and community delivery notes stay grouped after payment so your receiving team can coordinate clearly.'
                               : 'You will return here automatically after Stripe confirms the test payment.'}
                           </p>
+                          {(isCommunityCheckout || isRestaurantCheckout) && (
+                            <p className="mt-2">
+                              Invoice terms may apply for this {currentAccountTypeLabel}, but the demo payment still uses Stripe test mode and the platform commission remains 5%.
+                            </p>
+                          )}
                         </div>
+                        {(isCommunityCheckout || isRestaurantCheckout) && (
+                          <div className="rounded-lg border border-blue-100 bg-blue-50/70 p-4 text-sm text-blue-950">
+                            <p className="font-medium">Institutional payment terms</p>
+                            <p className="mt-2">
+                              This prototype still captures the order through Stripe test checkout immediately.
+                              The order record also stores that invoice terms may apply, so the demo can explain
+                              institutional workflows such as purchase orders, monthly billing, or 30-day terms.
+                            </p>
+                            <div className="mt-3">
+                              <Label htmlFor="purchase-order-number">Purchase order number (optional)</Label>
+                              <Input
+                                id="purchase-order-number"
+                                value={purchaseOrderNumber}
+                                onChange={(event) => setPurchaseOrderNumber(event.target.value)}
+                                placeholder="Example: PO-2026-001"
+                                disabled={paymentProcessing}
+                              />
+                            </div>
+                          </div>
+                        )}
                       </>
                     ) : (
                       <>
@@ -932,7 +1106,7 @@ export function CheckoutPage() {
                       <Button type="button" variant="outline" onClick={() => setStep('delivery')} disabled={paymentProcessing}>
                         Back
                       </Button>
-                      <Button type="submit" className="flex-1" disabled={paymentProcessing}>
+                      <Button type="submit" className="flex-1" disabled={paymentProcessing || !foodMiles.withinTwentyMiles}>
                         {paymentProcessing
                           ? usesStripeCheckout
                             ? 'Opening Stripe...'
@@ -981,14 +1155,35 @@ export function CheckoutPage() {
                         )}
                       </div>
                       <div className="mt-3 space-y-2">
-                        {group.items.map((item) => (
-                          <div key={item.cartItemId || item.product.id} className="flex justify-between gap-2 text-xs text-gray-700">
-                            <span>
-                              {item.product.name} • {item.quantity} {item.product.unit}
-                            </span>
-                            <span>£{(item.product.price * item.quantity).toFixed(2)}</span>
-                          </div>
-                        ))}
+                        {group.items.map((item) => {
+                          const hasSurplusPrice =
+                            Boolean(item.product.isSurplus) &&
+                            typeof item.product.surplusOriginalPrice === 'number' &&
+                            item.product.surplusOriginalPrice > item.product.price;
+                          const originalLineTotal = hasSurplusPrice
+                            ? (item.product.surplusOriginalPrice || item.product.price) * item.quantity
+                            : item.product.price * item.quantity;
+                          const saleLineTotal = item.product.price * item.quantity;
+                          const discountAmount = Math.max(0, originalLineTotal - saleLineTotal);
+
+                          return (
+                            <div key={item.cartItemId || item.product.id} className="rounded-md bg-white/70 px-2 py-1.5 text-xs text-gray-700">
+                              <div className="flex justify-between gap-2">
+                                <span>
+                                  {item.product.name} • {item.quantity} {item.product.unit}
+                                </span>
+                                <span className="font-medium">£{saleLineTotal.toFixed(2)}</span>
+                              </div>
+                              {hasSurplusPrice && (
+                                <div className="mt-1 flex flex-wrap items-center gap-2 text-amber-800">
+                                  <span className="rounded-full bg-amber-100 px-2 py-0.5 font-medium">Surplus deal</span>
+                                  <span className="line-through text-gray-500">Was £{originalLineTotal.toFixed(2)}</span>
+                                  <span>Save £{discountAmount.toFixed(2)}</span>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                       {deliveryDates[group.producerId] && (
                         <p className="mt-2 text-xs text-gray-600">
@@ -996,6 +1191,9 @@ export function CheckoutPage() {
                         </p>
                       )}
                       <p className="mt-2 text-sm font-medium">Producer Subtotal: £{group.subtotal.toFixed(2)}</p>
+                      <p className="mt-1 text-xs text-gray-600">
+                        Platform 5%: £{(group.subtotal * 0.05).toFixed(2)} | Producer payout 95%: £{(group.subtotal * 0.95).toFixed(2)}
+                      </p>
                     </div>
                   ))}
                 </div>
@@ -1008,8 +1206,16 @@ export function CheckoutPage() {
                     <span>£{grandTotal.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between text-gray-600">
-                    <span>Network Commission (5%)</span>
+                    <span>Network Commission (5%, included)</span>
                     <span>£{commission.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-gray-600">
+                    <span>Producer Payout (95%)</span>
+                    <span>£{producerPayout.toFixed(2)}</span>
+                  </div>
+                  <div className={`flex justify-between ${foodMiles.withinTwentyMiles ? 'text-gray-600' : 'text-red-700'}`}>
+                    <span>Food miles</span>
+                    <span>{foodMiles.total.toFixed(2)} selected-order miles</span>
                   </div>
                 </div>
 
@@ -1020,12 +1226,14 @@ export function CheckoutPage() {
                   <span className="text-green-700">£{total.toFixed(2)}</span>
                 </div>
 
-                {address && (
+                {addressLine1 && (
                   <>
                     <Separator />
                     <div className="text-xs text-gray-600">
                       <p className="font-medium mb-1">Delivering to:</p>
-                      <p>{address}</p>
+                      {deliveryAddressLabel && <p>{deliveryAddressLabel}</p>}
+                      <p>{addressLine1}</p>
+                      {addressLine2 && <p>{addressLine2}</p>}
                       <p>{city}, {postcode}</p>
                     </div>
                   </>

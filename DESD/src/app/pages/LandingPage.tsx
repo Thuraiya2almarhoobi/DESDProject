@@ -27,13 +27,15 @@ import {
   Users,
   UtensilsCrossed,
 } from 'lucide-react';
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 
 import { MarketingImageCard } from '../components/MarketingImageCard';
 import { AnimatedText, Reveal, RevealGroup } from '../components/motion/Motion';
 import { SiteHeader } from '../components/SiteHeader';
 import { Button } from '../components/ui/button';
 import { fetchProducts } from '../api/catalog';
+import { useAuth } from '../contexts/AuthContext';
+import { getDashboardPathForRole } from '../lib/roleRouting';
 import { Product } from '../types';
 import farmFeatureImage from '../../assets/homepage/WhatsApp Image 2026-04-29 at 21.27.34 (8).jpeg';
 import freshProduceImage from '../../assets/homepage/WhatsApp Image 2026-04-29 at 21.27.33 (16).jpeg';
@@ -173,6 +175,8 @@ const homeContextCards = [
  * so future contributors can trace behavior during sprint reviews.
  */
 export function LandingPage() {
+  const navigate = useNavigate();
+  const { user, loading } = useAuth();
   const [activeFarmIndex, setActiveFarmIndex] = useState(0);
   const [carouselDirection, setCarouselDirection] = useState(1);
   const [isShowcasePaused, setIsShowcasePaused] = useState(false);
@@ -180,6 +184,12 @@ export function LandingPage() {
   const [marketplaceProducts, setMarketplaceProducts] = useState<Product[]>([]);
 
   const featuredFarms = useMemo(() => buildFeaturedFarms(marketplaceProducts), [marketplaceProducts]);
+
+  useEffect(() => {
+    if (!loading && user) {
+      navigate(getDashboardPathForRole(user.role), { replace: true });
+    }
+  }, [loading, navigate, user]);
 
   useEffect(() => {
     let mounted = true;

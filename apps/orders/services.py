@@ -24,7 +24,12 @@ from uuid import uuid4
 from django.db import transaction
 from django.utils import timezone
 
-from .marketplace_sync import sync_catalog_product_from_orders_product
+from .marketplace_sync import (
+    default_marketplace_image_url,
+    effective_product_unit_price,
+    product_has_active_surplus_deal,
+    sync_catalog_product_from_orders_product,
+)
 from .models import (
     Cart,
     CartItem,
@@ -40,12 +45,11 @@ from .models import (
 )
 
 MONEY_Q = Decimal("0.01")
-# TC-025 depends on this exact 5% network commission. Keep this rate aligned
-# with `apps.payments.services.COMMISSION_RATE` so checkout records, Stripe
-# payment metadata, settlement exports, and admin reports all agree.
+# tc-025 depends on this exact 5% network commission
+# keep this aligned with payments so checkout stripe settlements and reports agree
 COMMISSION_RATE = Decimal("0.05")
-# Buyer quantity is also validated against live product stock. This value is
-# the extra bulk-order safety cap requested for community/restaurant ordering.
+# buyer quantity is also validated against live product stock
+# this is the extra bulk order safety cap for community and restaurant buyers
 MAX_ORDER_ITEM_QUANTITY = Decimal("100.00")
 logger = logging.getLogger("apps.orders")
 
@@ -59,6 +63,16 @@ def money(value: Decimal) -> Decimal:
     context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
     """
     return value.quantize(MONEY_Q)
+
+
+def cart_item_unit_price(item: CartItem) -> Decimal:
+    # surplus pricing is resolved here so cart and checkout share the same unit price
+    return effective_product_unit_price(item.product)
+
+
+def cart_item_line_total(item: CartItem) -> Decimal:
+    # every line total is rounded before it is added to order and commission totals
+    return money(cart_item_unit_price(item) * item.quantity)
 
 
 def get_or_create_cart(user) -> Cart:
@@ -96,9 +110,7 @@ def get_cart_groups(cart: Cart, selected_cart_item_ids: list[int] | None = None)
     or isolates a business rule that should remain easy to test. The wider
     context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
     """
-    # The checkout UI, cart UI, and producer delivery-date rules all operate
-    # by producer, so the grouping is centralised here instead of repeated in
-    # several API views.
+    # cart checkout and delivery date rules all operate by producer
     grouped: dict[int, CartProducerGroup] = {}
     item_queryset = cart.items.select_related("product__producer")
     if selected_cart_item_ids is not None:
@@ -109,7 +121,7 @@ def get_cart_groups(cart: Cart, selected_cart_item_ids: list[int] | None = None)
         if producer.id not in grouped:
             grouped[producer.id] = CartProducerGroup(producer=producer, items=[], subtotal=Decimal("0.00"))
         grouped[producer.id].items.append(item)
-        grouped[producer.id].subtotal = money(grouped[producer.id].subtotal + item.line_total)
+        grouped[producer.id].subtotal = money(grouped[producer.id].subtotal + cart_item_line_total(item))
     return sorted(grouped.values(), key=lambda g: g.producer.business_name.lower())
 
 
@@ -121,9 +133,8 @@ def build_cart_payload(cart: Cart) -> dict:
     or isolates a business rule that should remain easy to test. The wider
     context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
     """
-    # The frontend displays these values directly, but the calculation stays on
-    # the backend so price, stock, and commission totals cannot be manipulated
-    # from the browser.
+    # browser displays this payload but money rules stay on the backend
+    # surplus discounts and commission totals are calculated once here
     groups = get_cart_groups(cart)
     subtotal = money(sum((g.subtotal for g in groups), Decimal("0.00")))
     commission_amount = money(subtotal * COMMISSION_RATE)
@@ -145,8 +156,17 @@ def build_cart_payload(cart: Cart) -> dict:
                         "category": item.product.category,
                         "unit": item.product.unit,
                         "quantity": item.quantity,
-                        "unit_price": item.unit_price,
-                        "line_total": item.line_total,
+                        "unit_price": cart_item_unit_price(item),
+                        "line_total": cart_item_line_total(item),
+                        "original_unit_price": item.product.price,
+                        "image_url": item.product.image_url or default_marketplace_image_url(item.product.id),
+                        "allergen_info": item.product.allergen_info,
+                        "is_organic": item.product.is_organic,
+                        "organic_certification": item.product.organic_certification,
+                        "is_surplus": product_has_active_surplus_deal(item.product),
+                        "surplus_discount_percent": item.product.surplus_discount_percent if product_has_active_surplus_deal(item.product) else None,
+                        "surplus_best_before": item.product.surplus_best_before,
+                        "surplus_note": item.product.surplus_note,
                         "available_stock": item.product.stock_quantity,
                         "availability": item.product.effective_availability(),
                         "seasonal_dates": item.product.seasonal_window_label or ("Current season" if item.product.in_season else "Year-round"),
@@ -237,6 +257,7 @@ def _prepare_checkout_state(
     user, payload: dict
 ) -> tuple[Cart, list[int] | None, list[CartProducerGroup], str, dict[int, date]]:
     """Validate the cart immediately before an order/Stripe reservation is created."""
+    # checkout validation runs as late as possible to catch stale cart data
     cart = get_or_create_cart(user)
     unique_selected_ids = _selected_cart_item_ids(cart, payload)
     groups = get_cart_groups(cart, unique_selected_ids)
@@ -249,6 +270,7 @@ def _prepare_checkout_state(
     special_instructions = (payload.get("special_instructions") or "").strip()
 
     # stock is checked late so stale cart quantities cannot slip into orders
+    # this prevents out of stock purchases even if the cart page is stale
     for group in groups:
         for item in group.items:
             if not item.product.is_orderable() or item.product.stock_quantity < item.quantity:
@@ -269,6 +291,23 @@ def _prepare_checkout_state(
                 )
 
     delivery_dates = _resolve_delivery_dates(groups, payload)
+
+    from apps.geo.services import get_cart_food_miles
+
+    food_miles = get_cart_food_miles(
+        user,
+        postcode=payload["customer_postcode"],
+        selected_cart_item_ids=unique_selected_ids,
+    )
+    # the twenty mile rule is enforced before order creation so bad addresses do not create records
+    max_distance = max(
+        (Decimal(str(row["distance_miles"])) for row in food_miles.get("producer_totals", [])),
+        default=Decimal("0.00"),
+    )
+    if max_distance > Decimal("20.00"):
+        raise ValueError(
+            "Delivery address is outside the Bristol Regional Food Network 20-mile radius."
+        )
     return cart, unique_selected_ids, groups, special_instructions, delivery_dates
 
 
@@ -282,22 +321,40 @@ def _create_order_record(
     payment_reference: str,
     payment_status: str,
 ) -> Order:
-    # Store a financial snapshot on the order itself. Admin reports then remain
-    # auditable even if a future sprint changes the global commission rate.
+    # order totals are snapshotted so admin reports remain auditable later
     subtotal = money(sum((group.subtotal for group in groups), Decimal("0.00")))
     commission_amount = money(subtotal * COMMISSION_RATE)
     payout_total = money(subtotal - commission_amount)
 
+    from apps.geo.services import get_cart_food_miles
+
+    food_miles = get_cart_food_miles(
+        user,
+        postcode=payload["customer_postcode"],
+        selected_cart_item_ids=payload.get("selected_cart_item_ids"),
+    )
+    # distance snapshot lets order history show what address was actually used
+    max_distance = max(
+        (Decimal(str(row["distance_miles"])) for row in food_miles.get("producer_totals", [])),
+        default=Decimal("0.00"),
+    )
     return Order.objects.create(
         customer=user,
         delivery_address=payload["delivery_address"],
+        delivery_address_label=(payload.get("delivery_address_label") or "").strip(),
+        selected_address_id=payload.get("selected_address_id"),
         customer_postcode=payload["customer_postcode"],
+        total_food_miles=money(Decimal(str(food_miles.get("total_food_miles") or "0.00"))),
+        max_food_miles=money(max_distance),
+        within_twenty_miles=max_distance <= Decimal("20.00"),
         subtotal_amount=subtotal,
         commission_rate=COMMISSION_RATE,
         commission_amount=commission_amount,
         total_amount=subtotal,
         producer_payout_total=payout_total,
         payment_method=payment_method,
+        payment_terms=(payload.get("payment_terms") or "pay_online_now").strip(),
+        purchase_order_number=(payload.get("purchase_order_number") or "").strip(),
         payment_reference=payment_reference,
         payment_status=payment_status,
         status=Order.Status.PENDING,
@@ -308,9 +365,7 @@ def _create_order_record(
 def _create_order_structure(
     order: Order, groups: list[CartProducerGroup], delivery_dates: dict[int, date], special_instructions: str
 ) -> None:
-    # A single customer checkout can contain multiple producers. Sub-orders keep
-    # each supplier's delivery date, commission share, payout, and item list
-    # independent while preserving one buyer-facing order number.
+    # sub orders keep each producer fulfilment workflow separate under one order
     for group in groups:
         producer_commission = money(group.subtotal * COMMISSION_RATE)
         payout_amount = money(group.subtotal - producer_commission)
@@ -326,16 +381,29 @@ def _create_order_structure(
         )
 
         for item in group.items:
+            # order items copy product facts so receipts survive later product edits
+            unit_price = cart_item_unit_price(item)
+            line_total = cart_item_line_total(item)
+            is_surplus = product_has_active_surplus_deal(item.product)
             OrderItem.objects.create(
                 order=order,
                 sub_order=sub_order,
                 product=item.product,
                 product_name=item.product.name,
                 producer_name=group.producer.business_name,
+                product_image_url=item.product.image_url or default_marketplace_image_url(item.product.id),
+                allergen_info=item.product.allergen_info,
+                is_organic=item.product.is_organic,
+                organic_certification=item.product.organic_certification,
+                is_surplus=is_surplus,
+                surplus_discount_percent=item.product.surplus_discount_percent if is_surplus else None,
+                surplus_original_unit_price=item.product.price if is_surplus else None,
+                surplus_best_before=item.product.surplus_best_before if is_surplus else "",
+                surplus_note=item.product.surplus_note if is_surplus else "",
                 unit=item.product.unit,
                 quantity=item.quantity,
-                unit_price=item.product.price,
-                line_total=item.line_total,
+                unit_price=unit_price,
+                line_total=line_total,
             )
 
 
@@ -347,9 +415,7 @@ def _producer_portal_stock_units(quantity: Decimal) -> int:
     or isolates a business rule that should remain easy to test. The wider
     context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
     """
-    # Marketplace stock can be decimal for units such as kg/litre, while the
-    # producer portal inventory mirror is integer-based. Decimal quantities are
-    # rounded up so the producer dashboard never overstates remaining stock.
+    # marketplace stock can be decimal while producer portal stock is whole units
     whole_units = quantity.to_integral_value()
     if quantity == whole_units:
         return int(whole_units)
@@ -364,8 +430,7 @@ def _matching_producer_portal_product(order_item: OrderItem):
     or isolates a business rule that should remain easy to test. The wider
     context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
     """
-    # The producer portal keeps its own product model. We match by producer user,
-    # product name, and unit so stock changes remain visible in both dashboards.
+    # producer portal has a separate product model so stock sync needs a matching rule
     producer_user = getattr(getattr(order_item.product, "producer", None), "user", None)
     if producer_user is None:
         return None
@@ -407,9 +472,7 @@ def _adjust_order_product_stock(order_item: OrderItem, quantity_delta: Decimal) 
     if order_item.product is None:
         return
 
-    # The orders product table is the buyer-facing stock source. Every reserve
-    # or release is followed by a catalog sync so marketplace cards reflect the
-    # same available quantity.
+    # orders product stock is the buyer facing stock source
     next_stock = money(order_item.product.stock_quantity + quantity_delta)
     if next_stock < Decimal("0.00"):
         raise ValueError(f"Product '{order_item.product_name}' no longer has enough stock.")
@@ -428,9 +491,7 @@ def _adjust_producer_portal_stock(order_item: OrderItem, quantity_delta: Decimal
     or isolates a business rule that should remain easy to test. The wider
     context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
     """
-    # This mirrors the buyer-side stock adjustment in the producer workspace.
-    # Missing mirror rows are tolerated because older demo products may only
-    # exist in the marketplace/orders catalog.
+    # producer stock sync is best effort because older demo rows may not have mirrors
     producer_product = _matching_producer_portal_product(order_item)
     if producer_product is None:
         return
@@ -469,9 +530,7 @@ def reserve_stock_for_order(order: Order) -> None:
     or isolates a business rule that should remain easy to test. The wider
     context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
     """
-    # Stripe checkout reserves stock before redirecting away from the site. If
-    # Stripe fails/cancels later, `release_stock_reservation_for_order` reverses
-    # the same deltas.
+    # stripe checkout reserves stock before redirecting away from the site
     for order_item in order.items.select_related("product__producer__user").all():
         _adjust_order_product_stock(order_item, -order_item.quantity)
         _adjust_producer_portal_stock(order_item, -order_item.quantity)
@@ -485,8 +544,7 @@ def release_stock_reservation_for_order(order: Order) -> None:
     or isolates a business rule that should remain easy to test. The wider
     context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
     """
-    # The release path is intentionally symmetrical with reservation so failed
-    # payments return quantities to both buyer and producer inventory surfaces.
+    # failed payments release the same quantities that were reserved
     for order_item in order.items.select_related("product__producer__user").all():
         _adjust_order_product_stock(order_item, order_item.quantity)
         _adjust_producer_portal_stock(order_item, order_item.quantity)
@@ -500,9 +558,7 @@ def clear_checked_out_cart_items(order: Order, selected_cart_item_ids: list[int]
     or isolates a business rule that should remain easy to test. The wider
     context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
     """
-    # `selected_cart_item_ids=None` means a full-cart checkout. A list means the
-    # buyer checked out only selected producer sections/items and the remaining
-    # cart should be left intact.
+    # none means full cart checkout and a list means selected item checkout
     cart = Cart.objects.filter(customer=order.customer).first()
     if cart is None:
         return
@@ -520,8 +576,7 @@ def create_order_notifications(order: Order) -> None:
     or isolates a business rule that should remain easy to test. The wider
     context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
     """
-    # Notifications are created only after a successful mock payment or Stripe
-    # success webhook, which prevents producers receiving orders that later fail.
+    # notifications are created only after successful payment confirmation
     special_instructions = order.special_instructions.strip()
     for sub_order in order.sub_orders.select_related("producer").all():
         ProducerNotification.objects.get_or_create(
@@ -568,9 +623,8 @@ def checkout_cart_with_stripe_reservation(user, payload: dict) -> Order:
     or isolates a business rule that should remain easy to test. The wider
     context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
     """
-    # Stripe orders enter as pending reservations: stock is held, payment is
-    # tracked, and cart cleanup/notifications wait for the webhook or success
-    # confirmation endpoint.
+    # stripe orders enter as pending reservations with stock held
+    # cart cleanup and notifications wait for webhook or success confirmation
     _, unique_selected_ids, groups, special_instructions, delivery_dates = _prepare_checkout_state(user, payload)
     order = _create_order_record(
         user,
@@ -620,9 +674,8 @@ def checkout_cart(user, payload: dict) -> Order:
     or isolates a business rule that should remain easy to test. The wider
     context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
     """
-    # The non-Stripe test-card path is used by older flows/tests. It completes
-    # immediately, so stock, notifications, transaction, profile, and cart
-    # cleanup happen in this one atomic transaction.
+    # the non stripe test card path is used by older flows and tests
+    # it completes immediately so stock notification and cart cleanup happen here
     _, unique_selected_ids, groups, special_instructions, delivery_dates = _prepare_checkout_state(user, payload)
     order = _create_order_record(
         user,
@@ -674,9 +727,8 @@ def reorder_order_to_cart(user, order: Order) -> dict:
     or isolates a business rule that should remain easy to test. The wider
     context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
     """
-    # Reorder is intentionally conservative: unavailable or out-of-season items
-    # are reported back instead of silently re-adding products the buyer can no
-    # longer purchase.
+    # reorder is intentionally conservative with unavailable items
+    # blocked rows are reported back instead of silently added to cart
     cart = get_or_create_cart(user)
     unavailable: list[dict] = []
     added: list[dict] = []

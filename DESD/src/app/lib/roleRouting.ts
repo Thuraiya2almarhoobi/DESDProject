@@ -16,6 +16,7 @@
 import { UserRole } from '../types';
 
 export function getDashboardPathForRole(role: UserRole): string {
+  // role routing is centralised so login remember me and nav all agree
   switch (role) {
     case 'CUSTOMER':
       return '/marketplace';

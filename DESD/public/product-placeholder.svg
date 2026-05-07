@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600" role="img" aria-labelledby="title desc">
+  <title id="title">No product image available</title>
+  <desc id="desc">Neutral placeholder used when a producer has not uploaded a product image.</desc>
+  <rect width="800" height="600" fill="#f4f1e8"/>
+  <rect x="80" y="70" width="640" height="460" rx="24" fill="#fffdf7" stroke="#d8d0c0" stroke-width="4"/>
+  <circle cx="400" cy="250" r="92" fill="#e8efe2"/>
+  <path d="M343 269c44-12 85-48 105-93 30 43 25 91-9 125-29 29-72 34-106 12 2-15 5-29 10-44z" fill="#6f8f5f"/>
+  <path d="M331 341h138c22 0 40 18 40 40v16H291v-16c0-22 18-40 40-40z" fill="#d8d0c0"/>
+  <text x="400" y="458" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="32" font-weight="700" fill="#334032">No image available</text>
+  <text x="400" y="496" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#667461">Producer image not uploaded</text>
+</svg>

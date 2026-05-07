@@ -38,9 +38,9 @@ from apps.producer_portal.models import OrderStatus, ProducerOrder
 
 from .models import SettlementOrderLine, SettlementStatus, WeeklySettlement
 
-# Must match `apps.orders.services.COMMISSION_RATE`. The checkout service stores
-# commission snapshots on orders, and this payment service later uses the same
-# rate when building settlement lines for producer payout reporting.
+# commission rate must match orders checkout snapshots
+# settlements and admin reports depend on this staying at 5 percent
+# customer totals do not add this on top
 COMMISSION_RATE = Decimal("0.05")
 STRIPE_SUCCESS_EVENT_TYPES = {
     "checkout.session.completed",
@@ -195,9 +195,9 @@ def _payment_service_request(path: str, payload: dict[str, Any]) -> dict[str, An
     or isolates a business rule that should remain easy to test. The wider
     context is: Payments domain: Stripe checkout, settlement records, commission capture, and payment-service integration.
     """
-    # Stripe secrets stay inside the separate payment service. Django sends only
-    # a signed internal request, which keeps the marketplace app from directly
-    # handling secret-key Stripe SDK calls.
+    # stripe secrets stay inside the separate payment service
+    # django sends an internal signed request and receives only safe checkout data
+    # this keeps secret key handling out of the marketplace app
     url = f"{_payment_service_base_url()}{path}"
     try:
         response = requests.post(
@@ -233,9 +233,8 @@ def _build_stripe_line_items(order: Order) -> list[dict[str, Any]]:
     or isolates a business rule that should remain easy to test. The wider
     context is: Payments domain: Stripe checkout, settlement records, commission capture, and payment-service integration.
     """
-    # Each order item is sent to Stripe as quantity=1 with the already-rounded
-    # line total. That preserves decimal unit orders such as kg/litre and avoids
-    # Stripe re-rounding quantities differently from our audited order totals.
+    # stripe receives rounded line totals rather than raw decimal quantities
+    # this keeps kg and litre orders aligned with audited order totals
     line_items: list[dict[str, Any]] = []
     for item in order.items.all():
         description = f"{item.quantity} {item.unit}"
@@ -286,6 +285,8 @@ def _stripe_checkout_redirect_urls(
     success_url: str | None = None,
     cancel_url: str | None = None,
 ) -> tuple[str, str]:
+    # return urls are validated before they are sent to the payment service
+    # the success url must carry the stripe session id for reconciliation
     resolved_success_url = _absolute_http_url(success_url) or settings.STRIPE_SUCCESS_URL
     resolved_cancel_url = _absolute_http_url(cancel_url) or settings.STRIPE_CANCEL_URL
     return _success_url_with_session_placeholder(resolved_success_url), resolved_cancel_url
@@ -305,8 +306,8 @@ def create_stripe_checkout_session_for_order(
     or isolates a business rule that should remain easy to test. The wider
     context is: Payments domain: Stripe checkout, settlement records, commission capture, and payment-service integration.
     """
-    # The order already exists before Stripe redirect so stock can be reserved
-    # and later reconciled by webhook/session confirmation.
+    # order exists before stripe redirect so stock can be reserved
+    # webhook or success return later decides whether that reservation is kept
     if order.payment_status == Order.PaymentStatus.PAID:
         raise ValueError("Order is already paid.")
 
@@ -340,9 +341,8 @@ def create_stripe_checkout_session_for_order(
     if livemode:
         raise ValueError("Stripe Checkout must run in test mode only.")
 
-    # PaymentTransaction is the audit/reconciliation record. The raw payload also
-    # stores idempotency flags so duplicate Stripe webhooks do not duplicate cart
-    # cleanup, notifications, or stock release work.
+    # payment transaction stores reconciliation flags for webhook idempotency
+    # duplicate stripe events should not clear carts or notify producers twice
     transaction_record, _ = PaymentTransaction.objects.get_or_create(
         order=order,
         defaults={
@@ -404,8 +404,8 @@ def verify_and_construct_stripe_event(payload: bytes, signature: str) -> dict[st
     or isolates a business rule that should remain easy to test. The wider
     context is: Payments domain: Stripe checkout, settlement records, commission capture, and payment-service integration.
     """
-    # Signature verification is delegated to the payment service because it owns
-    # STRIPE_WEBHOOK_SECRET. This app only handles the verified event payload.
+    # signature verification is delegated to the service that owns the webhook secret
+    # this app only processes events after the payment service confirms them
     payload_text = payload.decode("utf-8")
     response_payload = _payment_service_request(
         "/stripe/webhooks/verify",
@@ -428,6 +428,8 @@ def retrieve_stripe_checkout_session(session_id: str) -> StripeCheckoutSessionSt
     or isolates a business rule that should remain easy to test. The wider
     context is: Payments domain: Stripe checkout, settlement records, commission capture, and payment-service integration.
     """
+    # checkout success page asks for status so the ui does not wait for webhook retry
+    # the webhook remains the durable backup if the browser return is skipped
     response_payload = _payment_service_request(
         "/stripe/checkout-sessions/retrieve",
         {"session_id": session_id},
@@ -451,8 +453,8 @@ def handle_stripe_webhook_event(event: dict[str, Any]) -> dict[str, Any]:
     or isolates a business rule that should remain easy to test. The wider
     context is: Payments domain: Stripe checkout, settlement records, commission capture, and payment-service integration.
     """
-    # This coursework environment uses Stripe test mode only; live events are
-    # rejected so demo/test financial records cannot mix with real payments.
+    # live stripe events are rejected so demo records cannot mix with real payments
+    # this project is intentionally locked to test mode payment behaviour
     if bool(event.get("livemode", False)):
         raise ValueError("Live mode Stripe events are not allowed.")
 
@@ -487,9 +489,8 @@ def _get_order_and_transaction(
     order_id: str | int | None = None,
     session_id: str = "",
 ) -> tuple[Order, PaymentTransaction]:
-    # Webhooks can arrive with either an explicit order id or only a Checkout
-    # Session id. Lock both records while resolving them so concurrent webhook
-    # retries cannot race each other.
+    # webhooks may identify the order by order id or checkout session id
+    # records are locked while resolving so retries cannot race each other
     transaction_record = None
     order = None
 
@@ -533,9 +534,8 @@ def _clear_reserved_cart_items_if_needed(order: Order, raw_payload: dict[str, An
     or isolates a business rule that should remain easy to test. The wider
     context is: Payments domain: Stripe checkout, settlement records, commission capture, and payment-service integration.
     """
-    # Cart deletion is delayed until Stripe succeeds. The idempotency flag lets
-    # the same success event be replayed without removing unrelated new cart
-    # items the buyer may have added afterwards.
+    # cart deletion waits for payment success and uses an idempotency flag
+    # selected checkout only clears selected cart rows after payment succeeds
     if raw_payload.get("cart_items_cleared"):
         return raw_payload
 
@@ -562,9 +562,8 @@ def _apply_payment_result(
     event_id: str = "",
     checkout_status: str = "",
 ) -> dict[str, Any]:
-    # This is the single reconciliation point for Stripe success/failure. It
-    # updates the order, transaction audit row, stock reservation, cart cleanup,
-    # and producer notifications inside one atomic webhook transaction.
+    # this is the single success and failure reconciliation point
+    # order status transaction status stock release and notifications meet here
     raw_payload = dict(transaction_record.raw_payload or {})
     processed_event_ids = [str(value) for value in raw_payload.get("processed_event_ids", []) if value]
     if event_id and event_id in processed_event_ids:
@@ -663,8 +662,8 @@ def confirm_stripe_checkout_session(session_id: str) -> dict[str, Any]:
     or isolates a business rule that should remain easy to test. The wider
     context is: Payments domain: Stripe checkout, settlement records, commission capture, and payment-service integration.
     """
-    # The success return URL confirms the session immediately so the browser can
-    # show an order confirmation even if Stripe's webhook retry arrives later.
+    # success return confirms status immediately while webhook remains the backup
+    # this makes the checkout page reliable during live demos
     session = retrieve_stripe_checkout_session(session_id)
     if session.livemode:
         raise ValueError("Stripe Checkout must run in test mode only.")
@@ -715,8 +714,8 @@ def cancel_stripe_checkout_order(order: Order) -> dict[str, Any]:
     or isolates a business rule that should remain easy to test. The wider
     context is: Payments domain: Stripe checkout, settlement records, commission capture, and payment-service integration.
     """
-    # Cancelling from the return path uses the same failure reconciliation as a
-    # Stripe expiry webhook, which keeps stock release and audit fields identical.
+    # checkout cancel uses the same failure path as stripe expiry
+    # stock release and transaction audit fields therefore stay identical
     locked_order = Order.objects.select_for_update().get(pk=order.pk)
     transaction_record = PaymentTransaction.objects.select_for_update().filter(order=locked_order).first()
     if transaction_record is None:
@@ -747,9 +746,8 @@ def process_weekly_settlements(reference_date: date | None = None) -> list[Weekl
     or isolates a business rule that should remain easy to test. The wider
     context is: Payments domain: Stripe checkout, settlement records, commission capture, and payment-service integration.
     """
-    # Settlement processing is producer-oriented: delivered producer orders are
-    # grouped by supplier, a 5% platform commission is retained, and the net 95%
-    # becomes the producer payout for that weekly settlement.
+    # settlements group delivered paid work by producer for 5 percent commission reporting
+    # this creates accounting records that separate gross sales commission and payout
     week_range = get_previous_week_range(reference_date)
     legacy_orders = (
         ProducerOrder.objects.select_related("producer")
@@ -783,6 +781,8 @@ def process_weekly_settlements(reference_date: date | None = None) -> list[Weekl
     settlements: list[WeeklySettlement] = []
 
     for producer_id, rows in by_producer.items():
+        # each settlement stores gross commission and net payout for accounting export
+        # legacy producer orders and marketplace sub orders are merged by supplier
         orders = rows["legacy"]
         sub_orders = rows["marketplace"]
         gross_total = _money(
@@ -824,6 +824,8 @@ def process_weekly_settlements(reference_date: date | None = None) -> list[Weekl
             order.save(update_fields=["settlement_processed", "updated_at"])
 
         for sub_order in sub_orders:
+            # marketplace sub order lines preserve the order level commission snapshot
+            # this protects reports if the global rate changes in a later sprint
             SettlementOrderLine.objects.create(
                 settlement=settlement,
                 sub_order=sub_order,

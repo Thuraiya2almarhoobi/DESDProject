@@ -220,8 +220,7 @@ function errorMessageFromUnknown(error: unknown): string {
  * so future contributors can trace behavior during sprint reviews.
  */
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  // Persisted auth state is restored on refresh so protected routes and shared
-  // navigation can react immediately without forcing a new login.
+  // persisted auth state restores early so protected routes can render without a login flash
   const [user, setUser] = useState<User | null>(() => loadStoredUser());
   const [profile, setProfile] = useState<Record<string, unknown> | null>(null);
   const [addresses, setAddresses] = useState<MePayload['addresses']>([]);
@@ -232,12 +231,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const persistUser = useCallback((nextUser: User | null) => {
+    // user state and storage move together so remember me routing has one source
     setUser(nextUser);
     saveUser(nextUser);
   }, []);
 
   const applyMePayload = useCallback(
     (payload: MePayload): User => {
+      // me payload carries the role profile and saved addresses used across checkout
       const nextUser = buildUserPayload(payload.user, payload.profile);
       persistUser(nextUser);
       setProfile(payload.profile);
@@ -248,6 +249,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const getMe = useCallback(async (): Promise<MePayload> => {
+    // every refresh of account data comes through here so pages share fresh profile state
     const payload = await getMeRequest();
     applyMePayload(payload);
     return payload;
@@ -258,9 +260,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       authAction: () => Promise<{ user: { id: number; email: string; role: UserRole }; detail?: string }>
     ): Promise<AuthResult> => {
       try {
-        // Login and all four registration flows share the same post-auth shape:
-        // fetch `/me`, save the role/profile/address payload, and let route
-        // guards decide the dashboard from the returned role.
+        // login and registration share the same follow up so role routing stays consistent
         const authPayload = await authAction();
         const me = await getMeRequest().catch(() => null);
         const nextUser = me
@@ -290,8 +290,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async (email: string, password: string, rememberMe: boolean): Promise<AuthResult> => {
       const result = await runAuthFlow(() => loginRequest(email, password, rememberMe));
       if (result.success) {
-        // Some legacy endpoints still support Basic auth, so the frontend keeps
-        // this compatibility token alongside the JWT stored by authService.
+        // basic auth remains for older local endpoints while jwt handles normal api calls
         setBasicAuthToken(btoa(`${email}:${password}`));
       }
       return result;
@@ -344,8 +343,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const logout = useCallback(() => {
-    // Logout clears every browser-side auth surface, including producer preview
-    // mode, so the next session cannot inherit another role's state.
+    // logout clears every browser side auth surface so another role cannot inherit state
     clearAuthStorage();
     setBasicAuthToken(null);
     persistUser(null);
@@ -359,8 +357,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const hasRole = useCallback((role: UserRole) => user?.role === role, [user]);
   const startCustomerPreview = useCallback((returnPath?: string | null) => {
-    // Producer preview mode is intentionally frontend-only. It lets producers
-    // inspect customer-facing pages while preserving their actual backend role.
+    // producer preview is frontend only so backend permissions still see the producer role
     setCustomerPreview(true);
     saveCustomerPreview(true);
     const nextReturnPath = returnPath && returnPath.trim() ? returnPath : null;
@@ -375,8 +372,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    // Preview mode should disappear as soon as the signed-in user is not a
-    // producer, otherwise customers/restaurants could see confusing navigation.
+    // preview mode is cleared when the active account is no longer a producer
     if (user?.role === 'PRODUCER' || user === null) {
       return;
     }
@@ -387,8 +383,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   useEffect(() => {
-    // On refresh, the access token is the source of truth. A stale localStorage
-    // user is discarded if `/api/accounts/me/` cannot validate the session.
+    // access token validation decides whether a stored user is still trusted
     const bootstrap = async () => {
       try {
         if (!getAccessToken()) {

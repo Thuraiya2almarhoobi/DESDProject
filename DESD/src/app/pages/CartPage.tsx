@@ -64,12 +64,19 @@ export function CartPage() {
   const grandTotal = getGrandTotal();
   const selectedGrandTotal = getSelectedGrandTotal();
   const commission = selectedGrandTotal * 0.05;
-  const totalWithCommission = selectedGrandTotal + commission;
+  const producerPayout = selectedGrandTotal - commission;
   const notSelectedTodayTotal = Math.max(0, grandTotal - selectedGrandTotal);
   const isBulkRole = user?.role === 'COMMUNITY' || user?.role === 'RESTAURANT';
   const selectedLineCount = selectedCartItemIds.length;
+  const selectedUnavailableCount = items.filter(
+    (item) =>
+      item.cartItemId &&
+      isCartItemSelected(item.cartItemId) &&
+      (item.product.stock <= 0 || item.product.availability === 'unavailable'),
+  ).length;
   const totalLineCount = items.length;
   const allCartItemIds = items
+    .filter((item) => item.product.stock > 0 && item.product.availability !== 'unavailable')
     .map((item) => item.cartItemId)
     .filter((cartItemId): cartItemId is string => Boolean(cartItemId));
   const allSelected = totalLineCount > 0 && selectedLineCount === allCartItemIds.length;
@@ -266,6 +273,7 @@ export function CartPage() {
           <div className="space-y-6 lg:col-span-2">
             {cartByProducer.map((group) => {
               const groupCartItemIds = group.items
+                .filter((item) => item.product.stock > 0 && item.product.availability !== 'unavailable')
                 .map((item) => item.cartItemId)
                 .filter((cartItemId): cartItemId is string => Boolean(cartItemId));
               const selectedGroupCount = groupCartItemIds.filter((cartItemId) =>
@@ -326,10 +334,20 @@ export function CartPage() {
                         const isSelected = item.cartItemId
                           ? isCartItemSelected(item.cartItemId)
                           : false;
+                        const isUnavailable = item.product.stock <= 0 || item.product.availability === 'unavailable';
                         const maxQuantity = Math.max(
                           1,
                           Math.min(MAX_ORDER_ITEM_QUANTITY, Math.floor(item.product.stock)),
                         );
+                        const hasSurplusPrice =
+                          Boolean(item.product.isSurplus) &&
+                          typeof item.product.surplusOriginalPrice === 'number' &&
+                          item.product.surplusOriginalPrice > item.product.price;
+                        const originalLineTotal = hasSurplusPrice
+                          ? (item.product.surplusOriginalPrice || item.product.price) * item.quantity
+                          : item.product.price * item.quantity;
+                        const saleLineTotal = item.product.price * item.quantity;
+                        const discountAmount = Math.max(0, originalLineTotal - saleLineTotal);
 
                         return (
                           <div
@@ -349,26 +367,61 @@ export function CartPage() {
                                       : undefined
                                   }
                                   aria-label={`Select ${item.product.name} for checkout`}
+                                  disabled={isUnavailable}
                                   className="size-5 rounded-md"
                                 />
                               </div>
 
-                              <img
-                                src={item.product.imageUrl}
-                                alt={item.product.name}
-                                className="size-20 shrink-0 rounded object-cover"
-                              />
+                              <button
+                                type="button"
+                                onClick={() => navigate(`/product/${item.product.id}`)}
+                                className="size-20 shrink-0 overflow-hidden rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
+                                aria-label={`View ${item.product.name}`}
+                              >
+                                <img
+                                  src={item.product.imageUrl}
+                                  alt={item.product.name}
+                                  className="size-full object-cover"
+                                />
+                              </button>
 
                               <div className="min-w-0 flex-1">
                                 <div className="mb-1 flex flex-wrap items-start justify-between gap-2">
-                                  <h3 className="font-medium">{item.product.name}</h3>
+                                  <button
+                                    type="button"
+                                    onClick={() => navigate(`/product/${item.product.id}`)}
+                                    className="font-medium text-left hover:text-green-700 hover:underline"
+                                  >
+                                    {item.product.name}
+                                  </button>
                                   <Badge variant={isSelected ? 'default' : 'outline'} className="shrink-0">
-                                    {isSelected ? 'Selected for checkout' : 'Saved in cart'}
+                                    {isUnavailable ? 'Unavailable' : isSelected ? 'Selected for checkout' : 'Saved in cart'}
                                   </Badge>
                                 </div>
-                                <p className="mb-2 text-sm text-gray-600">
-                                  £{item.product.price.toFixed(2)} per {item.product.unit}
-                                </p>
+                                {hasSurplusPrice ? (
+                                  <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <Badge className="bg-amber-600 text-white hover:bg-amber-600">
+                                        Surplus deal
+                                      </Badge>
+                                      <span className="text-gray-500 line-through">
+                                        £{item.product.surplusOriginalPrice?.toFixed(2)} per {item.product.unit}
+                                      </span>
+                                      <span className="font-semibold text-amber-900">
+                                        £{item.product.price.toFixed(2)} sale price
+                                      </span>
+                                    </div>
+                                    <p className="mt-1 text-xs text-amber-900">
+                                      Save £{discountAmount.toFixed(2)} on this cart line
+                                      {item.product.surplusDiscount ? ` (${item.product.surplusDiscount}% off)` : ''}.
+                                      {item.product.surplusBestBefore ? ` Best before: ${item.product.surplusBestBefore}.` : ''}
+                                    </p>
+                                  </div>
+                                ) : (
+                                  <p className="mb-2 text-sm text-gray-600">
+                                    £{item.product.price.toFixed(2)} per {item.product.unit}
+                                  </p>
+                                )}
                                 {productFoodMiles[item.product.id] !== undefined && (
                                   <p className="mb-2 text-xs text-gray-500">
                                     Food miles: {productFoodMiles[item.product.id].toFixed(2)} miles
@@ -381,6 +434,11 @@ export function CartPage() {
                                     Bulk cap: up to {MAX_ORDER_ITEM_QUANTITY} units per product.
                                   </p>
                                 )}
+                                {isUnavailable && (
+                                  <p className="mb-2 text-xs font-medium text-red-700">
+                                    This item is out of stock or unavailable. Remove it before checkout.
+                                  </p>
+                                )}
 
                                 <div className="flex items-center gap-2">
                                   <Button
@@ -388,6 +446,7 @@ export function CartPage() {
                                     size="icon"
                                     className="size-8"
                                     onClick={() => updateQuantity(item.product.id, item.quantity - 1)}
+                                    disabled={isUnavailable}
                                   >
                                     <Minus className="size-3" />
                                   </Button>
@@ -409,13 +468,14 @@ export function CartPage() {
                                         Math.max(1, Math.min(maxQuantity, Math.floor(next))),
                                       );
                                     }}
+                                    disabled={isUnavailable}
                                   />
                                   <Button
                                     variant="outline"
                                     size="icon"
                                     className="size-8"
                                     onClick={() => updateQuantity(item.product.id, item.quantity + 1)}
-                                    disabled={item.quantity >= maxQuantity}
+                                    disabled={isUnavailable || item.quantity >= maxQuantity}
                                   >
                                     <Plus className="size-3" />
                                   </Button>
@@ -513,9 +573,15 @@ export function CartPage() {
                 {selectedCartByProducer.length > 0 ? (
                   <div className="space-y-2">
                     {selectedCartByProducer.map((group) => (
-                      <div key={group.producerId} className="flex justify-between text-sm">
-                        <span className="text-gray-600">{group.producerName}</span>
-                        <span>£{group.subtotal.toFixed(2)}</span>
+                      <div key={group.producerId} className="space-y-1 rounded-md border bg-gray-50 p-2">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">{group.producerName}</span>
+                          <span>£{group.subtotal.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between text-xs text-gray-500">
+                          <span>Platform 5% / producer 95%</span>
+                          <span>£{(group.subtotal * 0.05).toFixed(2)} / £{(group.subtotal * 0.95).toFixed(2)}</span>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -533,8 +599,13 @@ export function CartPage() {
                 </div>
 
                 <div className="flex justify-between text-sm text-gray-600">
-                  <span>Network Commission (5%)</span>
+                  <span>Platform Commission (5%, included)</span>
                   <span>£{commission.toFixed(2)}</span>
+                </div>
+
+                <div className="flex justify-between text-sm text-gray-600">
+                  <span>Producer Payout (95%)</span>
+                  <span>£{producerPayout.toFixed(2)}</span>
                 </div>
 
                 <div className="flex justify-between text-sm text-gray-600">
@@ -551,14 +622,20 @@ export function CartPage() {
 
                 <div className="flex justify-between text-lg font-semibold">
                   <span>Total</span>
-                  <span className="text-green-700">£{totalWithCommission.toFixed(2)}</span>
+                  <span className="text-green-700">£{selectedGrandTotal.toFixed(2)}</span>
                 </div>
+
+                {selectedUnavailableCount > 0 && (
+                  <div className="rounded-md border border-red-200 bg-red-50 p-3 text-xs font-medium text-red-800">
+                    {selectedUnavailableCount} selected item{selectedUnavailableCount === 1 ? '' : 's'} must be removed or deselected before checkout.
+                  </div>
+                )}
 
                 <Button
                   className="w-full"
                   size="lg"
                   onClick={() => navigate('/checkout')}
-                  disabled={selectedLineCount === 0}
+                  disabled={selectedLineCount === 0 || selectedUnavailableCount > 0}
                 >
                   {user?.role === 'COMMUNITY'
                     ? 'Proceed to Community Checkout'

@@ -26,9 +26,11 @@ from apps.geo.services import get_postcode_coordinates, get_user_default_postcod
 
 from .marketplace_sync import (
     default_marketplace_image_url,
+    effective_product_unit_price,
     get_or_create_catalog_product_mirror,
     matching_producer_portal_product,
     product_is_organic,
+    product_has_active_surplus_deal,
 )
 from .models import (
     CartItem,
@@ -98,6 +100,14 @@ class ProductSerializer(serializers.ModelSerializer):
             "season_end_month",
             "harvest_date",
             "allergen_info",
+            "image_url",
+            "is_organic",
+            "organic_certification",
+            "is_surplus",
+            "surplus_discount_percent",
+            "surplus_expires_at",
+            "surplus_best_before",
+            "surplus_note",
         ]
 
 
@@ -110,6 +120,7 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
     can be changed without spreading the same responsibility across unrelated files.
     """
     producer_id = serializers.IntegerField(source="producer.id", read_only=True)
+    price = serializers.SerializerMethodField()
     producer_user_id = serializers.IntegerField(source="producer.user.id", read_only=True, allow_null=True)
     producer_name = serializers.CharField(source="producer.business_name", read_only=True)
     producer_location = serializers.SerializerMethodField()
@@ -120,6 +131,10 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
     producer_longitude = serializers.SerializerMethodField()
     availability = serializers.SerializerMethodField()
     seasonal_dates = serializers.SerializerMethodField()
+    configured_availability = serializers.SerializerMethodField()
+    effective_availability = serializers.SerializerMethodField()
+    is_currently_in_season = serializers.SerializerMethodField()
+    seasonal_status_message = serializers.SerializerMethodField()
     season_start_month = serializers.IntegerField(read_only=True)
     season_end_month = serializers.IntegerField(read_only=True)
     is_organic = serializers.SerializerMethodField()
@@ -161,9 +176,13 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
             "category",
             "harvest_date",
             "availability",
+            "configured_availability",
+            "effective_availability",
             "seasonal_dates",
             "season_start_month",
             "season_end_month",
+            "is_currently_in_season",
+            "seasonal_status_message",
             "is_organic",
             "organic_certification",
             "allergens",
@@ -185,12 +204,14 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
         ]
 
     def _producer_product(self, obj: Product):
+        # cache producer portal mirror lookup so list pages avoid repeated matching work
         cache = self.context.setdefault("_producer_product_cache", {})
         if obj.id not in cache:
             cache[obj.id] = matching_producer_portal_product(obj)
         return cache[obj.id]
 
     def _review_summary(self, obj: Product) -> dict:
+        # review aggregates are cached per serializer run for marketplace performance
         cache = self.context.setdefault("_review_summary_cache", {})
         if obj.id not in cache:
             catalog_product = get_or_create_catalog_product_mirror(obj)
@@ -225,6 +246,10 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
             return producer_profile.farm_origin_text
         return f"Fresh produce from {obj.producer.business_name}."
 
+    def get_price(self, obj: Product) -> Decimal:
+        # displayed price uses active surplus discounts when present
+        return effective_product_unit_price(obj)
+
     def get_producer_latitude(self, obj: Product) -> float | None:
         coordinates = get_postcode_coordinates(obj.producer.postcode)
         if not coordinates:
@@ -240,42 +265,85 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
     def get_availability(self, obj: Product) -> str:
         return obj.effective_availability()
 
+    def get_configured_availability(self, obj: Product) -> str:
+        # configured availability explains the producer setting before date logic is applied
+        if not obj.is_available:
+            return "unavailable"
+        if obj.season_start_month and obj.season_end_month:
+            return "in-season"
+        if obj.in_season:
+            return "in-season"
+        return "year-round"
+
+    def get_effective_availability(self, obj: Product) -> str:
+        return obj.effective_availability()
+
+    def get_is_currently_in_season(self, obj: Product) -> bool:
+        return obj.is_currently_in_season()
+
+    def get_seasonal_status_message(self, obj: Product) -> str:
+        # seasonal copy educates customers without changing whether the item can be bought
+        if obj.stock_quantity <= Decimal("0.00"):
+            return "Out of stock. It is shown only when searched directly."
+        configured_availability = self.get_configured_availability(obj)
+        if configured_availability == "year-round":
+            return "Available year-round from this local producer."
+        if configured_availability == "in-season" and obj.is_currently_in_season():
+            return "Currently in season. Choosing it now supports shorter, seasonal supply chains."
+        if configured_availability == "in-season":
+            label = obj.seasonal_window_label or "its local growing season"
+            return f"Outside {label}; shown for seasonal awareness."
+        return "Currently unavailable."
+
     def get_seasonal_dates(self, obj: Product) -> str:
         if obj.seasonal_window_label:
             return obj.seasonal_window_label
         return "Current season" if obj.in_season else "Year-round"
 
     def get_is_organic(self, obj: Product) -> bool:
+        # certification can be set directly or inherited from the producer product mirror
         producer_product = self._producer_product(obj)
         inferred_organic = product_is_organic(name=obj.name, description=obj.description)
+        if obj.is_organic:
+            return True
         if producer_product is not None:
             return bool(getattr(producer_product, "is_organic", False)) or inferred_organic
         return inferred_organic
 
     def get_organic_certification(self, obj: Product) -> str:
+        # wording is explicit so buyers can distinguish certified and not certified products
         producer_product = self._producer_product(obj)
         inferred_organic = product_is_organic(name=obj.name, description=obj.description)
+        if obj.organic_certification:
+            return obj.organic_certification
+        if obj.is_organic:
+            return "Certified Organic"
         if producer_product is None:
-            return "Organic" if inferred_organic else ""
+            return "Organic" if inferred_organic else "Not Certified Organic"
         certification = (getattr(producer_product, "organic_certification", "") or "").strip()
         if certification:
             return certification
-        return "Organic" if bool(getattr(producer_product, "is_organic", False)) or inferred_organic else ""
+        if bool(getattr(producer_product, "is_organic", False)):
+            return "Certified Organic"
+        return "Organic" if inferred_organic else "Not Certified Organic"
 
     def get_allergens(self, obj: Product) -> list[str]:
+        # no common allergens text is a confirmation state not a real allergen token
         tokens = [token.strip() for token in (obj.allergen_info or "").split(",") if token.strip()]
         return [token for token in tokens if token.lower() not in {"no common allergens", "none", "no allergens"}]
 
     def get_image_url(self, obj: Product) -> str:
+        # product images prefer the producer uploaded image before falling back once
         producer_product = self._producer_product(obj)
         if producer_product and producer_product.image_url:
             return producer_product.image_url
-        return default_marketplace_image_url(obj.id)
+        return obj.image_url or default_marketplace_image_url(obj.id)
 
     def get_stock(self, obj: Product) -> int:
         return max(0, int(obj.stock_quantity))
 
     def get_food_miles(self, obj: Product) -> float:
+        # marketplace cards estimate distance from the buyer default postcode when available
         request = self.context.get("request")
         user = getattr(request, "user", None)
         customer_postcode = get_user_default_postcode(user) if user and user.is_authenticated else ""
@@ -295,32 +363,41 @@ class MarketplaceProductSerializer(serializers.ModelSerializer):
         )
 
     def get_is_surplus(self, obj: Product) -> bool:
+        # surplus state can come from either product table while sync catches up
         producer_product = self._producer_product(obj)
-        return bool(getattr(producer_product, "is_surplus", False))
+        if producer_product and product_has_active_surplus_deal(producer_product):
+            return True
+        return product_has_active_surplus_deal(obj)
 
     def get_surplus_discount(self, obj: Product) -> int | None:
         producer_product = self._producer_product(obj)
-        return getattr(producer_product, "surplus_discount_percent", None)
+        if producer_product and product_has_active_surplus_deal(producer_product):
+            return producer_product.surplus_discount_percent
+        return obj.surplus_discount_percent if product_has_active_surplus_deal(obj) else None
 
     def get_surplus_original_price(self, obj: Product) -> Decimal | None:
-        discount = self.get_surplus_discount(obj)
-        if not discount or discount >= 100:
-            return None
-        return (obj.price / (Decimal("1.00") - (Decimal(str(discount)) / Decimal("100.00")))).quantize(
-            Decimal("0.01")
-        )
+        producer_product = self._producer_product(obj)
+        if producer_product and product_has_active_surplus_deal(producer_product):
+            return producer_product.price
+        return obj.price if product_has_active_surplus_deal(obj) else None
 
     def get_surplus_expires_at(self, obj: Product):
         producer_product = self._producer_product(obj)
-        return getattr(producer_product, "surplus_expires_at", None)
+        if producer_product and product_has_active_surplus_deal(producer_product):
+            return producer_product.surplus_expires_at
+        return obj.surplus_expires_at if product_has_active_surplus_deal(obj) else None
 
     def get_surplus_best_before(self, obj: Product) -> str:
         producer_product = self._producer_product(obj)
-        return getattr(producer_product, "surplus_best_before", "") or ""
+        if producer_product and product_has_active_surplus_deal(producer_product):
+            return producer_product.surplus_best_before
+        return obj.surplus_best_before if product_has_active_surplus_deal(obj) else ""
 
     def get_surplus_note(self, obj: Product) -> str:
         producer_product = self._producer_product(obj)
-        return getattr(producer_product, "surplus_note", "") or ""
+        if producer_product and product_has_active_surplus_deal(producer_product):
+            return producer_product.surplus_note
+        return obj.surplus_note if product_has_active_surplus_deal(obj) else ""
 
     def get_storage_tips(self, obj: Product) -> str:
         producer_product = self._producer_product(obj)
@@ -456,13 +533,18 @@ class CheckoutRequestSerializer(serializers.Serializer):
     can be changed without spreading the same responsibility across unrelated files.
     """
     delivery_address = serializers.CharField()
+    delivery_address_label = serializers.CharField(required=False, allow_blank=True, max_length=80)
+    selected_address_id = serializers.IntegerField(required=False, min_value=1, allow_null=True)
     customer_postcode = serializers.CharField(max_length=12)
     special_instructions = serializers.CharField(required=False, allow_blank=True)
     payment_method = serializers.CharField(max_length=50, default="test_card")
+    payment_terms = serializers.CharField(max_length=80, required=False, allow_blank=True)
+    purchase_order_number = serializers.CharField(max_length=64, required=False, allow_blank=True)
     payment_token = serializers.CharField(max_length=120, required=False, allow_blank=True)
     success_url = serializers.CharField(required=False, allow_blank=True, max_length=2048)
     cancel_url = serializers.CharField(required=False, allow_blank=True, max_length=2048)
     selected_cart_item_ids = serializers.ListField(
+        # selected ids let checkout submit part of the cart without deleting other rows
         child=serializers.IntegerField(min_value=1),
         required=False,
         allow_empty=False,
@@ -475,6 +557,7 @@ class CheckoutRequestSerializer(serializers.Serializer):
 
 class ProducerSubOrderStatusHistorySerializer(serializers.ModelSerializer):
     actor_email = serializers.EmailField(source="actor.email", read_only=True)
+    actor_role = serializers.CharField(source="actor.role", read_only=True)
 
     class Meta:
         model = ProducerSubOrderStatusHistory
@@ -484,6 +567,7 @@ class ProducerSubOrderStatusHistorySerializer(serializers.ModelSerializer):
             "new_status",
             "note",
             "actor_email",
+            "actor_role",
             "created_at",
         ]
 
@@ -546,6 +630,15 @@ class OrderItemSerializer(serializers.ModelSerializer):
             "product_id",
             "product_name",
             "producer_name",
+            "product_image_url",
+            "allergen_info",
+            "is_organic",
+            "organic_certification",
+            "is_surplus",
+            "surplus_discount_percent",
+            "surplus_original_unit_price",
+            "surplus_best_before",
+            "surplus_note",
             "unit",
             "quantity",
             "unit_price",
@@ -565,6 +658,8 @@ class OrderSummarySerializer(serializers.ModelSerializer):
     delivery_date_from = serializers.SerializerMethodField()
     delivery_date_to = serializers.SerializerMethodField()
     sub_orders = ProducerSubOrderSerializer(many=True, read_only=True)
+    items_preview = serializers.SerializerMethodField()
+    can_update_delivery_address = serializers.SerializerMethodField()
 
     class Meta:
         model = Order
@@ -573,14 +668,26 @@ class OrderSummarySerializer(serializers.ModelSerializer):
             "order_number",
             "status",
             "payment_status",
+            "payment_method",
+            "payment_terms",
+            "purchase_order_number",
+            "customer_postcode",
             "created_at",
             "subtotal_amount",
+            "commission_rate",
             "commission_amount",
+            "producer_payout_total",
             "total_amount",
+            "total_food_miles",
+            "max_food_miles",
+            "within_twenty_miles",
+            "delivery_address_label",
             "producer_names",
             "delivery_date_from",
             "delivery_date_to",
             "sub_orders",
+            "items_preview",
+            "can_update_delivery_address",
         ]
 
     def get_producer_names(self, obj: Order) -> list[str]:
@@ -601,6 +708,18 @@ class OrderSummarySerializer(serializers.ModelSerializer):
             return None
         return max(dates).isoformat()
 
+    def get_items_preview(self, obj: Order) -> list[dict]:
+        items = obj.items.all()[:4]
+        return OrderItemSerializer(items, many=True).data
+
+    def get_can_update_delivery_address(self, obj: Order) -> bool:
+        return not obj.sub_orders.filter(status__in=[
+            Order.Status.CONFIRMED,
+            Order.Status.PREPARING,
+            Order.Status.READY,
+            Order.Status.DELIVERED,
+        ]).exists()
+
 
 class OrderDetailSerializer(serializers.ModelSerializer):
     """
@@ -614,6 +733,7 @@ class OrderDetailSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
     payment_reference = serializers.SerializerMethodField()
     payment_reference_masked = serializers.SerializerMethodField()
+    can_update_delivery_address = serializers.SerializerMethodField()
 
     class Meta:
         model = Order
@@ -623,19 +743,27 @@ class OrderDetailSerializer(serializers.ModelSerializer):
             "status",
             "payment_status",
             "delivery_address",
+            "delivery_address_label",
+            "selected_address_id",
             "customer_postcode",
             "special_instructions",
+            "total_food_miles",
+            "max_food_miles",
+            "within_twenty_miles",
             "subtotal_amount",
             "commission_rate",
             "commission_amount",
             "producer_payout_total",
             "total_amount",
             "payment_method",
+            "payment_terms",
+            "purchase_order_number",
             "payment_reference",
             "payment_reference_masked",
             "is_recurring_instance",
             "recurring_scheduled_for",
             "created_at",
+            "can_update_delivery_address",
             "sub_orders",
             "items",
         ]
@@ -650,6 +778,14 @@ class OrderDetailSerializer(serializers.ModelSerializer):
 
     def get_payment_reference(self, obj: Order) -> str:
         return self.get_payment_reference_masked(obj)
+
+    def get_can_update_delivery_address(self, obj: Order) -> bool:
+        return not obj.sub_orders.filter(status__in=[
+            Order.Status.CONFIRMED,
+            Order.Status.PREPARING,
+            Order.Status.READY,
+            Order.Status.DELIVERED,
+        ]).exists()
 
 
 class RecurringOrderTemplateItemSerializer(serializers.ModelSerializer):
@@ -672,6 +808,8 @@ class RecurringOrderTemplateItemSerializer(serializers.ModelSerializer):
         decimal_places=2,
         read_only=True,
     )
+    unit_price = serializers.SerializerMethodField()
+    default_line_total = serializers.SerializerMethodField()
 
     class Meta:
         model = RecurringOrderTemplateItem
@@ -685,7 +823,15 @@ class RecurringOrderTemplateItemSerializer(serializers.ModelSerializer):
             "producer_email",
             "available_stock",
             "default_quantity",
+            "unit_price",
+            "default_line_total",
         ]
+
+    def get_unit_price(self, obj: RecurringOrderTemplateItem) -> Decimal:
+        return effective_product_unit_price(obj.product)
+
+    def get_default_line_total(self, obj: RecurringOrderTemplateItem) -> Decimal:
+        return (effective_product_unit_price(obj.product) * obj.default_quantity).quantize(Decimal("0.01"))
 
 
 class RecurringOrderTemplateSerializer(serializers.ModelSerializer):

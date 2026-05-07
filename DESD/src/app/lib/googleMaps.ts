@@ -1,47 +1,27 @@
 /**
- * DESD Marketplace documentation.
+ * desd marketplace notes
  *
- * File role:
- *   Contains reusable helper functions for googleMaps concerns across the frontend.
- *
- * Frontend context:
- *   Frontend utility layer: route helpers, token storage, API clients, formatting, maps, and domain helpers.
- *
- * Implementation notes:
- *   Keep comments focused on state ownership, role-specific routing, API calls,
- *   and non-obvious UI decisions. Styling-only class names are left uncommented
- *   unless they communicate an important layout or accessibility choice.
+ * shared google maps helpers for embeds directions links and script loading
+ * comments here explain api key ownership and fallback behavior
  */
 
 /**
- * GOOGLE_MAPS_EMBED_BASE boundary.
+ * google maps url constants
  *
- * This exported unit supports the file role: Contains reusable helper functions for googleMaps concerns across the frontend.
- * It belongs to: Frontend utility layer: route helpers, token storage, API clients, formatting, maps, and domain helpers.
- * Keep role checks, API coordination, and cross-page side effects visible here
- * so future contributors can trace behavior during sprint reviews.
+ * constants stay together so embed and external route links cannot drift
  */
 const GOOGLE_MAPS_EMBED_BASE = 'https://www.google.com/maps/embed/v1/place';
 const GOOGLE_MAPS_DIRECTIONS_EMBED_BASE = 'https://www.google.com/maps/embed/v1/directions';
 const GOOGLE_MAPS_SEARCH_BASE = 'https://www.google.com/maps/search/';
 const GOOGLE_MAPS_DIRECTIONS_BASE = 'https://www.google.com/maps/dir/';
 const GOOGLE_MAPS_LIBRARIES = 'places';
-/**
- * GOOGLE_MAPS_JS_BASE boundary.
- *
- * This exported unit supports the file role: Contains reusable helper functions for googleMaps concerns across the frontend.
- * It belongs to: Frontend utility layer: route helpers, token storage, API clients, formatting, maps, and domain helpers.
- * Keep role checks, API coordination, and cross-page side effects visible here
- * so future contributors can trace behavior during sprint reviews.
- */
 const GOOGLE_MAPS_JS_BASE = 'https://maps.googleapis.com/maps/api/js';
 
 /**
- * Google Maps helper functions used by product detail and live delivery UI.
+ * google maps helper functions
  *
- * The project uses:
- * - static embed/search/directions URLs for lightweight map views
- * - lazy loading of the JavaScript API for interactive delivery tracking
+ * static urls keep simple map views cheap
+ * lazy javascript loading is only used for interactive delivery tracking
  */
 declare global {
   interface Window {
@@ -51,14 +31,14 @@ declare global {
 }
 
 export function getGoogleMapsApiKey(): string {
-  // Vite exposes only variables prefixed with VITE_. The key is read at build
-  // time from `.env`, so Docker/frontend rebuilds are required after changing it.
+  // vite exposes only variables prefixed with vite_
+  // the key is baked at build time so docker needs a rebuild after changes
   return import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim() || '';
 }
 
 export function getGoogleMapsEmbedUrl(coordinates?: { lat: number; lng: number }, zoom = 12): string | null {
-  // Product/farm map cards use the lightweight Embed API. Returning null lets
-  // the UI show the address fallback when the key or coordinates are missing.
+  // product and farm cards use the lightweight embed api
+  // null lets the ui show address fallback when keys or coordinates are missing
   const apiKey = getGoogleMapsApiKey();
   if (!apiKey || !coordinates) {
     return null;
@@ -91,8 +71,8 @@ export function getGoogleMapsDirectionsEmbedUrl(
   destination?: string,
   mode: 'driving' | 'walking' | 'bicycling' | 'transit' = 'driving',
 ): string | null {
-  // Live delivery pages use an embedded directions map from producer pickup to
-  // customer dropoff, matching the route shown in the separate Google Maps tab.
+  // delivery pages embed producer pickup to customer dropoff directions
+  // this matches the separate google maps tab without duplicating route logic
   const apiKey = getGoogleMapsApiKey();
   if (!apiKey || !origin?.trim() || !destination?.trim()) {
     return null;
@@ -113,8 +93,8 @@ export function getGoogleMapsDirectionsUrl(
   destination?: string,
   mode: 'driving' | 'walking' | 'bicycling' | 'transit' = 'driving',
 ): string | null {
-  // External Google Maps links do not require our API key, so users can still
-  // open directions even if the embedded map is unavailable.
+  // external directions links do not need our api key
+  // users can still open maps when the embedded view is unavailable
   if (!origin?.trim() || !destination?.trim()) {
     return null;
   }
@@ -130,8 +110,8 @@ export function getGoogleMapsDirectionsUrl(
 }
 
 export async function loadGoogleMapsJavaScriptApi(): Promise<any | null> {
-  // Memoize script loading on window so repeated visits do not inject duplicate
-  // script tags or race each other.
+  // memoize script loading on window so repeated visits do not inject duplicates
+  // this keeps live delivery pages stable when order polling rerenders them
   const apiKey = getGoogleMapsApiKey();
   if (!apiKey) {
     return null;

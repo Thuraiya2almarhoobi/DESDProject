@@ -37,9 +37,7 @@ def _get_request_producer(user) -> Producer | None:
     or isolates a business rule that should remain easy to test. The wider
     context is: Content domain: recipes, farm stories, saved recipe feeds, and AI-assisted producer content generation.
     """
-    # AI generation and producer-owned recipes must resolve through the active
-    # producer record, not only the user's role, because inactive producers
-    # should not publish marketplace content.
+    # producer content resolves through active producer records not only user role
     return Producer.objects.filter(user=user, is_active=True).first()
 
 
@@ -56,8 +54,7 @@ def _product_ai_payload(product: Product) -> dict:
     or isolates a business rule that should remain easy to test. The wider
     context is: Content domain: recipes, farm stories, saved recipe feeds, and AI-assisted producer content generation.
     """
-    # Keep the prompt input factual and product-scoped. The AI service is
-    # instructed not to invent facts beyond this payload and the request context.
+    # prompt input stays factual and product scoped
     return {
         "id": product.id,
         "name": product.name,
@@ -106,8 +103,7 @@ class ContentFeedAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        # Buyer-facing feed merges published recipes and stories into one
-        # chronological stream while preserving the item type for frontend cards.
+        # buyer feed merges published recipes and stories while keeping item type
         recipes = (
             Recipe.objects.filter(is_published=True)
             .select_related("producer")
@@ -173,6 +169,7 @@ class RecipeListCreateAPIView(APIView):
     def get(self, request):
         queryset = Recipe.objects.select_related("producer").all()
         if request.query_params.get("mine") == "true":
+            # mine mode is producer scoped so drafts are not exposed across farms
             producer = _get_request_producer(request.user)
             if not producer:
                 return Response([], status=status.HTTP_200_OK)

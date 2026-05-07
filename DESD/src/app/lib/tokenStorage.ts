@@ -32,6 +32,7 @@ export const USER_ROLE_KEY = 'desd_user_role';
  * remember-me preference.
  */
 function getSessionStore(): Storage | null {
+  // session storage is used when remember me is not selected
   if (typeof window === 'undefined') {
     return null;
   }
@@ -39,6 +40,7 @@ function getSessionStore(): Storage | null {
 }
 
 function getLocalStore(): Storage | null {
+  // local storage is used for remembered sessions across browser restarts
   if (typeof window === 'undefined') {
     return null;
   }
@@ -86,8 +88,7 @@ function inferRememberPreference(): boolean {
 }
 
 export function setAuthTokens(access: string, refresh: string, rememberMe = inferRememberPreference()): void {
-  // Clear both stores first so a previous session does not leave stale tokens
-  // behind when the storage target changes.
+  // clear both stores first so the target cannot keep stale tokens
   clearKeyFromAllStores(ACCESS_TOKEN_KEY);
   clearKeyFromAllStores(REFRESH_TOKEN_KEY);
   const sessionStore = getSessionStore();

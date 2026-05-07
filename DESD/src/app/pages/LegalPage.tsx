@@ -42,6 +42,7 @@ const termsSections: LegalSection[] = [
     body: [
       'Accounts should only be used by the person or organisation they represent. Login details should be kept secure.',
       'Orders should be placed in good faith. Misuse of checkout, delivery, payment, or review features may lead to account restriction.',
+      'Restaurant and community buyers use the same Stripe test checkout in this prototype. Invoice terms may apply by agreement in a real deployment, but the platform commission remains 5% and is deducted from producer payout rather than added to the buyer total.',
     ],
   },
   {

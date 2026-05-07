@@ -26,6 +26,7 @@ from .models import (
     ProducerOrder,
     ProducerOrderItem,
     ProducerProduct,
+    ProducerProductInventoryEvent,
 )
 
 STORAGE_TIPS_MAX_LENGTH = 700
@@ -77,6 +78,7 @@ class ProducerProductSerializer(serializers.ModelSerializer):
             "is_organic",
             "organic_certification",
             "allergen_information",
+            "no_known_allergens_confirmed",
             "storage_tips",
             "storage_tips_ai_generated",
             "harvest_date",
@@ -146,7 +148,7 @@ class ProducerProductSerializer(serializers.ModelSerializer):
 
     def validate_allergen_information(self, value: str) -> str:
         normalized = (value or "").strip()
-        return normalized or "No common allergens"
+        return normalized
 
     def validate_storage_tips(self, value: str) -> str:
         normalized = (value or "").strip()
@@ -180,6 +182,11 @@ class ProducerProductSerializer(serializers.ModelSerializer):
         stock_quantity = attrs.get("stock_quantity", getattr(instance, "stock_quantity", None))
         low_stock_threshold = attrs.get("low_stock_threshold", getattr(instance, "low_stock_threshold", None))
         organic_certification = attrs.get("organic_certification", getattr(instance, "organic_certification", ""))
+        allergen_information = attrs.get("allergen_information", getattr(instance, "allergen_information", ""))
+        no_known_allergens_confirmed = attrs.get(
+            "no_known_allergens_confirmed",
+            getattr(instance, "no_known_allergens_confirmed", False),
+        )
 
         if price is not None and price <= 0:
             raise serializers.ValidationError({"price": "Price must be greater than zero."})
@@ -191,6 +198,9 @@ class ProducerProductSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"organic_certification": "Certification body or reference is required for organic products."}
             )
+        if not str(allergen_information or "").strip():
+            attrs["allergen_information"] = "No common allergens"
+            attrs["no_known_allergens_confirmed"] = True
 
         if availability == "in_season":
             errors = {}
@@ -216,6 +226,32 @@ class ProducerProductSerializer(serializers.ModelSerializer):
             attrs["storage_tips_ai_generated"] = False
 
         return attrs
+
+
+class ProducerProductInventoryEventSerializer(serializers.ModelSerializer):
+    actor_email = serializers.EmailField(source="actor.email", read_only=True)
+    actor_role = serializers.CharField(source="actor.role", read_only=True)
+    product_name = serializers.CharField(source="product.name", read_only=True)
+
+    class Meta:
+        model = ProducerProductInventoryEvent
+        fields = [
+            "id",
+            "product_id",
+            "product_name",
+            "actor_email",
+            "actor_role",
+            "event_type",
+            "previous_stock_quantity",
+            "new_stock_quantity",
+            "previous_availability",
+            "new_availability",
+            "changed_fields",
+            "previous_values",
+            "new_values",
+            "note",
+            "created_at",
+        ]
 
 
 class ProducerOrderItemSerializer(serializers.ModelSerializer):

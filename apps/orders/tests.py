@@ -185,6 +185,34 @@ class OrdersCriticalFlowTests(APITestCase):
             format="json",
         )
 
+    def test_user_notification_panel_endpoint_lists_and_marks_read(self):
+        first = UserNotification.objects.create(
+            user=self.customer,
+            category="order_status",
+            message="Order BRF-TEST is now ready.",
+            metadata={"order_id": 123},
+        )
+        second = UserNotification.objects.create(
+            user=self.customer,
+            category="surplus_deal",
+            message="Bristol Valley Farm added a surplus deal: Lettuce at 30% off.",
+            metadata={"producer_id": self.producer_a.id, "product_name": "Lettuce"},
+        )
+
+        list_res = self.client.get("/api/orders/notifications/")
+        self.assertEqual(list_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(list_res.data), 2)
+        self.assertEqual(list_res.data[0]["category"], "surplus_deal")
+
+        patch_res = self.client.patch(
+            "/api/orders/notifications/",
+            {"ids": [first.id, second.id]},
+            format="json",
+        )
+        self.assertEqual(patch_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(patch_res.data["updated"], 2)
+        self.assertFalse(UserNotification.objects.filter(user=self.customer, is_read=False).exists())
+
     def _seed_delivered_purchase(self, product: Product, quantity: str = "1.00"):
         quantity_decimal = Decimal(quantity)
         subtotal = (product.price * quantity_decimal).quantize(Decimal("0.01"))

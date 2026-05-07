@@ -58,7 +58,22 @@ class GeoApiTests(APITestCase):
         )
 
         cart = get_or_create_cart(self.customer)
-        CartItem.objects.create(cart=cart, product=product, quantity=Decimal("2.00"))
+        self.carrot_cart_item = CartItem.objects.create(cart=cart, product=product, quantity=Decimal("2.00"))
+
+        second_producer = Producer.objects.create(
+            business_name="South Bristol Growers", postcode="BS3 2AA", lead_time_hours=48
+        )
+        second_product = Product.objects.create(
+            producer=second_producer,
+            name="Spinach",
+            unit="bunch",
+            price=Decimal("1.80"),
+            stock_quantity=Decimal("8.00"),
+            is_available=True,
+        )
+        self.spinach_cart_item = CartItem.objects.create(
+            cart=cart, product=second_product, quantity=Decimal("1.00")
+        )
 
     def test_producers_near_me_endpoint(self):
         res = self.client.get("/api/geo/producers-near-me/")
@@ -72,6 +87,19 @@ class GeoApiTests(APITestCase):
         self.assertIn("total_food_miles", res.data)
         self.assertIn("producer_totals", res.data)
         self.assertIn("items", res.data)
+        self.assertIn("max_producer_distance", res.data)
+        self.assertIn("within_twenty_miles", res.data)
         self.assertGreaterEqual(len(res.data["producer_totals"]), 1)
         self.assertGreaterEqual(len(res.data["items"]), 1)
         self.assertGreaterEqual(Decimal(str(res.data["total_food_miles"])), Decimal("0.00"))
+
+    def test_cart_food_miles_can_limit_to_selected_checkout_items(self):
+        res = self.client.get(
+            f"/api/geo/food-miles/cart/?cart_item_id={self.carrot_cart_item.id}"
+        )
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res.data["items"]), 1)
+        self.assertEqual(res.data["items"][0]["product_name"], "Carrots")
+        self.assertEqual(len(res.data["producer_totals"]), 1)
+        self.assertGreater(Decimal(str(res.data["max_producer_distance"])), Decimal("0.00"))

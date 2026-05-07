@@ -386,6 +386,46 @@ class RestaurantRecurringOrderTests(APITestCase):
         self.assertEqual(over_stock.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("Tomatoes only has 110.00 kg available.", over_stock.data["detail"])
 
+    def test_producer_can_see_recurring_templates_before_instances_are_generated(self):
+        self.client.post(
+            "/api/orders/cart/items/",
+            {"product_id": self.product_a.id, "quantity": "10"},
+            format="json",
+        )
+        self.client.post(
+            "/api/orders/cart/items/",
+            {"product_id": self.product_b.id, "quantity": "8"},
+            format="json",
+        )
+
+        today = timezone.localdate()
+        create_res = self.client.post(
+            "/api/restaurant/recurring-orders/",
+            {
+                "frequency": "weekly",
+                "order_day": 0,
+                "delivery_day": 2,
+                "delivery_address": "12 Restaurant Lane, Bristol",
+                "customer_postcode": "BS1 4DJ",
+                "producer_delivery_dates": {
+                    str(self.producer_a.id): (today + timedelta(days=3)).isoformat(),
+                    str(self.producer_b.id): (today + timedelta(days=4)).isoformat(),
+                },
+            },
+            format="json",
+        )
+        self.assertEqual(create_res.status_code, status.HTTP_201_CREATED)
+
+        producer_client = APIClient()
+        producer_client.force_authenticate(self.producer_a.user)
+        demand_res = producer_client.get("/api/orders/producer/recurring-demand/")
+
+        self.assertEqual(demand_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(demand_res.data), 1)
+        self.assertEqual(demand_res.data[0]["restaurant_email"], self.restaurant_user.email)
+        self.assertEqual(demand_res.data[0]["items"][0]["product_name"], "Tomatoes")
+        self.assertEqual(demand_res.data[0]["items"][0]["quantity"], Decimal("10.00"))
+
     @patch("apps.payments.services.create_stripe_checkout_session_for_order")
     def test_restaurant_one_off_checkout_can_prepare_stripe_session(self, mock_checkout_session):
         mock_checkout_session.return_value = StripeCheckoutSessionResult(
@@ -608,6 +648,13 @@ class RestaurantRecurringOrderTests(APITestCase):
         self.assertTrue(
             UserNotification.objects.filter(
                 user=self.restaurant_user, category="recurring_order_generated"
+            ).exists()
+        )
+        self.assertTrue(
+            ProducerNotification.objects.filter(
+                producer=self.producer_a,
+                sub_order__order=generated_order,
+                message__icontains="Advance notice: recurring order",
             ).exists()
         )
 

@@ -27,6 +27,7 @@ import { toast } from 'sonner';
 import { Product, CartItem, CartByProducer } from '../types';
 import { ApiCart, ApiCartGroup, ApiCartItem, apiJson } from '../lib/api';
 import { useAuth } from './AuthContext';
+import { DEFAULT_PRODUCT_IMAGE_URL } from '../api/catalog';
 
 /**
  * Cart context coordinates the buyer-side ordering flow.
@@ -76,25 +77,24 @@ interface CartContextType {
  */
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
-const CART_IMAGE_LIBRARY = [
-  'https://images.unsplash.com/photo-1542838132-92c53300491e?w=600',
-  'https://images.unsplash.com/photo-1518843875459-f738682238a6?w=600',
-  'https://images.unsplash.com/photo-1471194402529-8e0f5a675de6?w=600',
-  'https://images.unsplash.com/photo-1506617420156-8e4536971650?w=600',
-  'https://images.unsplash.com/photo-1606787366850-de6330128bfc?w=600',
-  'https://images.unsplash.com/photo-1473093295043-cdd812d0e601?w=600',
-];
-
-function imageForCartItem(productId: number): string {
-  return CART_IMAGE_LIBRARY[productId % CART_IMAGE_LIBRARY.length];
-}
-
 function toNumber(value: string | number): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function parseAllergens(value?: string): string[] {
+  // backend stores allergen labels as text so the cart normalises them for filters
+  if (!value) {
+    return [];
+  }
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item) => item && !['none', 'no allergens', 'no common allergens'].includes(item.toLowerCase()));
+}
+
 function mapApiCartItemToProduct(group: ApiCartGroup, item: ApiCartItem): Product {
+  // cart product data is rebuilt from api snapshots so images and prices stay real
   const stock = toNumber(item.available_stock);
   const unitPrice = toNumber(item.unit_price);
 
@@ -111,11 +111,17 @@ function mapApiCartItemToProduct(group: ApiCartGroup, item: ApiCartItem): Produc
     harvestDate: new Date().toISOString().slice(0, 10),
     availability: item.availability || (stock > 0 ? 'in-season' : 'unavailable'),
     seasonalDates: item.seasonal_dates || undefined,
-    isOrganic: false,
-    allergens: [],
-    imageUrl: imageForCartItem(item.product_id),
+    isOrganic: Boolean(item.is_organic),
+    organicCertification: item.organic_certification || undefined,
+    allergens: parseAllergens(item.allergen_info),
+    imageUrl: item.image_url || DEFAULT_PRODUCT_IMAGE_URL,
     stock,
     foodMiles: 0,
+    isSurplus: Boolean(item.is_surplus),
+    surplusDiscount: item.surplus_discount_percent ?? undefined,
+    surplusOriginalPrice: item.original_unit_price ? toNumber(item.original_unit_price) : undefined,
+    surplusBestBefore: item.surplus_best_before || undefined,
+    surplusNote: item.surplus_note || undefined,
   };
 }
 
@@ -134,6 +140,7 @@ function mapApiCartToItems(cart: ApiCart | null): CartItem[] {
 }
 
 function buildCartByProducer(cart: ApiCart | null, selectedCartItemIds?: string[]): CartByProducer[] {
+  // producer grouping drives delivery dates commission rows and checkout sections
   if (!cart) {
     return [];
   }
@@ -167,6 +174,7 @@ function buildCartByProducer(cart: ApiCart | null, selectedCartItemIds?: string[
 }
 
 function findApiCartItem(cart: ApiCart | null, productId: string): ApiCartItem | null {
+  // api updates need cart row ids but callers usually know the product id first
   if (!cart) {
     return null;
   }
@@ -204,8 +212,7 @@ function cartItemIdsFromApiCart(cart: ApiCart | null): string[] {
  * so future contributors can trace behavior during sprint reviews.
  */
 export function CartProvider({ children }: { children: ReactNode }) {
-  // Cart data is refreshed from Django whenever the signed-in user changes so
-  // cross-role state does not leak between sessions.
+  // cart data refreshes from django when the signed in user changes
   const { user } = useAuth();
   const [cart, setCart] = useState<ApiCart | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -225,6 +232,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   );
 
   const refreshCart = useCallback(async () => {
+    // no user means no server cart should remain visible in this browser session
     if (!user) {
       setCart(null);
       setSelectedCartItemIds([]);
@@ -249,9 +257,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, [refreshCart]);
 
   useEffect(() => {
-    // Keep selection in sync with server responses. Newly-added items are
-    // selected automatically for checkout, while deleted items are removed from
-    // selection so stale cart_item_ids are never submitted.
+    // selection follows server rows so deleted cart items are never submitted
     const validIds = items.map((item) => item.cartItemId).filter((value): value is string => Boolean(value));
     const previousIds = previousCartItemIdsRef.current;
 
@@ -267,8 +273,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, [items]);
 
   const addToCartAndWait = useCallback(async (product: Product, quantity: number) => {
-    // Add-to-cart always goes through Django. The backend enforces buyer role,
-    // available stock, and max quantity before returning the updated cart.
+    // add to cart goes through django so stock and role rules stay server side
     const productId = Number(product.id);
     if (!Number.isInteger(productId)) {
       toast.error('Invalid product selected.');
@@ -332,9 +337,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   };
 
   const updateQuantity = (productId: string, quantity: number) => {
-    // Quantity edits reuse the cart item id returned by the server; product ids
-    // alone are not enough because the backend cart row is the record being
-    // patched.
+    // quantity edits use the cart row id because product ids are not patch targets
     const cartItem = findApiCartItem(cart, productId);
     if (!cartItem) {
       return;
@@ -419,8 +422,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   };
 
   const setCartItemSelection = (cartItemIds: string[], checked: boolean) => {
-    // Selected item ids are what allow checkout of only part of the cart, which
-    // is important for multi-producer orders where buyers may defer one supplier.
+    // selected ids allow partial checkout without removing the rest of the cart
     setSelectedCartItemIds((previous) => {
       const next = new Set(previous);
       cartItemIds.forEach((cartItemId) => {
@@ -450,9 +452,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   };
 
   const prepareSingleItemCheckout = useCallback(async (product: Product, quantity: number) => {
-    // "Buy now" is implemented by preparing exactly one selected cart item. It
-    // updates an existing cart row when possible rather than duplicating product
-    // lines, then the checkout page submits only that selected row.
+    // buy now prepares one selected row so checkout can submit only that item
     const productId = Number(product.id);
     if (!Number.isInteger(productId)) {
       toast.error('Invalid product selected.');
@@ -503,9 +503,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, [cart]);
 
   const undoLastAdd = () => {
-    // Undo mirrors the last successful add. If the product already existed in
-    // the cart, only the just-added quantity is removed rather than deleting the
-    // buyer's previous quantity.
+    // undo removes only the last added quantity rather than the whole product
     if (!lastAddedItem) {
       return;
     }

@@ -43,6 +43,7 @@ from .models import (
     ProductAvailability,
 )
 from .serializers import (
+    ProducerProductInventoryEventSerializer,
     ProducerOrderSerializer,
     ProducerOrderStatusUpdateSerializer,
     ProducerProductSerializer,
@@ -109,7 +110,54 @@ def _orders_producer_for_user(user):
     return OrdersProducer.objects.filter(user=user, is_active=True).first()
 
 
+PRODUCT_HISTORY_FIELDS = [
+    "name",
+    "category",
+    "description",
+    "price",
+    "unit",
+    "availability",
+    "season_start_month",
+    "season_end_month",
+    "stock_quantity",
+    "low_stock_threshold",
+    "is_organic",
+    "organic_certification",
+    "allergen_information",
+    "no_known_allergens_confirmed",
+    "storage_tips",
+    "storage_tips_ai_generated",
+    "harvest_date",
+    "image_url",
+    "is_surplus",
+    "surplus_discount_percent",
+    "surplus_expires_at",
+    "surplus_best_before",
+    "surplus_note",
+]
+
+
+def _history_value(value):
+    if isinstance(value, Decimal):
+        return str(value)
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return value
+
+
+def _product_snapshot(product: ProducerProduct) -> dict:
+    return {field: _history_value(getattr(product, field, None)) for field in PRODUCT_HISTORY_FIELDS}
+
+
 def _record_inventory_event(product: ProducerProduct, *, actor, event_type: str, previous=None) -> None:
+    previous_values = _product_snapshot(previous) if previous is not None else {}
+    new_values = _product_snapshot(product)
+    # store changed fields so product history can show before and after values
+    # the producer history panel reads these snapshots instead of guessing from logs
+    changed_fields = [
+        field for field in PRODUCT_HISTORY_FIELDS
+        if previous is None or previous_values.get(field) != new_values.get(field)
+    ]
     ProducerProductInventoryEvent.objects.create(
         product=product,
         actor=actor if getattr(actor, "is_authenticated", False) else None,
@@ -118,10 +166,19 @@ def _record_inventory_event(product: ProducerProduct, *, actor, event_type: str,
         new_stock_quantity=product.stock_quantity,
         previous_availability=getattr(previous, "availability", "") or "",
         new_availability=product.availability,
+        changed_fields=changed_fields,
+        previous_values={field: previous_values.get(field) for field in changed_fields},
+        new_values={field: new_values.get(field) for field in changed_fields},
+        note=(
+            f"{event_type.replace('_', ' ').title()}: "
+            f"{', '.join(changed_fields) if changed_fields else 'no field changes'}"
+        ),
     )
 
 
 def _sync_product_notifications(product: ProducerProduct) -> None:
+    # inventory alerts are resolved here whenever product state changes
+    # this keeps low stock and seasonal reminders tied to the latest producer edit
     orders_producer = _orders_producer_for_user(product.producer)
     if orders_producer is None:
         return
@@ -176,6 +233,8 @@ def _sync_product_notifications(product: ProducerProduct) -> None:
 
 
 def _notify_favorite_producer_surplus(product: ProducerProduct, *, previous: ProducerProduct | None = None) -> None:
+    # surplus notifications are created only when a deal first appears
+    # favourite customers should not get duplicate alerts for later stock edits
     if not product.is_surplus:
         return
     if previous is not None and previous.is_surplus:
@@ -326,6 +385,8 @@ class ProducerProductListCreateAPIView(generics.ListCreateAPIView):
         return queryset
 
     def perform_create(self, serializer):
+        # create writes inventory history before syncing the customer catalog
+        # this proves tc-11 product history exists from the first product version
         product = serializer.save(producer=_resolve_actor_user(self.request))
         _record_inventory_event(product, actor=self.request.user, event_type="created")
         sync_orders_product_from_producer_product(product)
@@ -348,6 +409,8 @@ class ProducerProductDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
         return ProducerProduct.objects.filter(producer=_resolve_actor_user(self.request))
 
     def perform_update(self, serializer):
+        # update snapshots every editable field before syncing marketplace mirrors
+        # this preserves the producer facing product update history view
         old_name = serializer.instance.name
         previous = ProducerProduct.objects.get(pk=serializer.instance.pk)
         product = serializer.save()
@@ -364,6 +427,21 @@ class ProducerProductDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
     def perform_destroy(self, instance):
         delete_orders_and_catalog_products_for_producer_product(instance)
         instance.delete()
+
+
+class ProducerProductHistoryAPIView(generics.ListAPIView):
+    serializer_class = ProducerProductInventoryEventSerializer
+    permission_classes = [permissions.IsAuthenticated, IsProducerUser]
+
+    def get_queryset(self):
+        # product history is producer scoped so one farm cannot inspect another farm
+        # the rows are already ordered newest first by the inventory event model
+        product = get_object_or_404(
+            ProducerProduct,
+            pk=self.kwargs["pk"],
+            producer=_resolve_actor_user(self.request),
+        )
+        return product.inventory_events.select_related("actor", "product").order_by("-created_at", "-id")
 
 
 class ProducerSurplusDealAPIView(APIView):

@@ -24,3 +24,13 @@ export function formatCompactNumber(value: number | string | null | undefined): 
     maximumFractionDigits: numericValue >= 1000 && numericValue < 10000 ? 1 : 0,
   }).format(numericValue);
 }
+
+export function formatPercentRate(value: number | string | null | undefined): string {
+  const numericValue = Number(value ?? 0);
+  if (!Number.isFinite(numericValue) || numericValue <= 0) {
+    return '0%';
+  }
+  // backend can send rates as decimals or whole percents
+  const percentValue = numericValue > 1 ? numericValue : numericValue * 100;
+  return `${Number.isInteger(percentValue) ? percentValue.toFixed(0) : percentValue.toFixed(2)}%`;
+}

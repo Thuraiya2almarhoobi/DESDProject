@@ -106,6 +106,7 @@ class ProducerProduct(models.Model):
     is_organic = models.BooleanField(default=False)
     organic_certification = models.CharField(max_length=160, blank=True)
     allergen_information = models.CharField(max_length=255, blank=True)
+    no_known_allergens_confirmed = models.BooleanField(default=False)
     storage_tips = models.TextField(blank=True, default="")
     storage_tips_ai_generated = models.BooleanField(default=False)
     harvest_date = models.DateField()
@@ -231,6 +232,9 @@ class ProducerProductInventoryEvent(models.Model):
     new_stock_quantity = models.PositiveIntegerField(null=True, blank=True)
     previous_availability = models.CharField(max_length=20, blank=True)
     new_availability = models.CharField(max_length=20, blank=True)
+    changed_fields = models.JSONField(default=list, blank=True)
+    previous_values = models.JSONField(default=dict, blank=True)
+    new_values = models.JSONField(default=dict, blank=True)
     note = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

@@ -98,8 +98,12 @@ export function ImageSourceField({
       </div>
       <p className="text-xs text-gray-500">{helpText}</p>
       {value && (
-        <div className="overflow-hidden rounded-lg border bg-gray-50 p-2">
-          <img src={value} alt="Selected preview" className="h-40 w-full rounded-md object-cover" />
+        <div className="inline-flex items-center gap-3 rounded-lg border bg-gray-50 p-2">
+          <img src={value} alt="Selected preview" className="size-24 rounded-md object-cover" />
+          <div className="max-w-40 text-xs text-gray-500">
+            <p className="font-medium text-gray-700">Preview</p>
+            <p>Square crop shown in marketplace cards and inventory rows.</p>
+          </div>
         </div>
       )}
     </div>

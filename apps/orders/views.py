@@ -68,9 +68,9 @@ from .services import (
     reorder_order_to_cart,
 )
 
-# Core ordering and marketplace transaction views.
-# This file covers browsing helpers, cart operations, checkout, order history,
-# reviews, and producer-facing sub-order workflow.
+# core ordering and marketplace transaction views
+# this file covers browsing cart checkout order history reviews
+# and producer facing sub order workflow
 
 TRUE_VALUES = {"1", "true", "yes", "on"}
 FALSE_VALUES = {"0", "false", "no", "off"}
@@ -169,7 +169,8 @@ def _enforce_cart_quantity_cap(quantity: Decimal, *, user, stock_quantity: Decim
 
 PRODUCER_SUBORDER_ALLOWED_TRANSITIONS = {
     Order.Status.PENDING: {Order.Status.CONFIRMED, Order.Status.CANCELLED},
-    Order.Status.CONFIRMED: {Order.Status.READY, Order.Status.CANCELLED},
+    Order.Status.CONFIRMED: {Order.Status.PREPARING, Order.Status.READY, Order.Status.CANCELLED},
+    Order.Status.PREPARING: {Order.Status.READY, Order.Status.CANCELLED},
     Order.Status.READY: {Order.Status.DELIVERED, Order.Status.CANCELLED},
     Order.Status.DELIVERED: set(),
     Order.Status.CANCELLED: set(),
@@ -227,6 +228,8 @@ def _sync_parent_order_status(order: Order) -> None:
         next_status = Order.Status.PENDING
     elif Order.Status.CONFIRMED in unique_statuses:
         next_status = Order.Status.CONFIRMED
+    elif Order.Status.PREPARING in unique_statuses:
+        next_status = Order.Status.PREPARING
     elif Order.Status.READY in unique_statuses:
         next_status = Order.Status.READY
 
@@ -246,8 +249,8 @@ def _producer_portal_stock_units(quantity: Decimal) -> int:
     whole_units = quantity.to_integral_value()
     if quantity == whole_units:
         return int(whole_units)
-    # Producer portal inventory stores whole-number stock counts, so round up
-    # fractional delivered quantities rather than leaving stock overstated.
+    # producer portal inventory stores whole number stock counts
+    # fractional delivered quantities round up so stock is not overstated
     return int(quantity.to_integral_value(rounding=ROUND_CEILING))
 
 
@@ -343,11 +346,30 @@ def _producer_sub_order_payload(sub_order: ProducerSubOrder) -> dict:
         "payout_amount": sub_order.payout_amount,
         "customer_name": _customer_name_for_order(order),
         "customer_email": order.customer.email,
+        "customer_phone": getattr(getattr(order.customer, "orders_customer_profile", None), "phone", "") or getattr(getattr(order.customer, "customer_profile", None), "phone", ""),
+        "customer_account_type": getattr(order.customer, "role", ""),
+        "customer_account_type_label": str(getattr(order.customer, "get_role_display", lambda: getattr(order.customer, "role", ""))()),
         "delivery_address": order.delivery_address,
+        "delivery_address_label": order.delivery_address_label,
         "customer_postcode": order.customer_postcode,
+        "is_recurring_instance": order.is_recurring_instance,
+        "recurring_template_id": order.recurring_template_id,
+        "recurring_scheduled_for": order.recurring_scheduled_for,
         "special_instructions": order.special_instructions,
         "lead_time_hours": sub_order.producer.lead_time_hours,
         "notes": sub_order.notes,
+        "payment_status": order.payment_status,
+        "subtotal_amount": sub_order.subtotal_amount,
+        "commission_rate": order.commission_rate,
+        "commission_amount": sub_order.commission_amount,
+        "payout_amount": sub_order.payout_amount,
+        "total_food_miles": order.total_food_miles,
+        "max_food_miles": order.max_food_miles,
+        "preparation_details": (
+            f"Prepare {len(list(sub_order.items.all()))} line(s) by {sub_order.delivery_date}. "
+            f"Lead time: {sub_order.producer.lead_time_hours} hours. "
+            f"Notes: {order.special_instructions or sub_order.notes or 'None'}"
+        ),
         "order_created_at": order.created_at,
         "delivery": DeliveryJobSerializer(delivery_job).data if delivery_job else None,
         "status_history": [
@@ -357,6 +379,8 @@ def _producer_sub_order_payload(sub_order: ProducerSubOrder) -> dict:
                 "new_status": row.new_status,
                 "note": row.note,
                 "actor_email": row.actor.email if row.actor else "",
+                "actor_role": row.actor.role if row.actor else "",
+                "producer_name": sub_order.producer.business_name,
                 "created_at": row.created_at,
             }
             for row in sub_order.status_history.select_related("actor").all()
@@ -366,7 +390,17 @@ def _producer_sub_order_payload(sub_order: ProducerSubOrder) -> dict:
                 "product_name": item.product_name,
                 "quantity": item.quantity,
                 "unit": item.unit,
+                "unit_price": item.unit_price,
                 "line_total": item.line_total,
+                "product_image_url": item.product_image_url,
+                "allergen_info": item.allergen_info,
+                "is_organic": item.is_organic,
+                "organic_certification": item.organic_certification,
+                "is_surplus": item.is_surplus,
+                "surplus_discount_percent": item.surplus_discount_percent,
+                "surplus_original_unit_price": item.surplus_original_unit_price,
+                "surplus_best_before": item.surplus_best_before,
+                "surplus_note": item.surplus_note,
             }
             for item in sub_order.items.all()
         ],
@@ -471,10 +505,16 @@ class ProductListCreateAPIView(APIView):
         queryset = Product.objects.select_related("producer", "producer__user").all()
         producer_id = request.query_params.get("producer_id")
         if producer_id:
+            # producer pages reuse marketplace cards but keep results scoped to one farm
             queryset = queryset.filter(producer_id=producer_id)
 
         search_query = request.query_params.get("search")
+        explicit_search = bool((search_query or "").strip())
+        if not explicit_search:
+            # normal browsing hides out of stock products but search can reveal them
+            queryset = queryset.filter(stock_quantity__gt=0)
         if search_query:
+            # fuzzy fallback uses orm filters first and never interpolates raw sql
             queryset = filter_queryset_with_fuzzy_fallback(
                 queryset,
                 search_query=search_query,
@@ -501,6 +541,7 @@ class ProductListCreateAPIView(APIView):
 
         organic_param = _parse_boolean(request.query_params.get("organic"))
         if organic_param is not None:
+            # organic status may come from the producer portal mirror or product text
             organic_ids = []
             for product in queryset:
                 producer_product = matching_producer_portal_product(product)
@@ -558,6 +599,7 @@ class ProductAllergenAcknowledgementAPIView(APIView):
 
     def get(self, request, product_id: int):
         product = get_object_or_404(Product, id=product_id)
+        # acknowledgement is per buyer and product so one product cannot cover another
         acknowledged = ProductAllergenAcknowledgement.objects.filter(
             user=request.user,
             product=product,
@@ -832,6 +874,7 @@ class CartItemAddAPIView(APIView):
         product = get_object_or_404(Product.objects.select_related("producer"), pk=product_id)
         effective_availability = product.effective_availability()
         if effective_availability == "unavailable":
+            # unavailable products can be viewed but must never enter checkout
             detail = "Product is out of season." if product.is_available and product.stock_quantity > 0 else "Product is unavailable."
             return Response({"detail": detail}, status=status.HTTP_400_BAD_REQUEST)
         if quantity > product.stock_quantity:
@@ -845,6 +888,7 @@ class CartItemAddAPIView(APIView):
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
         cart = get_or_create_cart(request.user)
+        # duplicate adds increase the existing row instead of creating hidden duplicates
         cart_item, created = CartItem.objects.get_or_create(
             cart=cart, product=product, defaults={"quantity": quantity}
         )
@@ -878,6 +922,7 @@ class CartItemDetailAPIView(APIView):
 
     def patch(self, request, item_id: int):
         cart = get_or_create_cart(request.user)
+        # item id and cart owner are checked together so buyers cannot patch another cart
         cart_item = get_object_or_404(
             CartItem.objects.select_related("product"), id=item_id, cart=cart
         )
@@ -935,6 +980,7 @@ class CheckoutAPIView(APIView):
         use_stripe_checkout = serializer.validated_data.get("payment_method") == "stripe_checkout"
 
         if not use_stripe_checkout and getattr(request.user, "role", None) in {"COMMUNITY", "RESTAURANT"}:
+            # institutional demo buyers still use online payment rules unless stripe is selected
             try:
                 order = checkout_cart(request.user, serializer.validated_data)
             except ValueError as exc:
@@ -964,6 +1010,7 @@ class CheckoutAPIView(APIView):
 
         order = None
         try:
+            # stripe flow creates the order first then reserves stock during payment setup
             order = checkout_cart_with_stripe_reservation(request.user, serializer.validated_data)
             from apps.payments.services import create_stripe_checkout_session_for_order
 
@@ -1057,6 +1104,77 @@ class OrderDetailAPIView(APIView):
         )
         return Response(OrderDetailSerializer(order).data)
 
+    def patch(self, request, order_id: int):
+        order = get_object_or_404(
+            Order.objects.prefetch_related("sub_orders__producer"),
+            id=order_id,
+            customer=request.user,
+        )
+        if order.sub_orders.filter(
+            status__in=[
+                Order.Status.CONFIRMED,
+                Order.Status.PREPARING,
+                Order.Status.READY,
+                Order.Status.DELIVERED,
+            ]
+        ).exists():
+            # address edits lock as soon as any producer confirms their part
+            return Response(
+                {"detail": "Delivery address is locked after a producer confirms the order."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        delivery_address = str(request.data.get("delivery_address") or "").strip()
+        customer_postcode = str(request.data.get("customer_postcode") or "").strip()
+        if not delivery_address or not customer_postcode:
+            return Response(
+                {"detail": "delivery_address and customer_postcode are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from apps.geo.services import get_postcode_coordinates, haversine_miles
+
+        customer_coords = get_postcode_coordinates(customer_postcode)
+        if not customer_coords:
+            return Response({"detail": "Unknown postcode for the selected delivery address."}, status=status.HTTP_400_BAD_REQUEST)
+
+        max_distance = Decimal("0.00")
+        total_distance = Decimal("0.00")
+        # recalculate all producer distances so order history keeps the chosen address snapshot
+        for sub_order in order.sub_orders.select_related("producer"):
+            producer_coords = get_postcode_coordinates(sub_order.producer.postcode)
+            if not producer_coords:
+                continue
+            distance = Decimal(str(haversine_miles(customer_coords[0], customer_coords[1], producer_coords[0], producer_coords[1])))
+            max_distance = max(max_distance, distance)
+            total_distance += distance
+        if max_distance > Decimal("20.00"):
+            return Response(
+                {"detail": "Delivery address is outside the Bristol Regional Food Network 20-mile radius."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        order.delivery_address = delivery_address
+        order.customer_postcode = customer_postcode
+        order.delivery_address_label = str(request.data.get("delivery_address_label") or "").strip()
+        order.selected_address_id = request.data.get("selected_address_id") or None
+        order.total_food_miles = total_distance.quantize(Decimal("0.01"))
+        order.max_food_miles = max_distance.quantize(Decimal("0.01"))
+        order.within_twenty_miles = True
+        order.save(
+            update_fields=[
+                "delivery_address",
+                "customer_postcode",
+                "delivery_address_label",
+                "selected_address_id",
+                "total_food_miles",
+                "max_food_miles",
+                "within_twenty_miles",
+                "updated_at",
+            ]
+        )
+        return Response(OrderDetailSerializer(order).data)
+
 
 class OrderReorderAPIView(APIView):
     """Copy a historical order back into the current cart."""
@@ -1067,6 +1185,7 @@ class OrderReorderAPIView(APIView):
         order = get_object_or_404(
             Order.objects.prefetch_related("items__product"), id=order_id, customer=request.user
         )
+        # unavailable historical items are reported by the service instead of silently added
         result = reorder_order_to_cart(request.user, order)
         return Response(result, status=status.HTTP_200_OK)
 
@@ -1104,7 +1223,7 @@ class OrderReceiptAPIView(APIView):
                 "",
                 f"Payment reference: {order.payment_reference[:4]}***{order.payment_reference[-3:] if order.payment_reference else ''}",
                 f"Delivery address: {order.delivery_address}",
-                f"Delivery postcode: {order.customer_postcode}",
+                f"Postcode: {order.customer_postcode}",
             ]
         )
 
@@ -1120,6 +1239,7 @@ class ProducerSubOrderListAPIView(APIView):
 
     def get(self, request):
         producer = get_object_or_404(Producer, user=request.user, is_active=True)
+        # producer ownership is enforced in the query so ui hiding is not the permission layer
         sub_orders = (
             ProducerSubOrder.objects.filter(producer=producer)
             .select_related("order", "producer")
@@ -1144,10 +1264,37 @@ class ProducerSubOrderStatusUpdateAPIView(APIView):
             producer=producer,
         )
 
-        next_status = request.data.get("status")
+        next_status = request.data.get("status") or sub_order.status
+        note = str(request.data.get("note", "") or "").strip()
         valid_choices = {choice for choice, _ in Order.Status.choices}
         if next_status not in valid_choices:
             return Response({"detail": "Invalid status value."}, status=status.HTTP_400_BAD_REQUEST)
+        if next_status == sub_order.status and note:
+            # note only updates still create audit history and customer notification rows
+            # this lets producers add fulfilment notes without changing the order state
+            sub_order.notes = note
+            sub_order.save(update_fields=["notes", "updated_at"])
+            ProducerSubOrderStatusHistory.objects.create(
+                sub_order=sub_order,
+                actor=request.user,
+                previous_status=sub_order.status,
+                new_status=sub_order.status,
+                note=note,
+            )
+            UserNotification.objects.create(
+                user=sub_order.order.customer,
+                category="order_status",
+                message=f"Producer note added for order {sub_order.order.order_number}.",
+                metadata={
+                    "order_id": sub_order.order_id,
+                    "sub_order_id": sub_order.id,
+                    "previous_status": sub_order.status,
+                    "new_status": sub_order.status,
+                    "note": note,
+                },
+            )
+            sub_order.refresh_from_db()
+            return Response(_producer_sub_order_payload(sub_order), status=status.HTTP_200_OK)
         if next_status != sub_order.status:
             previous_status = sub_order.status
             allowed = PRODUCER_SUBORDER_ALLOWED_TRANSITIONS.get(sub_order.status, set())
@@ -1160,15 +1307,18 @@ class ProducerSubOrderStatusUpdateAPIView(APIView):
                 from apps.delivery.services import dispatch_sub_order_to_stuart
 
                 try:
+                    # ready status is where delivery dispatch begins for the demo workflow
+                    # stuart simulation or api dispatch stays tied to a real sub order
                     dispatch_sub_order_to_stuart(sub_order)
                 except ValueError as exc:
                     return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
             sub_order.status = next_status
-            note = str(request.data.get("note", "") or "").strip()
             if note:
                 sub_order.notes = note
             sub_order.save(update_fields=["status", "notes", "updated_at"])
             ProducerSubOrderStatusHistory.objects.create(
+                # every status move is persisted for the audit trail panel
+                # customer notifications share the same previous and next status data
                 sub_order=sub_order,
                 actor=request.user,
                 previous_status=previous_status,
@@ -1193,3 +1343,37 @@ class ProducerSubOrderStatusUpdateAPIView(APIView):
             sub_order.refresh_from_db()
 
         return Response(_producer_sub_order_payload(sub_order), status=status.HTTP_200_OK)
+
+
+class UserNotificationListAPIView(APIView):
+    """Return the signed-in user's persisted customer/buyer notifications."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        # notifications stay in the database so the bell works after reloads
+        # status notes recurring orders and surplus alerts all use this feed
+        notifications = UserNotification.objects.filter(user=request.user).order_by("-created_at")[:25]
+        return Response(
+            [
+                {
+                    "id": notification.id,
+                    "category": notification.category,
+                    "message": notification.message,
+                    "metadata": notification.metadata,
+                    "is_read": notification.is_read,
+                    "created_at": notification.created_at,
+                }
+                for notification in notifications
+            ]
+        )
+
+    def patch(self, request):
+        # marking as read is scoped to the signed in user
+        # the header can update counts without exposing other accounts notifications
+        ids = request.data.get("ids")
+        queryset = UserNotification.objects.filter(user=request.user, is_read=False)
+        if isinstance(ids, list):
+            queryset = queryset.filter(id__in=ids)
+        updated = queryset.update(is_read=True)
+        return Response({"updated": updated}, status=status.HTTP_200_OK)

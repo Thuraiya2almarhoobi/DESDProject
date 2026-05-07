@@ -1,16 +1,8 @@
 /**
- * DESD Marketplace documentation.
+ * desd marketplace notes
  *
- * File role:
- *   Provides the reusable SiteHeader component used by pages or layout shells.
- *
- * Frontend context:
- *   Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
- *
- * Implementation notes:
- *   Keep comments focused on state ownership, role-specific routing, API calls,
- *   and non-obvious UI decisions. Styling-only class names are left uncommented
- *   unless they communicate an important layout or accessibility choice.
+ * reusable header for role navigation search cart and notification access
+ * comments here focus on shared state ownership and cross page routing
  */
 
 import type { FormEvent, MouseEvent } from 'react';
@@ -22,6 +14,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { formatDisplayPostcode, getPreferredAddress, getRoleLabel } from '../lib/accountLocation';
 import { useCart } from '../contexts/CartContext';
 import { clearPendingCustomerPreviewExitTarget } from '../lib/customerPreview';
+import { apiJson } from '../lib/api';
 import { formatCompactNumber } from '../lib/numberFormat';
 import { fetchProducerNotifications, getProducerNotificationBadgeCount } from '../lib/producerNotifications';
 import { getDashboardPathForRole } from '../lib/roleRouting';
@@ -39,6 +32,15 @@ interface SiteHeaderProps {
   onSearchSubmit?: (query: string) => void;
   showLocationBar?: boolean;
   locationCity?: string;
+}
+
+interface UserNotificationItem {
+  id: number;
+  category: string;
+  message: string;
+  metadata?: Record<string, unknown>;
+  is_read: boolean;
+  created_at: string;
 }
 
 function isMarketingPath(pathname: string): boolean {
@@ -62,13 +64,42 @@ function firstNameFrom(value: unknown): string {
   return value.trim().split(/\s+/).filter(Boolean)[0] || '';
 }
 
+function notificationTargetPath(item: UserNotificationItem): string {
+  // notification metadata chooses the page that explains the event
+  // the bell stays generic but order product and recurring events remain clickable
+  const metadata = item.metadata || {};
+  const orderId = metadata.order_id;
+  const productId = metadata.product_id || metadata.producer_product_id;
+  const templateId = metadata.template_id;
+
+  if (
+    (item.category === 'order_status' ||
+      item.category === 'order_confirmation' ||
+      item.category === 'recurring_order' ||
+      item.category === 'recurring_order_generated') &&
+    typeof orderId === 'number'
+  ) {
+    return `/orders/history?order=${orderId}`;
+  }
+  if (item.category === 'surplus_deal' && (typeof productId === 'number' || typeof productId === 'string')) {
+    return `/product/${productId}`;
+  }
+  if (
+    (item.category === 'recurring_order' ||
+      item.category === 'recurring_order_alert' ||
+      item.category === 'recurring_order_generated') &&
+    typeof templateId === 'number'
+  ) {
+    return '/restaurant/recurring-orders';
+  }
+  return '/marketplace';
+}
+
 /**
- * SiteHeader boundary.
+ * site header boundary
  *
- * This exported unit supports the file role: Provides the reusable SiteHeader component used by pages or layout shells.
- * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
- * Keep role checks, API coordination, and cross-page side effects visible here
- * so future contributors can trace behavior during sprint reviews.
+ * shared header keeps role routing search cart and notifications consistent
+ * page level logic should pass state in instead of duplicating header behavior
  */
 export function SiteHeader({
   showSearch = false,
@@ -87,6 +118,9 @@ export function SiteHeader({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [localSearchQuery, setLocalSearchQuery] = useState('');
   const [producerNotificationCount, setProducerNotificationCount] = useState(0);
+  const [userNotifications, setUserNotifications] = useState<UserNotificationItem[]>([]);
+  const [userNotificationCount, setUserNotificationCount] = useState(0);
+  const [isNotificationPanelOpen, setIsNotificationPanelOpen] = useState(false);
 
   const isMarketingSurface = isMarketingPath(location.pathname);
   const isAuthenticated = Boolean(user);
@@ -146,6 +180,7 @@ export function SiteHeader({
   }, [location.pathname, location.search]);
 
   useEffect(() => {
+    // local header search follows the url only when the page does not own search state
     if (onSearchQueryChange) {
       return;
     }
@@ -155,27 +190,42 @@ export function SiteHeader({
   }, [location.search, onSearchQueryChange]);
 
   useEffect(() => {
-    if (!user || user.role !== 'PRODUCER') {
+    if (!user) {
+      // signed out users should never see stale notification counts
+      // clearing both sources keeps role switching demos predictable
+      setUserNotifications([]);
+      setUserNotificationCount(0);
       setProducerNotificationCount(0);
       return;
     }
 
     let mounted = true;
-    const loadProducerNotificationCount = async () => {
+    const loadNotificationCounts = async () => {
       try {
-        const notifications = await fetchProducerNotifications((user.email || '').trim().toLowerCase());
+        // customer and producer notification sources are merged into one bell count
+        // this keeps status notes surplus alerts and producer alerts in one header
+        const [userNotificationsPayload, producerNotificationsPayload] = await Promise.all([
+          apiJson<UserNotificationItem[]>('/api/orders/notifications/'),
+          user.role === 'PRODUCER'
+            ? fetchProducerNotifications((user.email || '').trim().toLowerCase())
+            : Promise.resolve([]),
+        ]);
         if (!mounted) {
           return;
         }
-        setProducerNotificationCount(getProducerNotificationBadgeCount(notifications));
+        setUserNotifications(userNotificationsPayload);
+        setUserNotificationCount(userNotificationsPayload.filter((item) => !item.is_read).length);
+        setProducerNotificationCount(getProducerNotificationBadgeCount(producerNotificationsPayload));
       } catch {
         if (mounted) {
+          setUserNotifications([]);
+          setUserNotificationCount(0);
           setProducerNotificationCount(0);
         }
       }
     };
 
-    void loadProducerNotificationCount();
+    void loadNotificationCounts();
     return () => {
       mounted = false;
     };
@@ -183,6 +233,7 @@ export function SiteHeader({
 
   const updateSearchValue = (value: string) => {
     if (onSearchQueryChange) {
+      // marketplace owns its search input so url syncing does not fight typing
       onSearchQueryChange(value);
       return;
     }
@@ -219,30 +270,99 @@ export function SiteHeader({
   };
 
   const handleLogout = () => {
+    // logout also clears preview state before returning to the public home page
     clearPendingCustomerPreviewExitTarget();
     stopCustomerPreview();
     logout();
     navigate('/');
   };
 
-  const producerNotificationButton =
-    user?.role === 'PRODUCER' ? (
+  const totalNotificationCount = userNotificationCount + producerNotificationCount;
+
+  const handleNotificationButtonClick = async () => {
+    // open first then mark read so the panel still works if the patch fails
+    // the optimistic count update makes notification demos feel immediate
+    const nextOpen = !isNotificationPanelOpen;
+    setIsNotificationPanelOpen(nextOpen);
+    if (!nextOpen || userNotificationCount === 0) {
+      return;
+    }
+    const unreadIds = userNotifications.filter((item) => !item.is_read).map((item) => item.id);
+    setUserNotifications((current) => current.map((item) => ({ ...item, is_read: true })));
+    setUserNotificationCount(0);
+    try {
+      await apiJson('/api/orders/notifications/', {
+        method: 'PATCH',
+        body: JSON.stringify({ ids: unreadIds }),
+      });
+    } catch {
+      // panel remains useful even if the read marker fails
+    }
+  };
+
+  const handleUserNotificationClick = (item: UserNotificationItem) => {
+    // close before navigating so the next screen starts clean
+    // target routing is derived from persisted notification metadata
+    setIsNotificationPanelOpen(false);
+    navigate(notificationTargetPath(item));
+  };
+
+  const notificationButton = user ? (
+    <div className="relative">
       <Button
-        asChild
+        type="button"
         variant="ghost"
         size="icon"
+        onClick={handleNotificationButtonClick}
         className="relative text-[var(--forest-green)] hover:bg-[color-mix(in_srgb,var(--forest-green)_6%,white)]"
+        aria-label={`Notifications${totalNotificationCount > 0 ? `, ${totalNotificationCount} active` : ''}`}
       >
-        <Link to="/producer/notifications" aria-label={`Notifications${producerNotificationCount > 0 ? `, ${producerNotificationCount} active` : ''}`}>
           <Bell className="size-4" />
-          {producerNotificationCount > 0 ? (
+          {totalNotificationCount > 0 ? (
             <span className="absolute -right-1 -top-1 inline-flex min-w-5 items-center justify-center rounded-full bg-[var(--forest-green)] px-1.5 py-0.5 text-[11px] font-semibold text-white">
-              {formatCompactNumber(producerNotificationCount)}
+              {formatCompactNumber(totalNotificationCount)}
             </span>
           ) : null}
-        </Link>
       </Button>
-    ) : null;
+      {isNotificationPanelOpen && (
+        <div className="absolute right-0 top-11 z-50 w-[min(22rem,calc(100vw-1rem))] overflow-hidden rounded-2xl border border-[#e4e1d8] bg-[#fffefa] text-left shadow-xl">
+          <div className="border-b border-[#eee8dc] px-4 py-3">
+            <p className="font-semibold text-[var(--rich-soil)]">Notifications</p>
+            <p className="text-xs text-gray-600">Order updates and favourite-producer surplus alerts.</p>
+          </div>
+          <div className="max-h-80 overflow-y-auto p-2">
+            {userNotifications.length === 0 ? (
+              <p className="px-3 py-6 text-center text-sm text-gray-500">No customer notifications yet.</p>
+            ) : (
+              userNotifications.slice(0, 8).map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => handleUserNotificationClick(item)}
+                  className="block w-full rounded-xl px-3 py-2 text-left hover:bg-[#f6f1e7] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--forest-green)]"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="text-sm font-medium text-[var(--rich-soil)]">{item.message}</p>
+                    {!item.is_read && <span className="mt-1 size-2 rounded-full bg-[var(--forest-green)]" />}
+                  </div>
+                  <p className="mt-1 text-xs uppercase tracking-wide text-gray-500">{item.category.replaceAll('_', ' ')}</p>
+                </button>
+              ))
+            )}
+            {user?.role === 'PRODUCER' && producerNotificationCount > 0 && (
+              <Link
+                to="/producer/notifications"
+                onClick={() => setIsNotificationPanelOpen(false)}
+                className="mt-2 block rounded-xl border border-green-100 bg-green-50 px-3 py-2 text-sm font-medium text-[var(--forest-green)] hover:bg-green-100"
+              >
+                {producerNotificationCount} producer inventory/order alert{producerNotificationCount === 1 ? '' : 's'}
+              </Link>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  ) : null;
 
   const desktopActionButtons = !isAuthenticated ? (
     <>
@@ -284,7 +404,7 @@ export function SiteHeader({
           <Link to={getDashboardPathForRole(user.role)}>Dashboard</Link>
         </Button>
       )}
-      {producerNotificationButton}
+      {notificationButton}
       <Button asChild variant="ghost" size="sm" className="text-[var(--forest-green)] hover:bg-[color-mix(in_srgb,var(--forest-green)_6%,white)]">
         <Link to="/account">
           <User className="size-4" />
@@ -446,7 +566,7 @@ export function SiteHeader({
             </Link>
 
             <div className="flex items-center gap-1">
-              {producerNotificationButton}
+              {notificationButton}
               <Button
                 type="button"
                 variant="ghost"
@@ -553,7 +673,7 @@ export function SiteHeader({
                 </button>
               </div>
 
-              <span className="text-xs font-medium text-[var(--forest-green)]">Origin, seasonality, and delivery context stay visible</span>
+              <span className="text-xs font-medium text-[var(--forest-green)]">Origin, seasonality, and delivery</span>
             </div>
           </div>
         ) : null}

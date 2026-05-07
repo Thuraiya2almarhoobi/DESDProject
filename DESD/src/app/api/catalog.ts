@@ -39,8 +39,7 @@ const USE_MOCK_PRODUCTS =
  * Keep role checks, API coordination, and cross-page side effects visible here
  * so future contributors can trace behavior during sprint reviews.
  */
-const DEFAULT_IMAGE_URL =
-  "https://images.unsplash.com/photo-1542838132-92c53300491e?w=800";
+export const DEFAULT_PRODUCT_IMAGE_URL = "/product-placeholder.svg";
 
 interface ProductQueryParams {
   search?: string;
@@ -116,9 +115,13 @@ interface ApiProduct {
   category_slug?: string;
   harvest_date?: string;
   availability?: string;
+  configured_availability?: string;
+  effective_availability?: string;
   seasonal_dates?: string;
   is_organic?: boolean;
   organic_certification?: string;
+  is_currently_in_season?: boolean;
+  seasonal_status_message?: string;
   allergens?: unknown;
   image_url?: string;
   stock?: number;
@@ -216,12 +219,16 @@ function mapProduct(apiProduct: ApiProduct): Product {
         : undefined,
     category: apiProduct.category || "Uncategorized",
     harvestDate: apiProduct.harvest_date || new Date().toISOString().slice(0, 10),
-    availability: normalizeAvailability(apiProduct.availability),
+    availability: normalizeAvailability(apiProduct.effective_availability || apiProduct.availability),
+    configuredAvailability: normalizeAvailability(apiProduct.configured_availability || apiProduct.availability),
+    effectiveAvailability: normalizeAvailability(apiProduct.effective_availability || apiProduct.availability),
     seasonalDates: deriveSeasonalDates(apiProduct),
+    isCurrentlyInSeason: Boolean(apiProduct.is_currently_in_season),
+    seasonalStatusMessage: apiProduct.seasonal_status_message || undefined,
     isOrganic: Boolean(apiProduct.is_organic),
     organicCertification: apiProduct.organic_certification || undefined,
     allergens: normalizeAllergens(apiProduct.allergens),
-    imageUrl: apiProduct.image_url || DEFAULT_IMAGE_URL,
+    imageUrl: apiProduct.image_url || DEFAULT_PRODUCT_IMAGE_URL,
     stock: parsedStock,
     foodMiles: parsedFoodMiles,
     isSurplus: Boolean(apiProduct.is_surplus),
@@ -402,7 +409,7 @@ export async function fetchProducts(params: ProductQueryParams = {}): Promise<Pr
 
   const queryString = buildProductsQueryString(params);
   const baseUrl = `${ORDERS_API_BASE_URL}/products`;
-  const url = queryString ? `${baseUrl}?available=true&${queryString}` : `${baseUrl}?available=true`;
+  const url = queryString ? `${baseUrl}?${queryString}` : baseUrl;
   const data = await requestJson<ApiProduct[]>(url);
   return data.map(mapProduct);
 }

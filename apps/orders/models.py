@@ -122,6 +122,18 @@ class Product(models.Model):
     )
     harvest_date = models.DateField(null=True, blank=True)
     allergen_info = models.CharField(max_length=255, blank=True)
+    image_url = models.TextField(blank=True)
+    is_organic = models.BooleanField(default=False)
+    organic_certification = models.CharField(max_length=160, blank=True)
+    is_surplus = models.BooleanField(default=False)
+    surplus_discount_percent = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(10), MaxValueValidator(50)],
+    )
+    surplus_expires_at = models.DateTimeField(null=True, blank=True)
+    surplus_best_before = models.CharField(max_length=80, blank=True)
+    surplus_note = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -264,6 +276,7 @@ class Order(models.Model):
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"
         CONFIRMED = "confirmed", "Confirmed"
+        PREPARING = "preparing", "Preparing"
         READY = "ready", "Ready"
         DELIVERED = "delivered", "Delivered"
         CANCELLED = "cancelled", "Cancelled"
@@ -291,14 +304,21 @@ class Order(models.Model):
         max_length=20, choices=PaymentStatus.choices, default=PaymentStatus.PAID
     )
     delivery_address = models.TextField()
+    delivery_address_label = models.CharField(max_length=80, blank=True)
+    selected_address_id = models.PositiveIntegerField(null=True, blank=True)
     customer_postcode = models.CharField(max_length=12)
     special_instructions = models.TextField(blank=True)
+    total_food_miles = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
+    max_food_miles = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
+    within_twenty_miles = models.BooleanField(default=True)
     subtotal_amount = models.DecimalField(max_digits=12, decimal_places=2)
     commission_rate = models.DecimalField(max_digits=5, decimal_places=4, default=Decimal("0.05"))
     commission_amount = models.DecimalField(max_digits=12, decimal_places=2)
     total_amount = models.DecimalField(max_digits=12, decimal_places=2)
     producer_payout_total = models.DecimalField(max_digits=12, decimal_places=2)
     payment_method = models.CharField(max_length=50, blank=True)
+    payment_terms = models.CharField(max_length=80, default="pay_online_now")
+    purchase_order_number = models.CharField(max_length=64, blank=True)
     payment_reference = models.CharField(max_length=100, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -383,6 +403,15 @@ class OrderItem(models.Model):
     )
     product_name = models.CharField(max_length=255)
     producer_name = models.CharField(max_length=255)
+    product_image_url = models.TextField(blank=True)
+    allergen_info = models.CharField(max_length=255, blank=True)
+    is_organic = models.BooleanField(default=False)
+    organic_certification = models.CharField(max_length=160, blank=True)
+    is_surplus = models.BooleanField(default=False)
+    surplus_discount_percent = models.PositiveSmallIntegerField(null=True, blank=True)
+    surplus_original_unit_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    surplus_best_before = models.CharField(max_length=80, blank=True)
+    surplus_note = models.TextField(blank=True)
     unit = models.CharField(max_length=30, default="unit")
     quantity = models.DecimalField(max_digits=10, decimal_places=2)
     unit_price = models.DecimalField(max_digits=10, decimal_places=2)

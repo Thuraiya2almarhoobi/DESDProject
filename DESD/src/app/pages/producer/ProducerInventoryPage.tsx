@@ -25,10 +25,12 @@ import {
   ChevronDown,
   Edit,
   HelpCircle,
+  History,
   Loader2,
   Plus,
   Sparkles,
   Tag,
+  Trash2,
   XCircle,
 } from 'lucide-react';
 import { differenceInCalendarDays, format, isValid, parseISO } from 'date-fns';
@@ -74,6 +76,9 @@ import { Separator } from '../../components/ui/separator';
 import { AvailabilityType, Product, ProductUnit } from '../../types';
 import {
   createProducerProductInApi,
+  deleteProducerProductInApi,
+  fetchProducerProductHistoryFromApi,
+  ProducerProductHistoryEvent,
   fetchProducerProductsFromApi,
   patchProducerProductInApi,
 } from '../../services/productApi';
@@ -83,6 +88,14 @@ type MonthOption = { value: number; label: string };
 const STORAGE_TIPS_MAX_LENGTH = 700;
 
 interface ProductDraft {
+  name: string;
+  category: string;
+  description: string;
+  price: string;
+  unit: ProductUnit;
+  imageUrl: string;
+  allergens: string[];
+  noKnownAllergensConfirmed: boolean;
   stock: string;
   lowStockThreshold: string;
   availability: AvailabilityType;
@@ -112,6 +125,7 @@ interface NewProductForm {
   isOrganic: boolean;
   organicCertification: string;
   allergens: string[];
+  noKnownAllergensConfirmed: boolean;
   harvestDate: string;
   seasonStartMonth: string;
   seasonEndMonth: string;
@@ -134,6 +148,18 @@ interface NewProductForm {
  * so future contributors can trace behavior during sprint reviews.
  */
 const UNIT_OPTIONS: ProductUnit[] = ['kg', 'litre', 'dozen', 'each'];
+const CATEGORY_OTHER_VALUE = '__other__';
+const CATEGORY_OPTIONS = [
+  'Vegetables',
+  'Fruit',
+  'Dairy Products',
+  'Bakery',
+  'Eggs',
+  'Meat',
+  'Preserves',
+  'Herbs',
+  'Prepared Foods',
+] as const;
 const MONTH_OPTIONS: MonthOption[] = [
   { value: 1, label: 'January' },
   { value: 2, label: 'February' },
@@ -173,11 +199,25 @@ const ALLERGEN_OPTIONS = [
   'Tree nuts (almonds, hazelnuts, walnuts, brazil nuts, cashews, pecans, pistachios, and macadamia nuts)',
 ] as const;
 
+function categorySelectValue(category: string): string {
+  return CATEGORY_OPTIONS.includes(category as (typeof CATEGORY_OPTIONS)[number]) ? category : CATEGORY_OTHER_VALUE;
+}
+
 function toggleSelectedAllergen(selected: string[], allergen: string, checked: boolean): string[] {
   if (checked) {
     return selected.includes(allergen) ? selected : [...selected, allergen];
   }
   return selected.filter((item) => item !== allergen);
+}
+
+function addCustomAllergen(selected: string[], value: string): string[] {
+  const normalized = value.trim();
+  if (!normalized) {
+    return selected;
+  }
+  return selected.some((item) => item.toLowerCase() === normalized.toLowerCase())
+    ? selected
+    : [...selected, normalized];
 }
 
 function getSelectedAllergenSummary(allergens: string[]): string {
@@ -197,6 +237,7 @@ function generateStorageGuidanceDraft(product: {
   unit?: ProductUnit;
   allergens?: string[];
 }): string {
+  // local draft guidance gives producers useful text without calling ai services
   const productName = product.name.trim() || product.category.trim() || 'this product';
   const categoryText = `${product.category} ${product.name} ${product.description || ''}`.toLowerCase();
   const hasAllergens = Boolean(product.allergens?.length);
@@ -266,6 +307,7 @@ function initialNewProductForm(): NewProductForm {
     isOrganic: false,
     organicCertification: '',
     allergens: [],
+    noKnownAllergensConfirmed: false,
     harvestDate: todayIso(),
     seasonStartMonth: String(startMonth),
     seasonEndMonth: String(defaultSeasonEndMonth(startMonth)),
@@ -281,9 +323,18 @@ function initialNewProductForm(): NewProductForm {
 }
 
 function toDraft(product: Product): ProductDraft {
+  // edit mode starts from the api product so every original field can be changed
   const configuredAvailability = product.configuredAvailability ?? product.availability;
   const startMonth = product.seasonStartMonth ?? currentMonthNumber();
   return {
+    name: product.name,
+    category: product.category,
+    description: product.description,
+    price: String(product.price),
+    unit: product.unit,
+    imageUrl: product.imageUrl,
+    allergens: product.allergens ?? [],
+    noKnownAllergensConfirmed: (product.allergens ?? []).length === 0,
     stock: String(product.stock),
     lowStockThreshold: String(product.lowStockThreshold ?? 10),
     availability: configuredAvailability,
@@ -303,6 +354,7 @@ function toDraft(product: Product): ProductDraft {
 }
 
 function isSeasonEndingSoon(product: Product): boolean {
+  // season ending cards help producers update seasonal products before they disappear
   if (getEffectiveAvailability(product) !== 'in-season') {
     return false;
   }
@@ -352,6 +404,20 @@ function formatHarvestDate(value: string): string {
   return format(parsed, 'MMM d, yyyy');
 }
 
+function formatHistoryFieldName(field: string): string {
+  return field.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function formatHistoryValue(value: unknown): string {
+  if (value === null || value === undefined || value === '') {
+    return 'blank';
+  }
+  if (typeof value === 'boolean') {
+    return value ? 'Yes' : 'No';
+  }
+  return String(value);
+}
+
 function getLowStockThreshold(product: Product): number {
   return Math.max(1, product.lowStockThreshold ?? 10);
 }
@@ -383,9 +449,15 @@ export function ProducerInventoryPage() {
   const [filterHealthStatus, setFilterHealthStatus] = useState<HealthFilter>('all');
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [newProduct, setNewProduct] = useState<NewProductForm>(initialNewProductForm);
+  const [newOtherAllergen, setNewOtherAllergen] = useState('');
+  const [draftOtherAllergens, setDraftOtherAllergens] = useState<Record<string, string>>({});
   const [creatingProduct, setCreatingProduct] = useState(false);
+  const [historyDialogProduct, setHistoryDialogProduct] = useState<Product | null>(null);
+  const [historyEvents, setHistoryEvents] = useState<ProducerProductHistoryEvent[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   useEffect(() => {
+    // producer email scopes the demo api so each producer only sees their own stock
     let mounted = true;
 
     const loadProducts = async () => {
@@ -429,6 +501,7 @@ export function ProducerInventoryPage() {
   const handleCreateDialogChange = (open: boolean) => {
     setCreateDialogOpen(open);
     if (!open) {
+      setNewOtherAllergen('');
       const params = new URLSearchParams(location.search);
       if (params.get('create') === 'product') {
         navigate('/producer/inventory', { replace: true });
@@ -440,6 +513,7 @@ export function ProducerInventoryPage() {
   const outOfStockItems = useMemo(() => products.filter((product) => product.stock === 0), [products]);
   const surplusItems = useMemo(() => products.filter((product) => product.isSurplus), [products]);
   const surplusImpact = useMemo(() => {
+    // surplus analytics estimate waste reduction and customer savings for the dashboard
     const unitsProtected = surplusItems.reduce((total, product) => total + Math.max(0, product.stock), 0);
     const estimatedCustomerSavings = surplusItems.reduce((total, product) => {
       const originalPrice = product.surplusOriginalPrice ?? product.price;
@@ -459,6 +533,7 @@ export function ProducerInventoryPage() {
   const seasonStartingItems = useMemo(() => products.filter((product) => isSeasonStartingSoon(product)), [products]);
 
   const filteredProducts = useMemo(() => {
+    // inventory search includes hidden operational fields so producers can find audit cases
     const normalizedSearch = searchQuery.trim().toLowerCase();
     const healthFiltered =
       filterHealthStatus === 'low-stock'
@@ -503,6 +578,7 @@ export function ProducerInventoryPage() {
   }, [filterHealthStatus, lowStockItems, outOfStockItems, products, searchQuery, seasonEndingItems, seasonStartingItems, surplusItems]);
 
   const openEditor = (product: Product) => {
+    // only one product editor opens at a time so long forms do not fight each other
     if (editingId === product.id) {
       setEditingId(null);
       return;
@@ -511,10 +587,11 @@ export function ProducerInventoryPage() {
       ...previous,
       [product.id]: previous[product.id] || toDraft(product),
     }));
+    setDraftOtherAllergens((previous) => ({ ...previous, [product.id]: previous[product.id] || '' }));
     setEditingId(product.id);
   };
 
-  const updateDraft = (productId: string, field: keyof ProductDraft, value: string | boolean) => {
+  const updateDraft = (productId: string, field: keyof ProductDraft, value: string | boolean | string[]) => {
     setDrafts((previous) => {
       const existing = previous[productId];
       if (!existing) {
@@ -528,6 +605,17 @@ export function ProducerInventoryPage() {
         },
       };
     });
+  };
+
+  const addDraftOtherAllergen = (productId: string) => {
+    const value = draftOtherAllergens[productId] || '';
+    const draft = drafts[productId];
+    if (!draft) {
+      return;
+    }
+    updateDraft(productId, 'allergens', addCustomAllergen(draft.allergens, value));
+    updateDraft(productId, 'noKnownAllergensConfirmed', false);
+    setDraftOtherAllergens((previous) => ({ ...previous, [productId]: '' }));
   };
 
   const generateDraftStorageGuidance = (product: Product) => {
@@ -565,12 +653,30 @@ export function ProducerInventoryPage() {
   };
 
   const saveDraft = async (productId: string) => {
+    // edit details validates the same business fields that product creation uses
     const draft = drafts[productId];
     if (!draft) {
       return;
     }
 
     const parsedStock = Number.parseInt(draft.stock, 10);
+    const parsedPrice = Number.parseFloat(draft.price);
+    const requiredError =
+      validateRequiredText(draft.name, 'Product name', 3) ||
+      validateRequiredText(draft.category, 'Category', 2) ||
+      validateRequiredText(draft.description, 'Description', 12);
+    if (requiredError) {
+      toast.error(requiredError);
+      return;
+    }
+    if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) {
+      toast.error('Price must be greater than zero.');
+      return;
+    }
+    if (!UNIT_OPTIONS.includes(draft.unit)) {
+      toast.error('Choose a valid selling unit.');
+      return;
+    }
     if (!Number.isFinite(parsedStock) || parsedStock < 0) {
       toast.error('Stock quantity must be zero or greater.');
       return;
@@ -584,8 +690,24 @@ export function ProducerInventoryPage() {
       toast.error('Add the certification body or reference for organic products.');
       return;
     }
+    if (draft.allergens.length === 0 && !draft.noKnownAllergensConfirmed) {
+      toast.error('Select allergens or confirm there are no known common allergens.');
+      return;
+    }
+    if (!isValidOptionalUrl(draft.imageUrl)) {
+      toast.error('Image URL must start with http:// or https://.');
+      return;
+    }
 
     const payload: {
+      name: string;
+      category: string;
+      description: string;
+      price: number;
+      unit: ProductUnit;
+      imageUrl: string;
+      allergens: string[];
+      noKnownAllergensConfirmed: boolean;
       stock: number;
       lowStockThreshold: number;
       availability: AvailabilityType;
@@ -602,6 +724,15 @@ export function ProducerInventoryPage() {
       surplusBestBefore?: string;
       surplusNote?: string;
     } = {
+      // payload names match the api adapter so frontend fields stay readable
+      name: draft.name.trim(),
+      category: draft.category.trim(),
+      description: draft.description.trim(),
+      price: parsedPrice,
+      unit: draft.unit,
+      imageUrl: draft.imageUrl.trim(),
+      allergens: draft.allergens,
+      noKnownAllergensConfirmed: draft.noKnownAllergensConfirmed || draft.allergens.length === 0,
       stock: parsedStock,
       lowStockThreshold: parsedLowStockThreshold,
       availability: draft.availability,
@@ -625,6 +756,7 @@ export function ProducerInventoryPage() {
     }
 
     if (draft.isSurplus) {
+      // surplus discounts are intentionally capped for credible food waste offers
       const parsedDiscount = Number.parseInt(draft.surplusDiscountPercent, 10);
       if (!Number.isFinite(parsedDiscount) || parsedDiscount < 10 || parsedDiscount > 50) {
         toast.error('Surplus discount must be between 10 and 50.');
@@ -657,6 +789,7 @@ export function ProducerInventoryPage() {
   };
 
   const toggleInStock = async (product: Product) => {
+    // update stock is a quick path but still goes through the product api
     const newStock = product.stock === 0 ? 10 : 0;
     const currentConfiguredAvailability = product.configuredAvailability ?? product.availability;
     const newAvailability: AvailabilityType =
@@ -731,6 +864,7 @@ export function ProducerInventoryPage() {
 
   const handleCreateProduct = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    // create product keeps validation client side first then repeats rules on backend
 
     const price = Number.parseFloat(newProduct.price);
     const stock = Number.parseInt(newProduct.stock, 10);
@@ -765,6 +899,10 @@ export function ProducerInventoryPage() {
     }
     if (newProduct.isOrganic && !newProduct.organicCertification.trim()) {
       toast.error('Add the certification body or reference for organic products.');
+      return;
+    }
+    if (newProduct.allergens.length === 0 && !newProduct.noKnownAllergensConfirmed) {
+      toast.error('Select allergens or confirm there are no known common allergens.');
       return;
     }
     if (!isValidOptionalUrl(newProduct.imageUrl)) {
@@ -812,6 +950,7 @@ export function ProducerInventoryPage() {
           isOrganic: newProduct.isOrganic,
           organicCertification: newProduct.isOrganic ? newProduct.organicCertification.trim() : '',
           allergens: newProduct.allergens,
+          noKnownAllergensConfirmed: newProduct.noKnownAllergensConfirmed || newProduct.allergens.length === 0,
           storageTips: newProduct.storageTips.trim(),
           storageTipsAiGenerated: Boolean(newProduct.storageTips.trim() && newProduct.storageTipsAiGenerated),
           harvestDate: newProduct.harvestDate || todayIso(),
@@ -838,6 +977,32 @@ export function ProducerInventoryPage() {
       toast.error(message);
     } finally {
       setCreatingProduct(false);
+    }
+  };
+
+  const handleDeleteProduct = async (product: Product) => {
+    try {
+      // delete removes the listing while existing orders keep their copied snapshots
+      await deleteProducerProductInApi(product.id, demoUserEmail);
+      setProducts((previous) => previous.filter((current) => current.id !== product.id));
+      toast.success(`${product.name} deleted.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to delete product.');
+    }
+  };
+
+  const openProductHistory = async (product: Product) => {
+    // product history is loaded on demand so inventory cards stay light
+    setHistoryDialogProduct(product);
+    setHistoryEvents([]);
+    setHistoryLoading(true);
+    try {
+      const events = await fetchProducerProductHistoryFromApi(product.id);
+      setHistoryEvents(events);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to load product update history.');
+    } finally {
+      setHistoryLoading(false);
     }
   };
 
@@ -869,14 +1034,6 @@ export function ProducerInventoryPage() {
             )}
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setFilterHealthStatus('surplus')}
-              className="gap-2 focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
-            >
-              <Tag className="size-4" />
-              Create surplus deal
-            </Button>
             <Button
               className="gap-2 focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
               onClick={() => setCreateDialogOpen(true)}
@@ -1130,12 +1287,47 @@ export function ProducerInventoryPage() {
                             <Button
                               variant="outline"
                               size="sm"
+                              onClick={() => void openProductHistory(product)}
+                              className="focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
+                            >
+                              <History className="size-4 mr-2" />
+                              History
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
                               onClick={() => openEditor(product)}
                               className="focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
                             >
                               <Edit className="size-4 mr-2" />
-                              {editingId === product.id ? 'Done' : 'Edit'}
+                              {editingId === product.id ? 'Done' : 'Edit details'}
                             </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
+                                >
+                                  <Trash2 className="mr-2 size-4" />
+                                  Delete
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Delete {product.name}?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    This removes the product from your producer catalogue and customer marketplace mirrors. Existing order history keeps its product snapshot.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction onClick={() => void handleDeleteProduct(product)}>
+                                    Delete product
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
                           </div>
                         </div>
                         <p className="text-sm text-gray-600">{product.description}</p>
@@ -1181,6 +1373,173 @@ export function ProducerInventoryPage() {
 
                     {editingId === product.id && (
                       <div className="pt-4 border-t space-y-6">
+                        <div className="grid gap-4 rounded-lg border border-slate-200 bg-white p-4">
+                          <div className="grid gap-4 md:grid-cols-2">
+                            <div className="space-y-2">
+                              <Label htmlFor={`name-${product.id}`}>Product Name</Label>
+                              <Input
+                                id={`name-${product.id}`}
+                                value={draft.name}
+                                onChange={(event) => updateDraft(product.id, 'name', event.target.value)}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor={`category-${product.id}`}>Category</Label>
+                              <Select
+                                value={categorySelectValue(draft.category)}
+                                onValueChange={(value) =>
+                                  updateDraft(product.id, 'category', value === CATEGORY_OTHER_VALUE ? '' : value)
+                                }
+                              >
+                                <SelectTrigger id={`category-${product.id}`}>
+                                  <SelectValue placeholder="Select category" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {CATEGORY_OPTIONS.map((category) => (
+                                    <SelectItem key={category} value={category}>
+                                      {category}
+                                    </SelectItem>
+                                  ))}
+                                  <SelectItem value={CATEGORY_OTHER_VALUE}>Other</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              {categorySelectValue(draft.category) === CATEGORY_OTHER_VALUE && (
+                                <Input
+                                  value={draft.category}
+                                  onChange={(event) => updateDraft(product.id, 'category', event.target.value)}
+                                  placeholder="Type custom category"
+                                />
+                              )}
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor={`description-${product.id}`}>Description</Label>
+                            <Textarea
+                              id={`description-${product.id}`}
+                              value={draft.description}
+                              onChange={(event) => updateDraft(product.id, 'description', event.target.value)}
+                              rows={3}
+                            />
+                          </div>
+                          <div className="grid gap-4 md:grid-cols-2">
+                            <div className="space-y-2">
+                              <Label htmlFor={`price-${product.id}`}>Price (GBP)</Label>
+                              <Input
+                                id={`price-${product.id}`}
+                                type="number"
+                                min="0.01"
+                                step="0.01"
+                                value={draft.price}
+                                onChange={(event) => updateDraft(product.id, 'price', event.target.value)}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor={`unit-${product.id}`}>Unit</Label>
+                              <Select
+                                value={draft.unit}
+                                onValueChange={(value) => updateDraft(product.id, 'unit', value as ProductUnit)}
+                              >
+                                <SelectTrigger id={`unit-${product.id}`}>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {UNIT_OPTIONS.map((unit) => (
+                                    <SelectItem key={unit} value={unit}>
+                                      {unit}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                          <ImageSourceField
+                            id={`image-${product.id}`}
+                            label="Product Image URL"
+                            value={draft.imageUrl}
+                            onChange={(value) => updateDraft(product.id, 'imageUrl', value)}
+                            uploadScope="products"
+                          />
+                          <div className="space-y-2">
+                            <Label>Allergen Information</Label>
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="w-full items-start justify-between gap-3 text-left font-normal whitespace-normal"
+                                >
+                                  <span>{getSelectedAllergenSummary(draft.allergens)}</span>
+                                  <ChevronDown className="size-4 shrink-0 opacity-60" />
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent align="start" className="w-[min(32rem,calc(100vw-3rem))] p-0">
+                                <div className="border-b px-4 py-3">
+                                  <p className="text-sm font-medium text-slate-900">UK allergen checklist</p>
+                                  <p className="text-sm text-slate-600">Tick every allergen present in this product.</p>
+                                </div>
+                                <ScrollArea className="h-64">
+                                  <div className="space-y-1 p-2">
+                                    {ALLERGEN_OPTIONS.map((allergen, index) => {
+                                      const checkboxId = `edit-allergen-${product.id}-${index}`;
+                                      return (
+                                        <label
+                                          key={allergen}
+                                          htmlFor={checkboxId}
+                                          className="flex cursor-pointer items-start gap-3 rounded-md px-3 py-2 hover:bg-slate-50"
+                                        >
+                                          <Checkbox
+                                            id={checkboxId}
+                                            checked={draft.allergens.includes(allergen)}
+                                            onCheckedChange={(checked) => {
+                                              const nextAllergens = toggleSelectedAllergen(draft.allergens, allergen, checked === true);
+                                              updateDraft(product.id, 'allergens', nextAllergens);
+                                              if (checked === true) {
+                                                updateDraft(product.id, 'noKnownAllergensConfirmed', false);
+                                              }
+                                            }}
+                                            className="mt-0.5"
+                                          />
+                                          <span className="text-sm leading-5 text-slate-700">{allergen}</span>
+                                        </label>
+                                      );
+                                    })}
+                                  </div>
+                                </ScrollArea>
+                              </PopoverContent>
+                            </Popover>
+                            <label className="flex items-start gap-3 rounded-md border bg-white px-3 py-2 text-sm text-slate-700">
+                              <Checkbox
+                                checked={draft.noKnownAllergensConfirmed}
+                                disabled={draft.allergens.length > 0}
+                                onCheckedChange={(checked) =>
+                                  updateDraft(product.id, 'noKnownAllergensConfirmed', checked === true)
+                                }
+                                className="mt-0.5"
+                              />
+                              <span>I confirm this product has no known common allergens.</span>
+                            </label>
+                            <div className="rounded-md border bg-white px-3 py-2">
+                              <Label htmlFor={`other-allergen-${product.id}`} className="text-sm">Other allergen</Label>
+                              <div className="mt-2 flex gap-2">
+                                <Input
+                                  id={`other-allergen-${product.id}`}
+                                  value={draftOtherAllergens[product.id] || ''}
+                                  onChange={(event) =>
+                                    setDraftOtherAllergens((previous) => ({
+                                      ...previous,
+                                      [product.id]: event.target.value,
+                                    }))
+                                  }
+                                  placeholder="Type another allergen"
+                                />
+                                <Button type="button" variant="outline" onClick={() => addDraftOtherAllergen(product.id)}>
+                                  Add
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
                         <div className="grid md:grid-cols-3 gap-6">
                           <div className="space-y-2">
                             <Label htmlFor={`stock-${product.id}`} className="flex items-center gap-2">
@@ -1483,12 +1842,35 @@ export function ProducerInventoryPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="new-category">Category</Label>
-                <Input
-                  id="new-category"
-                  value={newProduct.category}
-                  onChange={(event) => setNewProduct((previous) => ({ ...previous, category: event.target.value }))}
-                  required
-                />
+                <Select
+                  value={categorySelectValue(newProduct.category)}
+                  onValueChange={(value) =>
+                    setNewProduct((previous) => ({
+                      ...previous,
+                      category: value === CATEGORY_OTHER_VALUE ? '' : value,
+                    }))
+                  }
+                >
+                  <SelectTrigger id="new-category">
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CATEGORY_OPTIONS.map((category) => (
+                      <SelectItem key={category} value={category}>
+                        {category}
+                      </SelectItem>
+                    ))}
+                    <SelectItem value={CATEGORY_OTHER_VALUE}>Other</SelectItem>
+                  </SelectContent>
+                </Select>
+                {categorySelectValue(newProduct.category) === CATEGORY_OTHER_VALUE && (
+                  <Input
+                    value={newProduct.category}
+                    onChange={(event) => setNewProduct((previous) => ({ ...previous, category: event.target.value }))}
+                    placeholder="Type custom category"
+                    required
+                  />
+                )}
               </div>
             </div>
 
@@ -1757,6 +2139,7 @@ export function ProducerInventoryPage() {
                                   setNewProduct((previous) => ({
                                     ...previous,
                                     allergens: toggleSelectedAllergen(previous.allergens, allergen, checked === true),
+                                    noKnownAllergensConfirmed: checked === true ? false : previous.noKnownAllergensConfirmed,
                                   }))
                                 }
                                 className="mt-0.5"
@@ -1770,6 +2153,45 @@ export function ProducerInventoryPage() {
                   </PopoverContent>
                 </Popover>
                 <p className="text-sm text-gray-500">Choose from the 14 UK law allergens instead of typing them manually.</p>
+                <div className="rounded-md border bg-white px-3 py-2">
+                  <Label htmlFor="new-other-allergen" className="text-sm">Other allergen</Label>
+                  <div className="mt-2 flex gap-2">
+                    <Input
+                      id="new-other-allergen"
+                      value={newOtherAllergen}
+                      onChange={(event) => setNewOtherAllergen(event.target.value)}
+                      placeholder="Type another allergen"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setNewProduct((previous) => ({
+                          ...previous,
+                          allergens: addCustomAllergen(previous.allergens, newOtherAllergen),
+                          noKnownAllergensConfirmed: false,
+                        }));
+                        setNewOtherAllergen('');
+                      }}
+                    >
+                      Add
+                    </Button>
+                  </div>
+                </div>
+                <label className="flex items-start gap-3 rounded-md border bg-white px-3 py-2 text-sm text-slate-700">
+                  <Checkbox
+                    checked={newProduct.noKnownAllergensConfirmed}
+                    disabled={newProduct.allergens.length > 0}
+                    onCheckedChange={(checked) =>
+                      setNewProduct((previous) => ({
+                        ...previous,
+                        noKnownAllergensConfirmed: checked === true,
+                      }))
+                    }
+                    className="mt-0.5"
+                  />
+                  <span>I confirm this product has no known common allergens.</span>
+                </label>
                 {newProduct.allergens.length > 0 && (
                   <div className="flex flex-wrap gap-2">
                     {newProduct.allergens.map((allergen) => (
@@ -1872,6 +2294,73 @@ export function ProducerInventoryPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(historyDialogProduct)} onOpenChange={(open) => !open && setHistoryDialogProduct(null)}>
+        <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Product Update History</DialogTitle>
+            <DialogDescription>
+              {historyDialogProduct
+                ? `${historyDialogProduct.name} audit trail for TC-011 inventory changes.`
+                : 'Producer product history.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          {historyLoading ? (
+            <div className="flex items-center gap-2 rounded-lg border bg-slate-50 p-4 text-sm text-slate-700">
+              <Loader2 className="size-4 animate-spin" />
+              Loading product history...
+            </div>
+          ) : historyEvents.length === 0 ? (
+            <div className="rounded-lg border bg-slate-50 p-4 text-sm text-slate-600">
+              No product history entries have been recorded yet.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {historyEvents.map((event) => (
+                <div key={event.id} className="rounded-xl border border-slate-200 bg-white p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-slate-900">
+                        {event.event_type.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {format(new Date(event.created_at), 'MMM d, yyyy h:mm a')}
+                        {event.actor_email ? ` by ${event.actor_email}` : ''}
+                        {event.actor_role ? ` (${event.actor_role})` : ''}
+                      </p>
+                    </div>
+                    <Badge variant="outline">{event.changed_fields.length} field{event.changed_fields.length === 1 ? '' : 's'}</Badge>
+                  </div>
+                  {event.changed_fields.length > 0 && (
+                    <div className="mt-3 grid gap-2">
+                      {event.changed_fields.slice(0, 8).map((field) => (
+                        <div key={field} className="rounded-lg bg-slate-50 px-3 py-2 text-sm">
+                          <p className="font-medium text-slate-800">{formatHistoryFieldName(field)}</p>
+                          <p className="mt-1 text-xs text-slate-600">
+                            {formatHistoryValue(event.previous_values[field])} → {formatHistoryValue(event.new_values[field])}
+                          </p>
+                        </div>
+                      ))}
+                      {event.changed_fields.length > 8 && (
+                        <p className="text-xs text-slate-500">
+                          Plus {event.changed_fields.length - 8} more changed field{event.changed_fields.length - 8 === 1 ? '' : 's'}.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setHistoryDialogProduct(null)}>
+              Close
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

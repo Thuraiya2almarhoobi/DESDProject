@@ -61,8 +61,7 @@ def _clean_api_key(value: str) -> str:
     or isolates a business rule that should remain easy to test. The wider
     context is: Content domain: recipes, farm stories, saved recipe feeds, and AI-assisted producer content generation.
     """
-    # Ignore common placeholder values so `.env` examples do not make the app
-    # attempt a real Gemini request and return confusing provider 400 errors.
+    # placeholder keys behave like missing keys so demo env files stay safe
     key = (value or "").strip()
     if not key or key.lower() in _PLACEHOLDER_API_KEYS:
         return ""
@@ -77,9 +76,7 @@ def _gemini_model_name(model: str) -> str:
     or isolates a business rule that should remain easy to test. The wider
     context is: Content domain: recipes, farm stories, saved recipe feeds, and AI-assisted producer content generation.
     """
-    # Vertex and Google AI Studio sometimes document model ids in different
-    # shapes. Normalising here lets `.env` use either `gemini-1.5-flash` or a
-    # longer provider path without changing the request builder.
+    # model ids are normalised so vertex and gemini key paths both work
     normalized = (model or "").strip().removeprefix("models/")
     return normalized.split("/")[-1]
 
@@ -92,8 +89,7 @@ def _google_error_message(response, provider: str) -> str:
     or isolates a business rule that should remain easy to test. The wider
     context is: Content domain: recipes, farm stories, saved recipe feeds, and AI-assisted producer content generation.
     """
-    # Surface the provider's short message without dumping credentials, request
-    # bodies, or very long Google error payloads into the frontend toast.
+    # provider errors are shortened so credentials and long payloads stay hidden
     fallback = f"{provider} returned status {response.status_code}."
     try:
         # google error bodies are json when the provider gives useful detail
@@ -144,9 +140,7 @@ def _load_authorized_session():
     or isolates a business rule that should remain easy to test. The wider
     context is: Content domain: recipes, farm stories, saved recipe feeds, and AI-assisted producer content generation.
     """
-    # Vertex AI uses Google Application Default Credentials. In Docker this can
-    # come from the mounted gcloud ADC file; locally it can come from
-    # `gcloud auth application-default login`.
+    # vertex uses google application default credentials in docker or local dev
     try:
         import google.auth
         from google.auth.transport.requests import AuthorizedSession
@@ -171,9 +165,7 @@ def _extract_json_array(text: str) -> list[dict[str, Any]]:
     or isolates a business rule that should remain easy to test. The wider
     context is: Content domain: recipes, farm stories, saved recipe feeds, and AI-assisted producer content generation.
     """
-    # Gemini/Vertex may wrap JSON in markdown fences even when instructed not
-    # to. The parser tolerates that but still requires a JSON array, because the
-    # producer UI expects exactly three structured suggestions.
+    # model output can include markdown fences so the parser extracts json
     cleaned = text.strip()
     if cleaned.startswith("```"):
         # model output can still include markdown fences so strip them first
@@ -198,9 +190,7 @@ def _build_prompt(content_type: str, products: list[dict[str, Any]], context: di
     or isolates a business rule that should remain easy to test. The wider
     context is: Content domain: recipes, farm stories, saved recipe feeds, and AI-assisted producer content generation.
     """
-    # The prompt deliberately constrains claims: producers can edit the copy, but
-    # the generator should not invent certifications, allergen guarantees, or
-    # medical/nutrition claims that would be risky in a food marketplace.
+    # prompt rules prevent invented certifications allergens and health claims
     type_rules = (
         # recipe and story prompts split here so the ai does not return same shaped copy
         "Recipe-specific requirements: use the selected products as the main ingredient context; "
@@ -235,8 +225,7 @@ def _parse_suggestions(data: dict[str, Any], context: dict[str, Any]) -> list[Ge
     or isolates a business rule that should remain easy to test. The wider
     context is: Content domain: recipes, farm stories, saved recipe feeds, and AI-assisted producer content generation.
     """
-    # Both Vertex and Gemini API-key responses share this candidate/parts shape,
-    # which lets the rest of the content view stay provider-agnostic.
+    # vertex and gemini key responses share this candidate parts shape
     try:
         text = data["candidates"][0]["content"]["parts"][0]["text"]
     except (KeyError, IndexError, TypeError) as exc:
@@ -275,9 +264,9 @@ def _generate_with_gemini_api_key(
     context: dict[str, Any],
     timeout_seconds: int,
 ) -> list[GeneratedSuggestion]:
-    # API-key mode is the simplest path for local demos. It calls Google AI
-    # Studio's Gemini endpoint directly and avoids requiring gcloud credentials
-    # inside Docker.
+    # api key mode keeps the demo simple when adc is not mounted
+    # it calls gemini directly while still using the same prompt and parser
+    # this keeps local and vertex paths comparable
     model_name = _gemini_model_name(model)
     endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
     payload = {
@@ -307,8 +296,9 @@ def _generate_with_vertex_adc(
     context: dict[str, Any],
     timeout_seconds: int,
 ) -> list[GeneratedSuggestion]:
-    # ADC mode is the production-style path: the app exchanges local/service
-    # account credentials for a Google-authenticated Vertex AI HTTP session.
+    # adc mode is the production style vertex path
+    # google auth owns token refresh so the app never stores bearer tokens
+    # the response is parsed exactly like the gemini key path
     endpoint = (
         f"https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}"
         f"/locations/{location}/publishers/google/models/{model}:generateContent"
@@ -339,9 +329,9 @@ def generate_content_suggestions(
     products: list[dict[str, Any]],
     context: dict[str, Any],
 ) -> list[GeneratedSuggestion]:
-    # Prefer an explicit Gemini API key when present, then fall back to Vertex
-    # ADC. This keeps the feature usable for teammates who cannot create service
-    # account JSON keys because of organisation policy.
+    # prefer an explicit gemini key when present then fall back to vertex adc
+    # this lets the same feature run in docker demos and service account setups
+    # both paths still use the same safety prompt and json validation
     project_id = (getattr(settings, "VERTEX_AI_PROJECT_ID", "") or "").strip()
     location = (getattr(settings, "VERTEX_AI_LOCATION", "") or "").strip()
     model = (getattr(settings, "VERTEX_AI_MODEL", "") or "").strip()

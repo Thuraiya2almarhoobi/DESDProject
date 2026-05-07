@@ -51,9 +51,18 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/ca
 import { Badge } from '../../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Separator } from '../../components/ui/separator';
+import { Textarea } from '../../components/ui/textarea';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../../components/ui/dialog';
 import { OrderHistoryPage } from '../OrderHistoryPage';
 
-type ProducerOrderStatus = 'pending' | 'confirmed' | 'ready' | 'delivered' | 'cancelled';
+type ProducerOrderStatus = 'pending' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
 /**
  * DELIVERY_POLL_MS boundary.
  *
@@ -68,7 +77,16 @@ interface ProducerSubOrderItemApi {
   product_name: string;
   quantity: string;
   unit: string;
+  unit_price?: string;
   line_total: string;
+  product_image_url?: string;
+  allergen_info?: string;
+  is_organic?: boolean;
+  organic_certification?: string;
+  is_surplus?: boolean;
+  surplus_discount_percent?: number | null;
+  surplus_best_before?: string;
+  surplus_note?: string;
 }
 
 interface ProducerSubOrderApi {
@@ -82,8 +100,20 @@ interface ProducerSubOrderApi {
   payout_amount: string;
   customer_name: string;
   customer_email: string;
+  customer_phone?: string;
+  customer_account_type?: string;
+  customer_account_type_label?: string;
   delivery_address: string;
+  delivery_address_label?: string;
   customer_postcode: string;
+  payment_status?: string;
+  commission_rate?: string;
+  total_food_miles?: string;
+  max_food_miles?: string;
+  is_recurring_instance?: boolean;
+  recurring_template_id?: number | null;
+  recurring_scheduled_for?: string | null;
+  preparation_details?: string;
   lead_time_hours: number;
   order_created_at: string;
   notes?: string;
@@ -93,9 +123,43 @@ interface ProducerSubOrderApi {
     new_status: string;
     note: string;
     created_at: string;
+    actor_role?: string;
+    actor_name?: string;
+    producer_name?: string;
   }>;
   items: ProducerSubOrderItemApi[];
   delivery?: ApiDeliveryInfo | null;
+}
+
+interface ProducerRecurringDemandItemApi {
+  product_id: number;
+  product_name: string;
+  quantity: string;
+  default_quantity: string;
+  unit: string;
+  unit_price: string;
+  line_total: string;
+  available_stock: string;
+  is_available: boolean;
+}
+
+interface ProducerRecurringDemandApi {
+  id: number;
+  restaurant_name: string;
+  restaurant_email: string;
+  frequency: string;
+  order_day: number;
+  delivery_day: number;
+  next_order_date: string;
+  delivery_address: string;
+  customer_postcode: string;
+  payment_method: string;
+  is_paused: boolean;
+  last_generated_at?: string | null;
+  next_instance_override?: unknown | null;
+  producer_subtotal: string;
+  unavailable_products: string[];
+  items: ProducerRecurringDemandItemApi[];
 }
 
 function toNumber(value: string): number {
@@ -136,7 +200,9 @@ export function ProducerOrdersPage() {
   const activeOrdersView = new URLSearchParams(location.search).get('view') === 'purchases' ? 'purchases' : 'sales';
   const searchQuery = new URLSearchParams(location.search).get('q') || '';
   const [orders, setOrders] = useState<ProducerSubOrderApi[]>([]);
+  const [recurringDemand, setRecurringDemand] = useState<ProducerRecurringDemandApi[]>([]);
   const [loading, setLoading] = useState(true);
+  const [recurringLoading, setRecurringLoading] = useState(true);
   const [simulationNow, setSimulationNow] = useState(() => Date.now());
   const [statusFilter, setStatusFilter] = useState<ProducerOrderStatus | 'all'>('all');
   const [customerFilter, setCustomerFilter] = useState('all');
@@ -146,6 +212,10 @@ export function ProducerOrdersPage() {
   const [deliveryActionOrderId, setDeliveryActionOrderId] = useState<number | null>(null);
   const [deliveryErrors, setDeliveryErrors] = useState<Record<number, string>>({});
   const [focusedUrgentOrderId, setFocusedUrgentOrderId] = useState<number | null>(null);
+  const [noteDialogOrder, setNoteDialogOrder] = useState<ProducerSubOrderApi | null>(null);
+  const [noteDraft, setNoteDraft] = useState('');
+  const [isRecurringDemandOpen, setIsRecurringDemandOpen] = useState(false);
+  const weekdayOptions = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
   const loadOrders = useCallback(async (background = false) => {
     if (!background) {
@@ -176,6 +246,25 @@ export function ProducerOrdersPage() {
     }
   }, []);
 
+  const loadRecurringDemand = useCallback(async (background = false) => {
+    // keep recurring demand separate from sales orders so producers can plan ahead
+    if (!background) {
+      setRecurringLoading(true);
+    }
+    try {
+      const payload = await apiJson<ProducerRecurringDemandApi[]>('/api/orders/producer/recurring-demand/');
+      setRecurringDemand(payload);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to load recurring demand.';
+      toast.error(message);
+      setRecurringDemand([]);
+    } finally {
+      if (!background) {
+        setRecurringLoading(false);
+      }
+    }
+  }, []);
+
   useEffect(() => {
     let mounted = true;
 
@@ -183,19 +272,20 @@ export function ProducerOrdersPage() {
       if (!mounted) {
         return;
       }
-      await loadOrders(false);
+      await Promise.all([loadOrders(false), loadRecurringDemand(false)]);
     };
 
     void run();
     return () => {
       mounted = false;
     };
-  }, [loadOrders]);
+  }, [loadOrders, loadRecurringDemand]);
 
   const statusCounts = useMemo(
     () => ({
       pending: orders.filter((order) => order.status === 'pending').length,
       confirmed: orders.filter((order) => order.status === 'confirmed').length,
+      preparing: orders.filter((order) => order.status === 'preparing').length,
       ready: orders.filter((order) => order.status === 'ready').length,
       delivered: orders.filter((order) => order.status === 'delivered').length,
       cancelled: orders.filter((order) => order.status === 'cancelled').length,
@@ -204,6 +294,14 @@ export function ProducerOrdersPage() {
   );
 
   const urgentOrders = useMemo(() => orders.filter((order) => isOrderUrgent(order)), [orders]);
+  const recurringDemandSummary = useMemo(
+    () => ({
+      active: recurringDemand.filter((template) => !template.is_paused).length,
+      unavailable: recurringDemand.reduce((count, template) => count + template.unavailable_products.length, 0),
+      totalValue: recurringDemand.reduce((sum, template) => sum + toNumber(template.producer_subtotal), 0),
+    }),
+    [recurringDemand],
+  );
   const customerOptions = useMemo(
     () => Array.from(new Set(orders.map((order) => order.customer_name).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
     [orders],
@@ -302,6 +400,42 @@ export function ProducerOrdersPage() {
         }));
       }
       toast.error(message);
+    } finally {
+      setUpdatingOrderId(null);
+    }
+  };
+
+  const openNoteDialog = (order: ProducerSubOrderApi) => {
+    // notes open in a dialog so status updates stay uncluttered
+    setNoteDialogOrder(order);
+    setNoteDraft('');
+  };
+
+  const saveOrderNote = async () => {
+    if (!noteDialogOrder) {
+      return;
+    }
+    const note = noteDraft.trim();
+    if (!note) {
+      toast.error('Write a note before saving.');
+      return;
+    }
+
+    setUpdatingOrderId(noteDialogOrder.id);
+    try {
+      const updated = await apiJson<ProducerSubOrderApi>(
+        `/api/orders/producer/sub-orders/${noteDialogOrder.id}/status/`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ status: noteDialogOrder.status, note }),
+        },
+      );
+      setOrders((previous) => previous.map((row) => (row.id === updated.id ? updated : row)));
+      toast.success(`Note saved for ${updated.order_number}.`);
+      setNoteDialogOrder(null);
+      setNoteDraft('');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to save note.');
     } finally {
       setUpdatingOrderId(null);
     }
@@ -423,6 +557,7 @@ export function ProducerOrdersPage() {
     const colors: Record<ProducerOrderStatus, string> = {
       pending: 'bg-yellow-100 text-yellow-800 border-yellow-300',
       confirmed: 'bg-blue-100 text-blue-800 border-blue-300',
+      preparing: 'bg-indigo-100 text-indigo-800 border-indigo-300',
       ready: 'bg-green-100 text-green-800 border-green-300',
       delivered: 'bg-gray-100 text-gray-800 border-gray-300',
       cancelled: 'bg-red-100 text-red-800 border-red-300',
@@ -612,6 +747,117 @@ export function ProducerOrdersPage() {
           </Card>
         )}
 
+        <Card className="mb-6 border-blue-200 bg-blue-50/40">
+          <CardHeader>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">Recurring demand</p>
+                <CardTitle className="mt-1 text-xl">Upcoming Restaurant Templates</CardTitle>
+                <p className="mt-1 text-sm text-blue-900">
+                  Producers receive advance notice here before recurring restaurant templates become normal producer orders.
+                  Use this panel to plan harvest, kitchen prep, and low-stock replenishment before the next instance is generated.
+                </p>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-sm">
+                <div className="rounded-lg border border-blue-100 bg-white/80 px-3 py-2">
+                  <p className="text-blue-700">Active</p>
+                  <p className="font-semibold">{recurringDemandSummary.active}</p>
+                </div>
+                <div className="rounded-lg border border-blue-100 bg-white/80 px-3 py-2">
+                  <p className="text-blue-700">Value</p>
+                  <p className="font-semibold">£{recurringDemandSummary.totalValue.toFixed(2)}</p>
+                </div>
+                <div className="rounded-lg border border-blue-100 bg-white/80 px-3 py-2">
+                  <p className="text-blue-700">Alerts</p>
+                  <p className="font-semibold">{recurringDemandSummary.unavailable}</p>
+                </div>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-100 bg-white/70 px-4 py-3">
+              <div>
+                <p className="text-sm font-medium text-blue-950">
+                  {recurringDemandSummary.active} active template{recurringDemandSummary.active === 1 ? '' : 's'} include your products.
+                </p>
+                <p className="text-xs text-blue-800">Details are hidden by default for a cleaner producer orders view.</p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="border-blue-200 bg-white text-blue-800 hover:bg-blue-50"
+                onClick={() => setIsRecurringDemandOpen((current) => !current)}
+              >
+                {isRecurringDemandOpen ? 'Hide recurring templates' : 'Show recurring templates'}
+              </Button>
+            </div>
+            {/* keep template details hidden until producer asks for them */}
+            {isRecurringDemandOpen && (
+              <div className="mt-4">
+                {recurringLoading ? (
+                  <p className="text-sm text-blue-900">Loading recurring demand...</p>
+                ) : recurringDemand.length === 0 ? (
+                  <p className="text-sm text-blue-900">No active restaurant recurring templates currently include your products.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {recurringDemand.map((template, index) => (
+                      <div key={template.id} className="rounded-xl border border-blue-100 bg-white p-4">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-semibold text-gray-900">Template {index + 1}: {template.restaurant_name}</p>
+                              <Badge variant={template.is_paused ? 'secondary' : 'default'}>
+                                {template.is_paused ? 'Paused' : 'Active'}
+                              </Badge>
+                              <Badge variant="outline">{template.frequency}</Badge>
+                              {template.next_instance_override && (
+                                <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-800">
+                                  Next instance edited
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="mt-1 text-sm text-gray-600">
+                              {template.restaurant_email} • Next order {template.next_order_date} • Delivery day {weekdayOptions[template.delivery_day] || template.delivery_day}
+                            </p>
+                            <p className="mt-1 text-sm font-medium text-blue-800">
+                              Advance notice active: this template is visible before the restaurant generates the next order instance.
+                            </p>
+                            <p className="mt-1 text-xs text-gray-500">
+                              {template.delivery_address} • {template.customer_postcode}
+                            </p>
+                          </div>
+                          <div className="text-right text-sm">
+                            <p className="text-gray-500">Your next-instance subtotal</p>
+                            <p className="text-lg font-semibold text-blue-800">£{toNumber(template.producer_subtotal).toFixed(2)}</p>
+                          </div>
+                        </div>
+                        <div className="mt-3 space-y-2">
+                          {template.items.map((item) => (
+                            <div key={item.product_id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-blue-50/60 px-3 py-2 text-sm">
+                              <button
+                                type="button"
+                                onClick={() => navigate(`/product/${item.product_id}`)}
+                                className="text-left font-medium text-[var(--forest-green)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--forest-green)]"
+                              >
+                                {item.product_name} • {toNumber(item.quantity).toFixed(0)} {item.unit}
+                              </button>
+                              <span className={item.is_available ? 'text-gray-700' : 'font-medium text-red-700'}>
+                                Stock {toNumber(item.available_stock).toFixed(0)} • £{toNumber(item.line_total).toFixed(2)}
+                                {!item.is_available ? ' • Unavailable for next run' : ''}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         <Card className="mb-6">
           <CardContent className="p-6">
             <div className="space-y-4">
@@ -638,6 +884,13 @@ export function ProducerOrdersPage() {
                   onClick={() => setStatusFilter('confirmed')}
                 >
                   Confirmed ({statusCounts.confirmed})
+                </Badge>
+                <Badge
+                  variant={statusFilter === 'preparing' ? 'default' : 'outline'}
+                  className="cursor-pointer"
+                  onClick={() => setStatusFilter('preparing')}
+                >
+                  Preparing ({statusCounts.preparing})
                 </Badge>
                 <Badge
                   variant={statusFilter === 'ready' ? 'default' : 'outline'}
@@ -772,6 +1025,12 @@ export function ProducerOrdersPage() {
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
                           <CardTitle className="text-lg">Order {order.order_number}</CardTitle>
+                          {order.is_recurring_instance && (
+                            <Badge variant="outline" className="gap-1 border-blue-200 bg-blue-50 text-blue-800">
+                              <Calendar className="size-3" />
+                              Recurring
+                            </Badge>
+                          )}
                           {urgent && (
                             <Badge variant="destructive" className="gap-1">
                               <Clock className="size-3" />
@@ -779,7 +1038,14 @@ export function ProducerOrdersPage() {
                             </Badge>
                           )}
                         </div>
-                        <p className="text-sm text-gray-700">{order.customer_name} • {order.customer_email}</p>
+                        <p className="text-sm text-gray-700">
+                          {order.customer_name} • {order.customer_email}
+                          {order.customer_phone ? ` • ${order.customer_phone}` : ''}
+                        </p>
+                        <p className="mt-1 text-xs text-gray-600">
+                          Account type: {order.customer_account_type_label || order.customer_account_type || 'Customer'} • Payment: {order.payment_status || 'pending'}
+                          {order.recurring_scheduled_for ? ` • Recurring date: ${order.recurring_scheduled_for}` : ''}
+                        </p>
                         {delivery && (
                           <p className="mt-2 text-sm font-medium text-green-800">
                             Live delivery status: {formatDeliveryStatus(displayDeliveryStatus)}
@@ -796,11 +1062,25 @@ export function ProducerOrdersPage() {
                       <h4 className="font-medium mb-2 text-gray-900">Items</h4>
                       <div className="space-y-2">
                         {order.items.map((item, index) => (
-                          <div key={`${order.id}-${item.product_name}-${index}`} className="flex justify-between text-sm">
-                            <span className="text-gray-700">
-                              {item.product_name} × {item.quantity} {item.unit}
-                            </span>
-                            <span className="font-medium text-gray-900">£{toNumber(item.line_total).toFixed(2)}</span>
+                          <div key={`${order.id}-${item.product_name}-${index}`} className="flex gap-3 rounded-lg border bg-white p-3 text-sm">
+                            {item.product_image_url && (
+                              <img src={item.product_image_url} alt={item.product_name} className="size-12 rounded object-cover" />
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <div className="flex justify-between gap-3">
+                                <span className="font-medium text-gray-800">
+                                  {item.product_name} × {item.quantity} {item.unit}
+                                </span>
+                                <span className="font-medium text-gray-900">£{toNumber(item.line_total).toFixed(2)}</span>
+                              </div>
+                              <p className="mt-1 text-xs text-gray-600">
+                                Unit: £{toNumber(item.unit_price || '0').toFixed(2)} • Allergens: {item.allergen_info || 'No common allergens'}
+                              </p>
+                              <p className="mt-1 text-xs text-gray-600">
+                                {item.is_organic ? item.organic_certification || 'Certified Organic' : 'Not Certified Organic'}
+                                {item.is_surplus ? ` • Surplus ${item.surplus_discount_percent || 0}% off${item.surplus_best_before ? ` • best before ${item.surplus_best_before}` : ''}` : ''}
+                              </p>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -823,10 +1103,24 @@ export function ProducerOrdersPage() {
                         <MapPin className="size-4 mt-0.5 text-gray-500" />
                         <div>
                           <p className="text-sm font-medium text-gray-900">Delivery Address</p>
+                          {order.delivery_address_label && (
+                            <p className="text-xs font-medium text-gray-600">{order.delivery_address_label}</p>
+                          )}
                           <p className="text-sm text-gray-700">{order.delivery_address}</p>
+                          <p className="text-xs text-gray-600">
+                            Food miles: {toNumber(order.total_food_miles || '0').toFixed(2)} total / {toNumber(order.max_food_miles || '0').toFixed(2)} local-radius check
+                          </p>
                         </div>
                       </div>
                     </div>
+
+                    {(order.notes || order.preparation_details) && (
+                      <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900">
+                        <p className="font-medium">Preparation and customer notes</p>
+                        {order.preparation_details && <p className="mt-1">{order.preparation_details}</p>}
+                        {order.notes && <p className="mt-1">{order.notes}</p>}
+                      </div>
+                    )}
 
                     <Separator />
 
@@ -889,7 +1183,7 @@ export function ProducerOrdersPage() {
                             variant="outline"
                             size="sm"
                             className="flex-1 gap-2"
-                            onClick={() => toast.info(`Delivery postcode: ${order.customer_postcode}`)}
+                            onClick={() => openNoteDialog(order)}
                           >
                             <FileText className="size-4" />
                             Note
@@ -897,6 +1191,34 @@ export function ProducerOrdersPage() {
                         </div>
                       </div>
                     </div>
+
+                    {order.status_history && order.status_history.length > 0 && (
+                      <>
+                        <Separator />
+                        <div className="rounded-xl border bg-gray-50 p-4">
+                          <p className="mb-3 text-sm font-semibold text-gray-900">Status history and notes</p>
+                          <div className="space-y-3">
+                            {order.status_history.map((entry) => (
+                              <div key={entry.id} className="rounded-lg border bg-white p-3 text-sm">
+                                <div className="flex flex-wrap justify-between gap-2">
+                                  <span className="font-medium text-gray-900">
+                                    {entry.previous_status || 'Created'} {'->'} {entry.new_status}
+                                  </span>
+                                  <span className="text-xs text-gray-500">
+                                    {format(parseISO(entry.created_at), 'MMM d, yyyy h:mm a')}
+                                  </span>
+                                </div>
+                                <p className="mt-1 text-xs text-gray-600">
+                                  Actor: {entry.actor_name || entry.actor_role || 'System'}
+                                  {entry.producer_name ? ` • Producer: ${entry.producer_name}` : ''}
+                                </p>
+                                {entry.note && <p className="mt-2 text-gray-700">{entry.note}</p>}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </>
+                    )}
 
                     <Separator />
 
@@ -1059,6 +1381,49 @@ export function ProducerOrdersPage() {
           </div>
         )}
       </main>
+      <Dialog
+        open={Boolean(noteDialogOrder)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setNoteDialogOrder(null);
+            setNoteDraft('');
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add producer note</DialogTitle>
+            <DialogDescription>
+              Save a timestamped note for {noteDialogOrder?.order_number}. The note is stored in the order audit trail with the current status.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Textarea
+              value={noteDraft}
+              onChange={(event) => setNoteDraft(event.target.value)}
+              rows={5}
+              placeholder="Example: Customer requested delivery through side entrance. Packed chilled items separately."
+            />
+            <p className="text-xs text-gray-500">
+              Current status: {noteDialogOrder ? formatBusinessStatus(noteDialogOrder.status) : 'N/A'}
+            </p>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setNoteDialogOrder(null);
+                setNoteDraft('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button onClick={() => void saveOrderNote()} disabled={updatingOrderId === noteDialogOrder?.id}>
+              {updatingOrderId === noteDialogOrder?.id ? 'Saving...' : 'Save Note'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

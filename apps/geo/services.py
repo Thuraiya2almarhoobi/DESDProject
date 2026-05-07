@@ -31,7 +31,7 @@ from apps.orders.services import get_or_create_cart, get_cart_groups
 
 from .models import PostcodeLocation
 
-# Static fallback coordinates around Bristol to keep local demo self-contained.
+# static fallback coordinates around bristol keep local demo self contained
 FALLBACK_POSTCODE_COORDINATES = {
     "BS15JG": (51.4545, -2.5879),  # customer
     "BS14DJ": (51.4510, -2.5904),  # producer sample
@@ -78,8 +78,7 @@ def get_postcode_coordinates(postcode: str) -> tuple[float, float] | None:
     or isolates a business rule that should remain easy to test. The wider
     context is: Geospatial domain: postcode/location lookup, distance calculations, and map-friendly producer/customer coordinates.
     """
-    # Prefer cached database coordinates, then seed known Bristol fallback
-    # postcodes into the database so demo/test runs are deterministic offline.
+    # cached coordinates are preferred and fallback postcodes keep demos offline
     normalized = normalize_postcode(postcode)
     if not normalized:
         return None
@@ -104,8 +103,7 @@ def haversine_miles(lat1: float, lon1: float, lat2: float, lon2: float) -> float
     or isolates a business rule that should remain easy to test. The wider
     context is: Geospatial domain: postcode/location lookup, distance calculations, and map-friendly producer/customer coordinates.
     """
-    # Haversine is enough for Bristol-area food-mile estimates and avoids
-    # calling a paid distance API for every marketplace/card render.
+    # haversine is enough for bristol area food mile estimates
     radius_miles = 3958.8
     phi1 = math.radians(lat1)
     phi2 = math.radians(lat2)
@@ -125,8 +123,7 @@ def get_producers_near_postcode(postcode: str, radius_miles: float = 20.0) -> di
     or isolates a business rule that should remain easy to test. The wider
     context is: Geospatial domain: postcode/location lookup, distance calculations, and map-friendly producer/customer coordinates.
     """
-    # Used by the "Near Me" page: resolve the buyer postcode once, then compare
-    # every active producer by straight-line food miles.
+    # near me resolves the buyer postcode once then compares active producers
     customer_coords = get_postcode_coordinates(postcode)
     if not customer_coords:
         return {"postcode": postcode, "radius_miles": radius_miles, "producers": []}
@@ -170,8 +167,7 @@ def get_user_default_postcode(user) -> str:
     or isolates a business rule that should remain easy to test. The wider
     context is: Geospatial domain: postcode/location lookup, distance calculations, and map-friendly producer/customer coordinates.
     """
-    # Role-specific profiles store their address relation under different field
-    # names; this helper gives the rest of the app one postcode lookup path.
+    # role profiles store addresses differently so this gives one postcode path
     if not user or not getattr(user, "is_authenticated", False):
         return ""
 
@@ -205,7 +201,11 @@ def get_user_default_postcode(user) -> str:
     return ""
 
 
-def get_cart_food_miles(user, postcode: str | None = None) -> dict:
+def get_cart_food_miles(
+    user,
+    postcode: str | None = None,
+    selected_cart_item_ids: list[int] | None = None,
+) -> dict:
     """
     Helper for the file role: Holds domain/service logic that should stay outside thin HTTP view classes.
 
@@ -213,8 +213,7 @@ def get_cart_food_miles(user, postcode: str | None = None) -> dict:
     or isolates a business rule that should remain easy to test. The wider
     context is: Geospatial domain: postcode/location lookup, distance calculations, and map-friendly producer/customer coordinates.
     """
-    # Cart food miles are grouped by producer because multi-producer checkout
-    # needs to show where each supplier is coming from.
+    # cart food miles are grouped by producer for multi producer checkout
     cart = get_or_create_cart(user)
     customer_postcode = postcode or get_user_default_postcode(user)
     customer_coords = get_postcode_coordinates(customer_postcode)
@@ -223,6 +222,8 @@ def get_cart_food_miles(user, postcode: str | None = None) -> dict:
         return {
             "customer_postcode": customer_postcode,
             "total_food_miles": Decimal("0.00"),
+            "max_producer_distance": Decimal("0.00"),
+            "within_twenty_miles": False,
             "items": [],
             "producer_totals": [],
         }
@@ -230,14 +231,16 @@ def get_cart_food_miles(user, postcode: str | None = None) -> dict:
     item_rows = []
     producer_totals: dict[int, dict] = {}
     total = Decimal("0.00")
+    max_producer_distance = Decimal("0.00")
 
-    for group in get_cart_groups(cart):
+    for group in get_cart_groups(cart, selected_cart_item_ids):
         producer_coords = get_postcode_coordinates(group.producer.postcode)
         if not producer_coords:
             continue
         producer_distance = Decimal(
             str(haversine_miles(customer_coords[0], customer_coords[1], producer_coords[0], producer_coords[1]))
         )
+        max_producer_distance = max(max_producer_distance, producer_distance)
         producer_totals[group.producer.id] = {
             "producer_id": group.producer.id,
             "producer_name": group.producer.business_name,
@@ -262,6 +265,8 @@ def get_cart_food_miles(user, postcode: str | None = None) -> dict:
         "customer_postcode": normalize_postcode(customer_postcode),
         "customer_coordinates": {"lat": customer_coords[0], "lng": customer_coords[1]},
         "total_food_miles": total.quantize(Decimal("0.01")),
+        "max_producer_distance": max_producer_distance.quantize(Decimal("0.01")),
+        "within_twenty_miles": max_producer_distance <= Decimal("20.00"),
         "items": item_rows,
         "producer_totals": list(producer_totals.values()),
     }

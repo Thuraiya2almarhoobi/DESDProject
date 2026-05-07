@@ -1532,12 +1532,12 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
 	                )}
 
 	                {aiPanelMode === 'saved' && (
-	                  <div className="flex flex-col gap-2 rounded-xl border border-[#e4ded2] bg-[#fffefa] p-3 sm:flex-row">
+	                  <div className="flex w-full min-w-0 flex-col gap-2 rounded-xl border border-[#e4ded2] bg-[#fffefa] p-3 sm:flex-row">
 	                    <Button
 	                      variant="outline"
 	                      onClick={reloadAiSuggestions}
 	                      disabled={generatingAi}
-	                      className="flex-1 justify-center"
+	                      className="min-w-0 flex-1 justify-center"
 	                    >
 	                      <RefreshCw className="mr-2 size-4" />
 	                      Reload suggestions
@@ -1546,7 +1546,7 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
 	                      variant="outline"
 	                      onClick={fullRefreshAiSuggestions}
 	                      disabled={generatingAi}
-	                      className="flex-1 justify-center border-[#b89573] text-[#6f4b2f] hover:bg-[#f7efe7]"
+	                      className="min-w-0 flex-1 justify-center border-[#b89573] text-[#6f4b2f] hover:bg-[#f7efe7]"
 	                    >
 	                      <Sparkles className="mr-2 size-4" />
 	                      Random generate

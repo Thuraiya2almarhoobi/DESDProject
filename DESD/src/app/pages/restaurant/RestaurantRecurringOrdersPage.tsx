@@ -1,16 +1,8 @@
 /**
- * DESD Marketplace documentation.
+ * desd marketplace notes
  *
- * File role:
- *   Implements the RestaurantRecurringOrdersPage browser route and coordinates the UI state for that screen.
- *
- * Frontend context:
- *   Route-level React page layer: one component per main browser page or role-specific workspace.
- *
- * Implementation notes:
- *   Keep comments focused on state ownership, role-specific routing, API calls,
- *   and non-obvious UI decisions. Styling-only class names are left uncommented
- *   unless they communicate an important layout or accessibility choice.
+ * restaurant recurring order workspace for templates overrides and manual runs
+ * comments here explain api ownership and one off next instance behavior
  */
 
 import { useEffect, useMemo, useState } from 'react';
@@ -31,9 +23,12 @@ interface RecurringTemplateItem {
   id: number;
   product_id: number;
   product_name: string;
+  producer_id: number;
   producer_name: string;
   available_stock: string;
   default_quantity: string;
+  unit_price?: string;
+  default_line_total?: string;
 }
 
 interface RecurringTemplateAlert {
@@ -65,13 +60,24 @@ function weekdayName(value: number): string {
   return names[value] || 'Unknown';
 }
 
+function formatWhole(value: string | number): string {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return String(value);
+  }
+  return String(Math.round(parsed));
+}
+
+function money(value: string | number): string {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? `£${parsed.toFixed(2)}` : '£0.00';
+}
+
 /**
- * RestaurantRecurringOrdersPage boundary.
+ * recurring restaurant orders page boundary
  *
- * This exported unit supports the file role: Implements the RestaurantRecurringOrdersPage browser route and coordinates the UI state for that screen.
- * It belongs to: Route-level React page layer: one component per main browser page or role-specific workspace.
- * Keep role checks, API coordination, and cross-page side effects visible here
- * so future contributors can trace behavior during sprint reviews.
+ * the page shows template defaults beside the editable next instance
+ * generated orders and payments remain owned by the backend service
  */
 export function RestaurantRecurringOrdersPage() {
   const navigate = useNavigate();
@@ -83,6 +89,8 @@ export function RestaurantRecurringOrdersPage() {
   const [overrideWarnings, setOverrideWarnings] = useState<Record<number, Record<number, string>>>({});
 
   const loadTemplates = async () => {
+    // rebuild drafts from api data so cancelled edits never hang around
+    // each refresh treats the backend as owner of template and override state
     setLoading(true);
     try {
       const payload = await apiJson<RecurringTemplatePayload[]>('/api/restaurant/recurring-orders/');
@@ -96,6 +104,8 @@ export function RestaurantRecurringOrdersPage() {
           const overridden = template.next_instance_override?.items.find(
             (row) => row.product_id === item.product_id,
           );
+          // override drafts start from the next instance when it exists
+          // otherwise the editable quantities mirror the original template
           itemDrafts[item.product_id] = overridden?.quantity || item.default_quantity;
           itemWarnings[item.product_id] = '';
         });
@@ -117,11 +127,15 @@ export function RestaurantRecurringOrdersPage() {
   }, []);
 
   const activeTemplates = useMemo(
+    // hide cancelled templates without deleting their history from backend
+    // cancelled rows can still support future audit or settlement checks
     () => templates.filter((template) => !template.is_cancelled),
     [templates],
   );
 
   const updateTemplate = async (templateId: number, payload: Record<string, unknown>) => {
+    // route all template patch actions through one refresh path
+    // pause resume and cancel share the same backend permission check
     setSavingTemplateId(templateId);
     try {
       await apiJson(`/api/restaurant/recurring-orders/${templateId}/`, {
@@ -137,12 +151,16 @@ export function RestaurantRecurringOrdersPage() {
   };
 
   const saveNextOverride = async (template: RecurringTemplatePayload) => {
+    // clamp next instance quantities so the template itself stays unchanged
+    // this keeps one off kitchen changes separate from the recurring base order
     setSavingTemplateId(template.id);
     try {
       const draft = overrideDrafts[template.id] || {};
       const items = template.items.map((item) => ({
         product_id: item.product_id,
         quantity: (() => {
+          // next instance edits are rounded to whole quantities for restaurant ux
+          // stock limits are applied before the override reaches the api
           const rawValue = Number(draft[item.product_id] || item.default_quantity);
           const availableStock = Number(item.available_stock);
           if (!Number.isFinite(rawValue)) {
@@ -151,7 +169,7 @@ export function RestaurantRecurringOrdersPage() {
           if (!Number.isFinite(availableStock) || availableStock <= 0) {
             return '0.01';
           }
-          return Math.max(0.01, Math.min(rawValue, availableStock)).toFixed(2);
+          return String(Math.max(1, Math.min(Math.round(rawValue), Math.floor(availableStock))));
         })(),
       }));
       await apiJson(`/api/restaurant/recurring-orders/${template.id}/next-instance/`, {
@@ -168,6 +186,8 @@ export function RestaurantRecurringOrdersPage() {
   };
 
   const runGeneration = async () => {
+    // generated recurring orders create normal orders plus payment rows
+    // producers then see advance demand and generated orders in their own pages
     setRunning(true);
     try {
       const payload = await apiJson<{ generated_count: number; results: Array<{ unavailable_products: unknown[] }> }>(
@@ -178,6 +198,8 @@ export function RestaurantRecurringOrdersPage() {
         },
       );
       const unavailableCount = payload.results.reduce(
+        // unavailable products are counted so the demo can prove stock checks ran
+        // the toast keeps stock failures visible without leaving the page
         (sum, row) => sum + (row.unavailable_products?.length || 0),
         0,
       );
@@ -223,7 +245,9 @@ export function RestaurantRecurringOrdersPage() {
           <CardContent className="p-6 flex flex-wrap items-center gap-4 justify-between">
             <div>
               <p className="text-sm text-gray-600">Run due recurring templates and generate order instances.</p>
-              <p className="text-xs text-gray-500 mt-1">Each generated instance creates its own payment record.</p>
+              <p className="text-xs text-gray-500 mt-1">
+                Each generated instance creates its own paid order and payment transaction, so payment is processed per recurring order instance rather than only on the template.
+              </p>
             </div>
             <Button onClick={runGeneration} disabled={running}>
               <RefreshCw className="size-4 mr-2" />
@@ -241,11 +265,11 @@ export function RestaurantRecurringOrdersPage() {
             </CardContent>
           </Card>
         ) : (
-          activeTemplates.map((template) => (
+          activeTemplates.map((template, index) => (
             <Card key={template.id}>
               <CardHeader className="pb-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <CardTitle className="text-lg">Template #{template.id}</CardTitle>
+                  <CardTitle className="text-lg">Template {index + 1}</CardTitle>
                   <div className="flex items-center gap-2">
                     <Badge variant={template.is_paused ? 'secondary' : 'default'}>
                       {template.is_paused ? 'Paused' : 'Active'}
@@ -271,17 +295,33 @@ export function RestaurantRecurringOrdersPage() {
                 </div>
 
                 <div className="border rounded-md">
-                  <div className="grid grid-cols-4 gap-2 p-3 text-xs font-semibold text-gray-600 border-b">
+                  <div className="grid grid-cols-5 gap-2 p-3 text-xs font-semibold text-gray-600 border-b">
                     <span>Product</span>
                     <span>Producer</span>
                     <span>Default Qty</span>
+                    <span>Original Amount</span>
                     <span>Next Instance Qty</span>
                   </div>
                   {template.items.map((item) => (
-                    <div key={item.id} className="grid grid-cols-4 gap-2 p-3 text-sm border-b last:border-b-0">
-                      <span>{item.product_name}</span>
-                      <span>{item.producer_name}</span>
-                      <span>{item.default_quantity}</span>
+                    <div key={item.id} className="grid grid-cols-5 gap-2 p-3 text-sm border-b last:border-b-0">
+                      {/* product and producer names behave like marketplace links
+                          this lets restaurant buyers inspect the item or farm before the next run */}
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/product/${item.product_id}`)}
+                        className="text-left font-medium text-[var(--forest-green)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--forest-green)]"
+                      >
+                        {item.product_name}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/producers/${item.producer_id}`)}
+                        className="text-left font-medium text-[var(--forest-green)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--forest-green)]"
+                      >
+                        {item.producer_name}
+                      </button>
+                      <span>{formatWhole(item.default_quantity)}</span>
+                      <span>{money(item.default_line_total || Number(item.default_quantity) * Number(item.unit_price || 0))}</span>
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
                           <Label htmlFor={`override-${template.id}-${item.product_id}`} className="sr-only">
@@ -290,10 +330,10 @@ export function RestaurantRecurringOrdersPage() {
                           <Input
                             id={`override-${template.id}-${item.product_id}`}
                             type="number"
-                            min="0.01"
+                            min="1"
                             max={item.available_stock}
-                            step="0.01"
-                            value={overrideDrafts[template.id]?.[item.product_id] || item.default_quantity}
+                            step="1"
+                            value={formatWhole(overrideDrafts[template.id]?.[item.product_id] || item.default_quantity)}
                             onChange={(event) => {
                               const next = Number(event.target.value);
                               setOverrideWarnings((previous) => ({
@@ -302,7 +342,7 @@ export function RestaurantRecurringOrdersPage() {
                                   ...(previous[template.id] || {}),
                                   [item.product_id]:
                                     Number.isFinite(next) && next > Number(item.available_stock)
-                                      ? `Above stock. Max ${item.available_stock}.`
+                                      ? `Above stock. Max ${formatWhole(item.available_stock)}.`
                                       : '',
                                 },
                               }));
@@ -315,8 +355,11 @@ export function RestaurantRecurringOrdersPage() {
                               }));
                             }}
                           />
-                          <span className="text-[11px] text-gray-500">Stock {item.available_stock}</span>
+                          <span className="text-[11px] text-gray-500">Stock {formatWhole(item.available_stock)}</span>
                         </div>
+                        <p className="text-[11px] text-gray-500">
+                          Next amount {money(Number(overrideDrafts[template.id]?.[item.product_id] || item.default_quantity) * Number(item.unit_price || 0))}
+                        </p>
                         {overrideWarnings[template.id]?.[item.product_id] ? (
                           <p className="text-[11px] text-orange-600">
                             {overrideWarnings[template.id][item.product_id]}

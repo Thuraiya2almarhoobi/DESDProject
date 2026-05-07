@@ -41,6 +41,7 @@ import { Label } from '../../components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
 import { ApiProducer, apiBlob, apiJson } from '../../lib/api';
 import { formatAdminCurrency, formatAdminDate, getDefaultAdminDateRange } from '../../lib/adminReporting';
+import { formatPercentRate } from '../../lib/numberFormat';
 
 interface CommissionReportOrderRow {
   order_id: number;
@@ -962,7 +963,7 @@ export function AdminCommissionPage() {
                   <Wallet className="mt-1 size-10 rounded-2xl bg-white p-2 text-[var(--forest-green)] shadow-sm" />
                   <div className="space-y-1">
                     <p className="font-semibold text-[#182219]">Commission calculation</p>
-                    <p className="text-sm text-[#4f5f53]">Rate: {selectedDetail.calculation.commission_rate}</p>
+                    <p className="text-sm text-[#4f5f53]">Rate: {formatPercentRate(selectedDetail.calculation.commission_rate)}</p>
                     <p className="text-sm text-[#4f5f53]">
                       Recorded commission: {formatAdminCurrency(selectedDetail.calculation.commission_amount)}
                     </p>

@@ -75,9 +75,9 @@ def _service_headers() -> dict[str, str]:
     or isolates a business rule that should remain easy to test. The wider
     context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
     """
-    # Stuart credentials live in the delivery microservice. Django authenticates
-    # to that service with a shared internal token rather than sending the Stuart
-    # client secret from this app.
+    # stuart credentials live in the delivery microservice
+    # django authenticates with a shared internal token instead
+    # this keeps provider secrets out of the marketplace app
     headers = {"Content-Type": "application/json"}
     shared_secret = (getattr(settings, "STUART_SERVICE_SHARED_SECRET", "") or "").strip()
     if shared_secret:
@@ -104,6 +104,8 @@ def _simulation_enabled() -> bool:
     or isolates a business rule that should remain easy to test. The wider
     context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
     """
+    # simulation mode keeps delivery demos working without the stuart sandbox
+    # the same delivery job model is used either way
     return str(getattr(settings, "DELIVERY_SIMULATION_ENABLED", True)).strip().lower() in {"1", "true", "yes", "on"}
 
 
@@ -130,9 +132,8 @@ def _service_request(path: str, payload: dict[str, Any]) -> dict[str, Any]:
     or isolates a business rule that should remain easy to test. The wider
     context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
     """
-    # All Stuart API calls are proxied through the local delivery service. That
-    # gives the marketplace one consistent error surface whether the real Stuart
-    # sandbox or the local simulation is being used.
+    # all stuart api calls are proxied through the local delivery service
+    # marketplace code sees the same error shape for sandbox and simulation
     url = f"{_service_base_url()}{path}"
     try:
         response = requests.post(
@@ -190,9 +191,8 @@ def _normalize_status(raw_status: str | None) -> str:
     or isolates a business rule that should remain easy to test. The wider
     context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
     """
-    # Stuart webhooks/service responses use several status names. Normalising
-    # them here keeps the frontend tracking timeline stable even if the provider
-    # sends `package_delivering`, `in_transit`, or `dropoff` style statuses.
+    # stuart and simulation responses use several status names
+    # normalising here keeps the frontend tracking timeline stable
     value = (raw_status or "").strip().lower()
     if not value:
         return DeliveryJob.Status.UNKNOWN
@@ -314,9 +314,8 @@ def _enrich_snapshot_with_coordinates(snapshot: dict[str, Any]) -> dict[str, Any
     or isolates a business rule that should remain easy to test. The wider
     context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
     """
-    # The map UI needs coordinates, but order/profile records often store only
-    # postcodes. Enrichment keeps original address data while adding map-ready
-    # lat/lng when the postcode database/fallback can resolve it.
+    # map ui needs coordinates but orders often store only postcodes
+    # enrichment keeps original address data and adds lat lng when possible
     enriched = dict(snapshot)
     postcode = str(enriched.get("postcode") or "")
     coordinates = get_postcode_coordinates(postcode)
@@ -363,6 +362,8 @@ def _producer_snapshot(sub_order: ProducerSubOrder) -> tuple[dict[str, Any], str
     producer_profile = _bootstrap_producer_profile(producer_user) if producer_user else None
     address = producer_profile.address if producer_profile and producer_profile.address else None
 
+    # pickup data comes from producer profile first then falls back to order producer data
+    # stuart needs complete address contact and phone values before dispatch
     line1 = address.line1 if address else (sub_order.producer.business_name or "Producer Address")
     line2 = address.line2 if address else ""
     city = address.city if address else "Bristol"
@@ -397,6 +398,8 @@ def _customer_snapshot(sub_order: ProducerSubOrder) -> tuple[dict[str, Any], str
     full_name = (customer_profile.full_name if customer_profile else "") or "Customer"
     phone = (customer_profile.phone if customer_profile else "") or ""
     address = customer_profile.default_address if customer_profile and customer_profile.default_address else None
+    # dropoff data prefers the saved customer address used by checkout
+    # the order snapshot remains the fallback for older seeded orders
     line1 = address.line1 if address else order.delivery_address
     line2 = address.line2 if address else ""
     city = address.city if address else _infer_city_from_address(order.delivery_address, order.customer_postcode)
@@ -434,6 +437,8 @@ def _build_create_payload(sub_order: ProducerSubOrder) -> dict[str, Any]:
     pickup_snapshot, producer_contact_name, producer_phone = _producer_snapshot(sub_order)
     dropoff_snapshot, customer_contact_name, customer_phone = _customer_snapshot(sub_order)
 
+    # dispatch is blocked before calling stuart if pickup or dropoff data is incomplete
+    # this gives producers a fixable validation error instead of a provider failure
     if not pickup_snapshot["full_address"] or not pickup_snapshot["postcode"]:
         raise ValueError("Producer pickup address is incomplete for Stuart dispatch.")
     if not dropoff_snapshot["full_address"] or not dropoff_snapshot["postcode"]:
@@ -477,6 +482,8 @@ def _mark_delivery_job_completed(delivery_job: DeliveryJob) -> None:
     context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
     """
     sub_order = delivery_job.sub_order
+    # delivered delivery jobs update the producer sub order and parent order
+    # stock deduction also happens here so delivery completion affects inventory
     if sub_order.status != Order.Status.DELIVERED:
         sub_order.status = Order.Status.DELIVERED
         sub_order.save(update_fields=["status", "updated_at"])
@@ -524,6 +531,8 @@ def _apply_payload_to_delivery_job(delivery_job: DeliveryJob, payload: dict[str,
     """
     raw_status = _extract_raw_status(payload)
     normalized_status = _normalize_status(raw_status)
+    # every provider payload is converted into one delivery job snapshot
+    # the frontend reads this snapshot rather than raw stuart response shapes
     tracking_url = _path_lookup(
         payload,
         ("tracking_url",),
@@ -734,8 +743,8 @@ def hydrate_delivery_job_snapshots(delivery_job: DeliveryJob) -> DeliveryJob:
     or isolates a business rule that should remain easy to test. The wider
     context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
     """
-    # Snapshot hydration is safe to run on read: it fills missing coordinates
-    # without changing the original address text captured at dispatch time.
+    # snapshot hydration is safe to run on read
+    # it fills missing coordinates without changing the original dispatch address
     update_fields: list[str] = []
     pickup_snapshot = dict(delivery_job.pickup_address_snapshot or {})
     dropoff_snapshot = dict(delivery_job.dropoff_address_snapshot or {})
@@ -767,9 +776,8 @@ def sync_delivery_job_simulation(delivery_job: DeliveryJob, now=None) -> Deliver
     or isolates a business rule that should remain easy to test. The wider
     context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
     """
-    # In sandbox mode we generate a realistic courier progression between the
-    # producer pickup postcode and buyer dropoff postcode. If Stuart later sends
-    # real courier coordinates, provider data wins over simulated coordinates.
+    # sandbox mode generates courier movement between pickup and dropoff
+    # real stuart coordinates win if provider data arrives later
     delivery_job = hydrate_delivery_job_snapshots(delivery_job)
     if (
         delivery_job.provider != DeliveryJob.Provider.STUART
@@ -862,6 +870,8 @@ def restart_delivery_job_simulation(delivery_job: DeliveryJob) -> DeliveryJob:
         raise ValueError("Simulation restart is not available for delivered or cancelled orders.")
 
     now = timezone.now()
+    # restart puts the delivery back at assigned so demos can be repeated
+    # this does not create a second stuart job
     delivery_job.simulation_started_at = now
     delivery_job.simulation_duration_seconds = _simulation_total_seconds()
     delivery_job.status = DeliveryJob.Status.ASSIGNED
@@ -894,8 +904,8 @@ def latest_delivery_job(sub_order: ProducerSubOrder, *, sync_for_read: bool = Fa
     or isolates a business rule that should remain easy to test. The wider
     context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
     """
-    # Read paths can request a simulation sync so the UI map appears live even
-    # without a real Stuart webhook stream during demos.
+    # read paths can request a simulation sync so the ui map appears live
+    # this keeps producer and customer tracking screens moving during demos
     delivery_job = sub_order.delivery_jobs.order_by("-created_at").first()
     if delivery_job is None:
         return None
@@ -928,9 +938,8 @@ def dispatch_sub_order_to_stuart(sub_order: ProducerSubOrder) -> StuartDeliveryR
     or isolates a business rule that should remain easy to test. The wider
     context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
     """
-    # Each producer sub-order can have only one active courier job at a time.
-    # This prevents duplicate delivery bookings for the same supplier/customer
-    # leg.
+    # each producer sub order can have only one active courier job
+    # this prevents duplicate bookings for the same supplier customer leg
     existing_active = active_delivery_job(sub_order)
     if existing_active is not None:
         raise ValueError("An active Stuart delivery already exists for this producer sub-order.")
@@ -944,9 +953,8 @@ def dispatch_sub_order_to_stuart(sub_order: ProducerSubOrder) -> StuartDeliveryR
     simulation_started_at = dispatched_at if test_mode and _simulation_enabled() else None
     simulation_duration_seconds = _simulation_total_seconds() if simulation_started_at else 0
 
-    # Persist both provider identifiers and address snapshots. Provider IDs are
-    # used for refresh/webhook matching; snapshots preserve the exact pickup and
-    # dropoff details used when the courier was booked.
+    # provider identifiers support refresh and webhook matching
+    # address snapshots preserve the exact pickup and dropoff used at booking
     delivery_job = DeliveryJob.objects.create(
         sub_order=sub_order,
         provider=DeliveryJob.Provider.STUART,
@@ -984,9 +992,8 @@ def refresh_delivery_job(delivery_job: DeliveryJob) -> DeliveryJob:
     or isolates a business rule that should remain easy to test. The wider
     context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
     """
-    # Manual refresh is useful when webhooks are delayed: it asks the delivery
-    # service for the current Stuart state and applies the same mapper used by
-    # webhook updates.
+    # manual refresh is useful when webhooks are delayed
+    # it applies the same mapper used by webhook updates
     if not delivery_job.provider_reference:
         raise ValueError("This Stuart delivery does not have a provider reference yet.")
     response_payload = _service_request(
@@ -1014,6 +1021,8 @@ def cancel_delivery_job(delivery_job: DeliveryJob) -> DeliveryJob:
     """
     if not delivery_job.provider_reference:
         raise ValueError("This Stuart delivery does not have a provider reference yet.")
+    # cancellation is sent through the delivery service so provider state and local state match
+    # the returned payload is still normalised before saving
     response_payload = _service_request(
         "/stuart/jobs/cancel",
         {
@@ -1057,8 +1066,8 @@ def _resolve_delivery_job_for_payload(payload: dict[str, Any]) -> DeliveryJob | 
     or isolates a business rule that should remain easy to test. The wider
     context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
     """
-    # Stuart payload shapes can vary by event. Try our own client reference
-    # first, then package id, then job id, from most stable to most provider-led.
+    # stuart payload shapes can vary by event
+    # client reference is tried first because it is created by this app
     client_reference = str(
         _path_lookup(
             payload,
@@ -1099,8 +1108,8 @@ def handle_stuart_webhook_payload(payload: dict[str, Any]) -> dict[str, Any]:
     or isolates a business rule that should remain easy to test. The wider
     context is: Delivery domain: delivery jobs, tracking snapshots, Stuart/simulation integration, and delivery API endpoints.
     """
-    # Webhooks are idempotent by provider_event_id so retries update the delivery
-    # once and then return a duplicate marker.
+    # webhooks are idempotent by provider event id
+    # retries update the delivery once and then return a duplicate marker
     delivery_job = _resolve_delivery_job_for_payload(payload)
     if delivery_job is None:
         raise ValueError("No matching Stuart delivery job was found for this webhook event.")

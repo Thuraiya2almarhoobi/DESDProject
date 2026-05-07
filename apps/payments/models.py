@@ -32,8 +32,11 @@ class SettlementStatus(models.TextChoices):
     It keeps related behavior grouped so the payments domain: stripe checkout, settlement records, commission capture, and payment-service integration.
     can be changed without spreading the same responsibility across unrelated files.
     """
-    PROCESSED = "processed", "Processed"
     PENDING_BANK_TRANSFER = "pending_bank_transfer", "Pending Bank Transfer"
+    PROCESSING = "processing", "Processing"
+    PROCESSED = "processed", "Processed"
+    PAID = "paid", "Paid"
+    FAILED = "failed", "Failed"
 
 
 class WeeklySettlement(models.Model):

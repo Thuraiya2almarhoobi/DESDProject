@@ -91,8 +91,8 @@ class ModerationAction(models.Model):
     class Meta:
         ordering = ["-created_at"]
         indexes = [
-            models.Index(fields=["target_type", "object_id", "created_at"]),
-            models.Index(fields=["action", "created_at"]),
+            models.Index(fields=["target_type", "object_id", "created_at"], name="moderation__target__b5364f_idx"),
+            models.Index(fields=["action", "created_at"], name="moderation__action_02c583_idx"),
         ]
 
     def __str__(self) -> str:

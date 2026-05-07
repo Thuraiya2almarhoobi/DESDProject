@@ -44,7 +44,8 @@ from .services import (
     verify_and_construct_stripe_event,
 )
 
-# Payment-facing API views for Stripe checkout and producer settlements.
+# payment facing api views for stripe checkout and producer settlements
+# services own money state while views keep permissions and response shapes clear
 
 
 class StripeCheckoutSessionCreateAPIView(APIView):
@@ -55,6 +56,8 @@ class StripeCheckoutSessionCreateAPIView(APIView):
     def post(self, request):
         serializer = StripeCheckoutSessionRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        # orders are scoped to the current customer before any stripe session is created
+        # this prevents a buyer from paying for or exposing another buyer order
         order = get_object_or_404(
             Order.objects.prefetch_related("items"),
             pk=serializer.validated_data["order_id"],
@@ -97,6 +100,8 @@ class StripeWebhookAPIView(APIView):
             )
 
         try:
+            # signature verification happens before the event can change order state
+            # this keeps webhook reconciliation tied to trusted stripe payloads
             event = verify_and_construct_stripe_event(request.body, signature)
             result = handle_stripe_webhook_event(event)
         except ValueError as exc:
@@ -114,6 +119,8 @@ class StripeCheckoutSessionConfirmAPIView(APIView):
         serializer = StripeCheckoutSessionConfirmSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         session_id = serializer.validated_data["session_id"]
+        # confirm is customer scoped because the browser receives only a session id
+        # the order lookup proves the session belongs to the signed in account
         get_object_or_404(
             Order.objects.select_related("payment"),
             payment__provider="stripe",
@@ -166,6 +173,8 @@ class WeeklySettlementListAPIView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
+        # settlement history is producer scoped and includes line level order breakdowns
+        # this supports accounting views without exposing other producer payouts
         return WeeklySettlement.objects.filter(producer=self.request.user).prefetch_related(
             "lines",
             "lines__order",
@@ -213,6 +222,8 @@ class WeeklySettlementExportCSVAPIView(APIView):
         ]
         rows = []
         for line in settlement.lines.all():
+            # each export row keeps the gross 5% commission and net payout visible
+            # this is the tc-025 reporting evidence for sustainability planning
             order_number = line.order.order_number if line.order_id else line.sub_order.order.order_number
             rows.append(
                 [
@@ -229,6 +240,8 @@ class WeeklySettlementExportCSVAPIView(APIView):
             )
 
         if export_format == "pdf":
+            # pdf and xlsx share the same rows as csv to avoid report mismatches
+            # only the response renderer changes by requested export format
             pdf_response = HttpResponse(
                 build_simple_pdf(f"Settlement {settlement.transaction_reference}", [headers, *rows]),
                 content_type="application/pdf",
@@ -237,6 +250,8 @@ class WeeklySettlementExportCSVAPIView(APIView):
             return pdf_response
 
         if export_format in {"xlsx", "excel"}:
+            # xlsx is available for spreadsheet accounting workflows
+            # csv remains the default because it is simplest for demo review
             xlsx_response = HttpResponse(
                 build_simple_xlsx(headers, rows),
                 content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -261,6 +276,8 @@ class TriggerWeeklySettlementsAPIView(APIView):
         if not request.user.is_staff:
             return response.Response({"detail": "Only staff users can trigger settlement runs."}, status=403)
 
+        # manual settlement trigger is staff only for demos and admin checks
+        # the service still owns the idempotent settlement creation rules
         settlements = process_weekly_settlements()
         payload = WeeklySettlementSerializer(settlements, many=True).data
         return response.Response(

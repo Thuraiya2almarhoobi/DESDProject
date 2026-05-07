@@ -1,16 +1,8 @@
 /**
- * DESD Marketplace documentation.
+ * desd marketplace notes
  *
- * File role:
- *   Provides the reusable LiveDeliveryMap component used by pages or layout shells.
- *
- * Frontend context:
- *   Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
- *
- * Implementation notes:
- *   Keep comments focused on state ownership, role-specific routing, API calls,
- *   and non-obvious UI decisions. Styling-only class names are left uncommented
- *   unless they communicate an important layout or accessibility choice.
+ * live delivery map for stuart tracking and local simulation fallback
+ * comments here explain route state and map api ownership
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -76,6 +68,8 @@ function getDistanceMeters(from: CoordinatePoint, to: CoordinatePoint): number {
 }
 
 function getSimulationProgress(simulationStartedAt?: string | null, simulationDurationSeconds?: number): number | null {
+  // delivery simulation is time based so test orders can move without a courier api
+  // returning null lets live stuart coordinates win when they are present
   if (!simulationStartedAt || !simulationDurationSeconds || simulationDurationSeconds <= 0) {
     return null;
   }
@@ -90,6 +84,8 @@ function getSimulationProgress(simulationStartedAt?: string | null, simulationDu
 }
 
 function getPointAlongRoute(route: CoordinatePoint[], progress: number): CoordinatePoint | null {
+  // route interpolation follows google directions geometry when it exists
+  // the fallback straight line still gives a stable demo for missing route data
   if (route.length === 0) {
     return null;
   }
@@ -191,6 +187,8 @@ function getSimulatedCourierPosition(
   simulationDurationSeconds?: number,
   testMode?: boolean,
 ): CoordinatePoint | null {
+  // the first part of the simulated delivery waits at pickup
+  // after that the marker travels along the route until it reaches dropoff
   if (!pickup || !dropoff || !testMode || !simulationStartedAt || !simulationDurationSeconds || simulationDurationSeconds <= 0) {
     return null;
   }
@@ -215,12 +213,10 @@ function getSimulatedCourierPosition(
 }
 
 /**
- * LiveDeliveryMap boundary.
+ * live delivery map boundary
  *
- * This exported unit supports the file role: Provides the reusable LiveDeliveryMap component used by pages or layout shells.
- * It belongs to: Reusable React component layer: shared layout, maps, product metadata, protection wrappers, and UI building blocks.
- * Keep role checks, API coordination, and cross-page side effects visible here
- * so future contributors can trace behavior during sprint reviews.
+ * the component owns google map markers and simulated courier movement
+ * order pages pass snapshots in without duplicating map setup
  */
 export function LiveDeliveryMap({
   pickup,
@@ -262,6 +258,8 @@ export function LiveDeliveryMap({
     let cancelled = false;
 
     const run = async () => {
+      // the map only loads the javascript api when both saved coordinates exist
+      // otherwise the card falls back to address and route details
       if (!pickupCoordinates || !dropoffCoordinates) {
         setScriptUnavailable(true);
         setScriptReady(false);
@@ -301,6 +299,8 @@ export function LiveDeliveryMap({
       return;
     }
 
+    // google directions gives the polyline used by the courier animation
+    // if google cannot calculate a route we still draw pickup to dropoff
     let cancelled = false;
     const maps = window.google.maps;
     const directionsService = new maps.DirectionsService();
@@ -346,6 +346,8 @@ export function LiveDeliveryMap({
       return;
     }
 
+    // real courier coordinates override simulation when stuart sends them
+    // simulation only fills the gap for demo jobs in test mode
     const updatePosition = () => {
       const simulatedPosition = getSimulatedCourierPosition(
         pickupCoordinates,
@@ -385,6 +387,8 @@ export function LiveDeliveryMap({
 
     const maps = window.google.maps;
     if (!mapInstanceRef.current) {
+      // the map instance is reused so live delivery updates move markers only
+      // this avoids remount flicker when webhook polling refreshes order data
       mapInstanceRef.current = new maps.Map(mapContainerRef.current, {
         center: pickupCoordinates,
         zoom: 12,
@@ -398,9 +402,9 @@ export function LiveDeliveryMap({
     }
 
     const map = mapInstanceRef.current;
-  const activeRoutePath = routePath.length > 1 ? routePath : [pickupCoordinates, dropoffCoordinates];
+    const activeRoutePath = routePath.length > 1 ? routePath : [pickupCoordinates, dropoffCoordinates];
     const bounds = new maps.LatLngBounds();
-  activeRoutePath.forEach((point) => bounds.extend(point));
+    activeRoutePath.forEach((point) => bounds.extend(point));
 
     if (!pickupMarkerRef.current) {
       pickupMarkerRef.current = new maps.Marker({

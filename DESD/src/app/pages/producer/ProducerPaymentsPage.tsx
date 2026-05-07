@@ -13,8 +13,9 @@
  *   unless they communicate an important layout or accessibility choice.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Calendar, ChevronDown, Download, Loader2 } from 'lucide-react';
+import { useNavigate } from 'react-router';
 import { format, isValid, parseISO } from 'date-fns';
 import { toast } from 'sonner';
 import { apiBlob, apiJson } from '../../lib/api';
@@ -44,6 +45,19 @@ interface WeeklySettlementApi {
   transaction_reference: string;
   order_count: number;
   running_tax_year_total: string;
+  lines?: Array<{
+    id: number;
+    order_id?: number | null;
+    sub_order_id?: number | null;
+    source_type: string;
+    marketplace_order_id?: number | null;
+    order_number: string;
+    customer_name: string;
+    delivery_date?: string | null;
+    gross_amount: string;
+    commission_amount: string;
+    net_amount: string;
+  }>;
 }
 
 type ExportFormat = 'csv' | 'pdf' | 'xlsx';
@@ -156,10 +170,12 @@ function SettlementDownloadMenu({
  * so future contributors can trace behavior during sprint reviews.
  */
 export function ProducerPaymentsPage() {
+  const navigate = useNavigate();
   const goBack = useSafeBack('/producer/dashboard');
   const [settlements, setSettlements] = useState<WeeklySettlementApi[]>([]);
   const [loading, setLoading] = useState(true);
   const [exportingId, setExportingId] = useState<number | null>(null);
+  const [expandedSettlementIds, setExpandedSettlementIds] = useState<number[]>([]);
 
   useEffect(() => {
     let mounted = true;
@@ -227,6 +243,24 @@ export function ProducerPaymentsPage() {
       return;
     }
     await exportSettlement(latest, format);
+  };
+
+  const toggleSettlement = (settlementId: number) => {
+    setExpandedSettlementIds((previous) =>
+      previous.includes(settlementId)
+        ? previous.filter((id) => id !== settlementId)
+        : [...previous, settlementId],
+    );
+  };
+
+  const navigateToOrder = (line: NonNullable<WeeklySettlementApi['lines']>[number]) => {
+    if (line.marketplace_order_id) {
+      navigate(`/orders/history?order=${line.marketplace_order_id}`);
+      return;
+    }
+    if (line.order_number) {
+      navigate(`/orders/history?q=${encodeURIComponent(line.order_number)}`);
+    }
   };
 
   return (
@@ -301,44 +335,92 @@ export function ProducerPaymentsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {settlements.map((settlement) => (
-                    <TableRow key={settlement.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Calendar className="size-4 text-gray-400" />
-                          <div>
-                            <p className="font-medium">
-                              {formatDate(settlement.week_start)} - {formatDate(settlement.week_end)}
-                            </p>
-                            <p className="text-xs text-gray-500">{settlement.transaction_reference}</p>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">{settlement.order_count}</TableCell>
-                      <TableCell className="text-right">£{toNumber(settlement.gross_amount).toFixed(2)}</TableCell>
-                      <TableCell className="text-right text-gray-600">
-                        -£{toNumber(settlement.commission_amount).toFixed(2)}
-                      </TableCell>
-                      <TableCell className="text-right font-semibold text-green-700">
-                        £{toNumber(settlement.net_amount).toFixed(2)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Badge variant="outline">{settlement.status.replaceAll('_', ' ')}</Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end">
-                          <SettlementDownloadMenu
-                            disabled={exportingId !== null}
-                            isDownloading={exportingId === settlement.id}
-                            label="Download"
-                            onExport={(format) => void exportSettlement(settlement, format)}
-                            size="sm"
-                            variant="outline"
-                          />
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {settlements.map((settlement) => {
+                    const expanded = expandedSettlementIds.includes(settlement.id);
+                    const lines = settlement.lines || [];
+                    return (
+                      <Fragment key={settlement.id}>
+                        <TableRow>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Calendar className="size-4 text-gray-400" />
+                              <div>
+                                <p className="font-medium">
+                                  {formatDate(settlement.week_start)} - {formatDate(settlement.week_end)}
+                                </p>
+                                <p className="text-xs text-gray-500">{settlement.transaction_reference}</p>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">{settlement.order_count}</TableCell>
+                          <TableCell className="text-right">£{toNumber(settlement.gross_amount).toFixed(2)}</TableCell>
+                          <TableCell className="text-right text-gray-600">
+                            -£{toNumber(settlement.commission_amount).toFixed(2)}
+                          </TableCell>
+                          <TableCell className="text-right font-semibold text-green-700">
+                            £{toNumber(settlement.net_amount).toFixed(2)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Badge variant="outline">{settlement.status.replaceAll('_', ' ')}</Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => toggleSettlement(settlement.id)}
+                              >
+                                {expanded ? 'Hide orders' : 'Show orders'}
+                              </Button>
+                              <SettlementDownloadMenu
+                                disabled={exportingId !== null}
+                                isDownloading={exportingId === settlement.id}
+                                label="Download"
+                                onExport={(format) => void exportSettlement(settlement, format)}
+                                size="sm"
+                                variant="outline"
+                              />
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                        {expanded && (
+                          <TableRow>
+                            <TableCell colSpan={7} className="bg-gray-50">
+                              {lines.length === 0 ? (
+                                <p className="py-4 text-sm text-gray-600">No order lines attached to this settlement.</p>
+                              ) : (
+                                <div className="space-y-2 py-2">
+                                  <div className="grid grid-cols-6 gap-3 px-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                    <span>Order</span>
+                                    <span>Customer</span>
+                                    <span>Delivery</span>
+                                    <span className="text-right">Gross</span>
+                                    <span className="text-right">Commission</span>
+                                    <span className="text-right">Payout</span>
+                                  </div>
+                                  {lines.map((line) => (
+                                    <button
+                                      key={line.id}
+                                      type="button"
+                                      onClick={() => navigateToOrder(line)}
+                                      className="grid w-full grid-cols-6 gap-3 rounded-lg border bg-white px-3 py-2 text-left text-sm hover:border-green-300 hover:bg-green-50"
+                                    >
+                                      <span className="font-medium text-green-800">{line.order_number || `Line ${line.id}`}</span>
+                                      <span>{line.customer_name || 'Customer'}</span>
+                                      <span>{line.delivery_date ? formatDate(line.delivery_date) : 'N/A'}</span>
+                                      <span className="text-right">£{toNumber(line.gross_amount).toFixed(2)}</span>
+                                      <span className="text-right text-gray-600">-£{toNumber(line.commission_amount).toFixed(2)}</span>
+                                      <span className="text-right font-semibold text-green-700">£{toNumber(line.net_amount).toFixed(2)}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </Fragment>
+                    );
+                  })}
                 </TableBody>
               </Table>
             )}

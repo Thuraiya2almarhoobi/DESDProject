@@ -28,6 +28,7 @@ import {
   Star,
   User as UserIcon,
   CreditCard,
+  Bookmark,
   Trash2,
 } from 'lucide-react';
 import { useCart } from '../contexts/CartContext';
@@ -53,7 +54,7 @@ import {
   respondToProductReview,
   updateProductReview,
 } from '../api/catalog';
-import { isBulkBuyerRole, isBuyerRole, MAX_ORDER_ITEM_QUANTITY } from '../lib/ordering';
+import { getQuantityCapForRole, isBulkBuyerRole, isBuyerRole } from '../lib/ordering';
 import { getDashboardPathForRole } from '../lib/roleRouting';
 import { useSafeBack } from '../lib/navigation';
 import { ApiRecipe, apiJson } from '../lib/api';
@@ -159,6 +160,7 @@ export function ProductDetailPage() {
   const [linkedRecipes, setLinkedRecipes] = useState<ApiRecipe[]>([]);
   const [linkedRecipesLoading, setLinkedRecipesLoading] = useState(false);
   const [expandedRecipeIds, setExpandedRecipeIds] = useState<number[]>([]);
+  const [savingRecipeIds, setSavingRecipeIds] = useState<number[]>([]);
   const [activeReportKey, setActiveReportKey] = useState<string | null>(null);
   const [reportedProductIds, setReportedProductIds] = useState<Set<string>>(new Set());
 
@@ -330,6 +332,7 @@ export function ProductDetailPage() {
     setAllergenConfirmationError('');
 
     if (product.allergens.length > 0 && user && !isAdminReadOnly) {
+      // server acknowledgement stops allergen review from being only a browser checkbox
       apiJson<{ acknowledged: boolean }>(`/api/orders/products/${product.id}/allergen-acknowledgement/`)
         .then((payload) => {
           setHasReviewedAllergens(payload.acknowledged);
@@ -353,18 +356,20 @@ export function ProductDetailPage() {
   }, [reviews]);
 
   const isAvailable = useMemo(() => {
+    // visible products can still be unavailable so purchase actions check live status
     if (!product) {
       return false;
     }
-    return product.availability !== 'unavailable' && product.stock > 0;
+    return (product.effectiveAvailability || product.availability) !== 'unavailable' && product.stock > 0;
   }, [product]);
 
   const maxQuantity = useMemo(() => {
     if (!product) {
       return 1;
     }
-    return Math.max(1, Math.min(MAX_ORDER_ITEM_QUANTITY, Math.floor(product.stock)));
-  }, [product]);
+    // keep quantity limits role aware so bulk buyers can use live stock
+    return Math.max(1, getQuantityCapForRole(user?.role, product.stock));
+  }, [product, user?.role]);
 
   const requiresAllergenReview = Boolean(product && product.allergens.length > 0);
   const isBulkBuyer = isBulkBuyerRole(user?.role);
@@ -382,6 +387,7 @@ export function ProductDetailPage() {
     return total / reviews.length;
   }, [reviews]);
   const isInCart = useMemo(() => {
+    // cart state decides whether remove and view cart actions should be shown
     if (!product) {
       return false;
     }
@@ -399,14 +405,16 @@ export function ProductDetailPage() {
     if (!product) {
       return 0;
     }
-    return Math.max(0, Math.min(MAX_ORDER_ITEM_QUANTITY, product.stock) - cartQuantity);
-  }, [cartQuantity, product]);
+    // subtract cart quantity before enabling another add action
+    return Math.max(0, maxQuantity - cartQuantity);
+  }, [cartQuantity, maxQuantity, product]);
 
   const showAdminReadOnlyNotice = () => {
     toast.info('Admin preview is read-only. Use moderation tools from the admin dashboard.');
   };
 
   const validateBuyerPurchaseAction = () => {
+    // every buy path comes through here so role and allergen checks stay same
     if (isAdminReadOnly) {
       showAdminReadOnlyNotice();
       return false;
@@ -512,6 +520,7 @@ export function ProductDetailPage() {
   };
 
   const handleReport = async (targetType: ModerationTargetType, objectId: string | number, label: string) => {
+    // reporting is read only from this page except for creating a moderation case
     if (isAdminReadOnly) {
       showAdminReadOnlyNotice();
       return;
@@ -554,6 +563,7 @@ export function ProductDetailPage() {
 
   const cartActionPanel = isAvailable ? (
     <div className="space-y-3">
+      {/* keep main purchase actions high in the card so the first viewport has them */}
       {(isBulkBuyer || isInCart) && (
         <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--muted-foreground)]">
           {isBulkBuyer && <span>{user?.role === 'COMMUNITY' ? 'Community bulk ordering' : 'Restaurant order planning'}</span>}
@@ -561,21 +571,8 @@ export function ProductDetailPage() {
         </div>
       )}
 
-      {isBulkBuyer && (
-        <div className="rounded-2xl border border-[#e4e1d8] bg-[#fffdf8] p-3 text-sm text-gray-700">
-          <p className="font-medium text-gray-900">
-            {user?.role === 'COMMUNITY' ? 'Community ordering workspace' : 'Restaurant ordering workspace'}
-          </p>
-          <p className="mt-1">
-            Build larger producer orders here, then continue through the dedicated {user?.role === 'COMMUNITY' ? 'bulk checkout' : 'restaurant checkout'} flow.
-          </p>
-          <p className="mt-2 text-xs text-gray-500">
-            Maximum quantity per product: {MAX_ORDER_ITEM_QUANTITY} units.
-          </p>
-        </div>
-      )}
-
       <div className="grid gap-3 sm:grid-cols-2">
+        {/* both primary actions share the same validation path before touching the cart */}
         <Button
           size="lg"
           onClick={() => void handleBuyNow()}
@@ -603,27 +600,6 @@ export function ProductDetailPage() {
         </Button>
       </div>
 
-      {isBulkBuyer && (
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setQuantity((value) => Math.min(maxQuantity, value + 10))}
-            disabled={quantity >= maxQuantity || isCartActionPending}
-          >
-            +10
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setQuantity(maxQuantity)}
-            disabled={quantity >= maxQuantity || isCartActionPending}
-          >
-            Use Max ({maxQuantity})
-          </Button>
-        </div>
-      )}
-
       <div className="flex flex-wrap gap-3">
         {isInCart && (
           <Button variant="secondary" onClick={handleViewCart} disabled={isCartActionPending}>
@@ -647,6 +623,7 @@ export function ProductDetailPage() {
   );
 
   const handleAllergenReviewToggle = async (checked: boolean) => {
+    // save acknowledgement when possible but keep the checkbox usable if api fails
     if (isAdminReadOnly) {
       showAdminReadOnlyNotice();
       return;
@@ -855,6 +832,31 @@ export function ProductDetailPage() {
     );
   };
 
+  const handleSaveRecipe = async (recipe: ApiRecipe) => {
+    if (isAdminReadOnly) {
+      showAdminReadOnlyNotice();
+      return;
+    }
+    if (!user) {
+      navigate('/login');
+      return;
+    }
+    setSavingRecipeIds((previous) => [...previous, recipe.id]);
+    try {
+      const response = await apiJson<{ saved: boolean }>(`/api/content/recipes/${recipe.id}/save/`, {
+        method: 'POST',
+      });
+      setLinkedRecipes((current) =>
+        current.map((entry) => (entry.id === recipe.id ? { ...entry, saved: response.saved } : entry)),
+      );
+      toast.success(response.saved ? 'Recipe saved.' : 'Recipe removed from saved recipes.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to update saved recipe.');
+    } finally {
+      setSavingRecipeIds((previous) => previous.filter((currentId) => currentId !== recipe.id));
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-[oklch(0.98_0.01_145)] to-[oklch(0.96_0.02_150)]">
@@ -899,6 +901,12 @@ export function ProductDetailPage() {
   const firstReview = reviews[0];
   const recipeCount = linkedRecipes.length || product.recipeIdeas?.length || 0;
   const isProductReported = reportedProductIds.has(String(product.id));
+  const effectiveAvailability = product.effectiveAvailability || product.availability;
+  const configuredAvailability = product.configuredAvailability || product.availability;
+  const isOutOfStock = product.stock <= 0;
+  const isOutOfSeason = !isOutOfStock && configuredAvailability === 'in-season' && effectiveAvailability === 'unavailable';
+  const seasonalEducationCopy =
+    'Seasonal information helps customers understand local food systems: producer-set windows explain when crops are naturally available, when year-round supply is stable, and why out-of-season items may be unavailable instead of imported from further away.';
 
   return (
     <div className="min-h-screen bg-[#f3fbf1]">
@@ -925,12 +933,12 @@ export function ProductDetailPage() {
 
         <section>
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
-            <div className="grid gap-5 sm:grid-cols-[18rem_minmax(0,1fr)] xl:grid-cols-[20rem_minmax(0,1fr)] lg:h-[28.5rem] xl:h-[29rem]">
+            <div className="grid gap-5 sm:grid-cols-[18rem_minmax(0,1fr)] xl:grid-cols-[20rem_minmax(0,1fr)]">
               <div className="space-y-4">
                 <div className="relative h-36 overflow-hidden rounded-3xl bg-[#f2efe5] sm:h-[24rem] lg:h-[24rem] xl:h-[24.5rem]">
                   <img src={product.imageUrl} alt={product.name} className="h-full w-full object-cover" />
                   <div className="absolute left-3 top-3 flex flex-wrap gap-2">
-                    <AvailabilityBadge availability={product.availability} />
+                    <AvailabilityBadge availability={effectiveAvailability} />
                     {product.isOrganic && <OrganicBadge />}
                   </div>
                 </div>
@@ -964,7 +972,9 @@ export function ProductDetailPage() {
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="outline">{product.category}</Badge>
                     <Badge variant="secondary">{product.seasonalDates || 'Year-round'}</Badge>
-                    <Badge variant="outline">{product.isOrganic ? product.organicCertification || 'Organic Certified' : 'Non-organic'}</Badge>
+                    <Badge variant={product.isOrganic ? 'default' : 'outline'}>
+                      {product.isOrganic ? 'Certified Organic' : 'Not Certified Organic'}
+                    </Badge>
                   </div>
                   <div>
                     <h1 className="text-3xl font-semibold tracking-tight text-[var(--rich-soil)] sm:text-4xl">{product.name}</h1>
@@ -1030,31 +1040,58 @@ export function ProductDetailPage() {
                       </p>
                     </div>
                   )}
+
+                  <div className="max-w-2xl overflow-hidden rounded-3xl border border-[#dfe8d9] bg-white/80 text-sm shadow-sm">
+                    <div className="grid grid-cols-3 divide-x divide-[#e7eee2]">
+                      <div className="px-3 py-2.5 sm:px-4 sm:py-3">
+                        <span className="block text-xs font-medium uppercase tracking-[0.08em] text-[var(--muted-foreground)]">
+                          Order status
+                        </span>
+                        <span className="mt-1 block font-semibold leading-snug text-[var(--rich-soil)]">
+                          {isAvailable ? 'Available to order' : isOutOfStock ? 'Out of stock' : isOutOfSeason ? 'Out of season' : 'Unavailable'}
+                        </span>
+                      </div>
+                      <div className="px-3 py-2.5 sm:px-4 sm:py-3">
+                        <span className="block text-xs font-medium uppercase tracking-[0.08em] text-[var(--muted-foreground)]">
+                          Estimated fulfilment
+                        </span>
+                        <span className="mt-1 block font-semibold leading-snug text-[var(--rich-soil)]">
+                          {producerDeliveryLeadTime} hours
+                        </span>
+                      </div>
+                      <div className="px-3 py-2.5 sm:px-4 sm:py-3">
+                        <span className="block text-xs font-medium uppercase tracking-[0.08em] text-[var(--muted-foreground)]">
+                          Stock
+                        </span>
+                        <span className="mt-1 block font-semibold leading-snug text-[var(--rich-soil)]">
+                          {product.stock} {formatUnit(product.unit, product.stock)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 divide-x divide-[#e7eee2] border-t border-[#e7eee2]">
+                      <div className="px-3 py-2.5 sm:px-4 sm:py-3">
+                        <span className="block text-xs font-medium uppercase tracking-[0.08em] text-[var(--muted-foreground)]">
+                          Allergens
+                        </span>
+                        <span className="mt-1 block font-semibold leading-snug text-[var(--rich-soil)]">
+                          {product.allergens.length > 0 ? product.allergens.join(', ') : 'No common allergens'}
+                        </span>
+                      </div>
+
+                      <div className="px-3 py-2.5 sm:px-4 sm:py-3">
+                        <span className="block text-xs font-medium uppercase tracking-[0.08em] text-[var(--muted-foreground)]">
+                          Certification status
+                        </span>
+                        <Badge variant={product.isOrganic ? 'default' : 'outline'} className="mt-2 w-fit">
+                          {product.isOrganic ? 'Certified Organic' : 'Not Certified Organic'}
+                        </Badge>
+                      </div>
+                    </div>
+
+                  </div>
                 </div>
 
-                <div className="hidden max-w-2xl rounded-3xl bg-[#f5fbef] px-4 py-3 text-sm leading-6 text-[var(--warm-earth)] sm:block">
-                  <p className="font-semibold text-[var(--rich-soil)]">Order with context</p>
-                  <p className="mt-1">
-                    This product is available to order today, with fulfilment estimated at {producerDeliveryLeadTime} hours from {product.producerLocation}.
-                  </p>
-                </div>
-
-                <div className="hidden max-w-2xl gap-3 border-t border-[#e4e1d8] pt-4 text-sm sm:grid sm:grid-cols-3">
-                  <div>
-                    <p className="text-[var(--muted-foreground)]">Season</p>
-                    <p className="font-medium text-[var(--rich-soil)]">{product.seasonalDates || 'Year-round'}</p>
-                  </div>
-                  <div>
-                    <p className="text-[var(--muted-foreground)]">Lead time</p>
-                    <p className="font-medium text-[var(--rich-soil)]">{producerDeliveryLeadTime} hours</p>
-                  </div>
-                  <div>
-                    <p className="text-[var(--muted-foreground)]">Stock</p>
-                    <p className="font-medium text-[var(--rich-soil)]">
-                      {product.stock} {formatUnit(product.unit, product.stock)}
-                    </p>
-                  </div>
-                </div>
               </div>
             </div>
 
@@ -1071,79 +1108,95 @@ export function ProductDetailPage() {
                   )}
                 </div>
                 <Badge variant={isAvailable ? 'secondary' : 'outline'}>
-                  {isAvailable ? 'Available to order' : 'Unavailable'}
+                  {isAvailable ? 'Available to order' : isOutOfStock ? 'Out of stock' : isOutOfSeason ? 'Out of season' : 'Unavailable'}
                 </Badge>
               </div>
 
-              <div className="mt-2 grid gap-1 border-t border-[#dfe8d9] pt-2.5 text-sm">
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-[var(--muted-foreground)]">Order status</span>
-                  <span className="font-semibold text-[var(--rich-soil)]">
-                    {isAvailable ? 'Available to order' : 'Unavailable'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-[var(--muted-foreground)]">Estimated fulfilment</span>
-                  <span className="font-semibold text-[var(--rich-soil)]">{producerDeliveryLeadTime} hours</span>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-[var(--muted-foreground)]">Stock</span>
-                  <span className="font-semibold text-[var(--rich-soil)]">
-                    {product.stock} {formatUnit(product.unit, product.stock)}
-                  </span>
-                </div>
-              </div>
-
               {isAvailable && !isAdminReadOnly && (
-                <div className="mt-4 flex items-center justify-between gap-5">
-                  <label className="shrink-0 text-sm font-medium text-[var(--rich-soil)]">Quantity</label>
-                  <div className="inline-flex items-center overflow-hidden rounded-2xl border border-[#d6cab8] bg-[#fffdf8]">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={decrementQuantity}
-                      disabled={quantity <= 1 || isCartActionPending}
-                      aria-label="Decrease quantity"
-                      className="rounded-none"
-                    >
-                      <Minus className="size-4" />
-                    </Button>
-                    <Input
-                      type="text"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      aria-label={`Quantity in ${formatUnit(product.unit, quantity)}`}
-                      value={quantity}
-                      onFocus={(event) => event.target.select()}
-                      onChange={(event) => {
-                        const next = Number(event.target.value.replace(/\D/g, ''));
-                        if (!Number.isFinite(next)) {
-                          return;
-                        }
-                        setQuantity(Math.max(1, Math.min(maxQuantity, Math.floor(next || 1))));
-                      }}
-                      className="h-10 w-16 rounded-none border-0 bg-transparent text-center shadow-none focus-visible:ring-0"
-                      disabled={isCartActionPending}
-                    />
-                    <span className="border-l border-r border-[#d6cab8] px-5 text-sm text-[var(--warm-earth)]">
-                      {formatUnit(product.unit, quantity)}
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={incrementQuantity}
-                      disabled={quantity >= maxQuantity || isCartActionPending}
-                      aria-label="Increase quantity"
-                      className="rounded-none"
-                    >
-                      <Plus className="size-4" />
-                    </Button>
+                <div className="mt-4 rounded-2xl border border-[#dfe8d9] bg-[#fbfff7] p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <label className="shrink-0 text-sm font-medium text-[var(--rich-soil)]">Quantity</label>
+                    <div className="inline-flex items-center overflow-hidden rounded-2xl border border-[#d6cab8] bg-[#fffdf8]">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={decrementQuantity}
+                        disabled={quantity <= 1 || isCartActionPending}
+                        aria-label="Decrease quantity"
+                        className="rounded-none"
+                      >
+                        <Minus className="size-4" />
+                      </Button>
+                      <Input
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        aria-label={`Quantity in ${formatUnit(product.unit, quantity)}`}
+                        value={quantity}
+                        onFocus={(event) => event.target.select()}
+                        onChange={(event) => {
+                          const next = Number(event.target.value.replace(/\D/g, ''));
+                          if (!Number.isFinite(next)) {
+                            return;
+                          }
+                          setQuantity(Math.max(1, Math.min(maxQuantity, Math.floor(next || 1))));
+                        }}
+                        className="h-10 w-16 rounded-none border-0 bg-transparent text-center shadow-none focus-visible:ring-0"
+                        disabled={isCartActionPending}
+                      />
+                      <span className="border-l border-r border-[#d6cab8] px-4 text-sm text-[var(--warm-earth)]">
+                        {formatUnit(product.unit, quantity)}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={incrementQuantity}
+                        disabled={quantity >= maxQuantity || isCartActionPending}
+                        aria-label="Increase quantity"
+                        className="rounded-none"
+                      >
+                        <Plus className="size-4" />
+                      </Button>
+                    </div>
                   </div>
+
+                  {isBulkBuyer && (
+                    <div className="mt-3 rounded-xl border border-[#e4e1d8] bg-white p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-medium text-[var(--rich-soil)]">
+                            {user?.role === 'COMMUNITY' ? 'Community bulk ordering' : 'Restaurant order planning'}
+                          </p>
+                          <p className="mt-1 text-xs text-[var(--warm-earth)]">
+                            Use quick quantities here, then complete checkout through your role-specific order flow.
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setQuantity((value) => Math.min(maxQuantity, value + 10))}
+                            disabled={quantity >= maxQuantity || isCartActionPending}
+                          >
+                            +10
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setQuantity(maxQuantity)}
+                            disabled={quantity >= maxQuantity || isCartActionPending}
+                          >
+                            Use Max ({maxQuantity})
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
               {requiresAllergenReview && (
-                <div className="mt-2.5 space-y-2 border-t border-[#dfe8d9] pt-2.5">
+                <div className="mt-3 space-y-2">
                   <div className="rounded-2xl border border-orange-200 bg-orange-50/80 px-3 py-2 text-sm text-orange-900">
                     <p className="font-semibold">Allergen warning</p>
                     <p className="mt-1">Contains: <strong>{product.allergens.join(', ')}</strong></p>
@@ -1177,7 +1230,7 @@ export function ProductDetailPage() {
                 </div>
               )}
 
-              <div className={requiresAllergenReview ? 'mt-2.5' : 'mt-5 border-t border-[#dfe8d9] pt-4'}>
+              <div className="mt-4 border-t border-[#dfe8d9] pt-4">
                 {isAdminReadOnly ? (
                   <div className="rounded-2xl border border-[#d6cab8] bg-[#fbfaf4] px-4 py-3 text-sm text-[#6a4f45]">
                     <p className="font-semibold text-[#3b2c24]">Ordering disabled in admin preview</p>
@@ -1190,7 +1243,68 @@ export function ProductDetailPage() {
                   cartActionPanel
                 )}
               </div>
+
             </aside>
+          </div>
+        </section>
+
+        <section className="mt-6 grid gap-4 lg:grid-cols-2">
+          <div className="rounded-3xl border border-[#dfe8d9] bg-white/80 p-5 shadow-sm">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--earth-accent)]">
+                  Seasonal context
+                </p>
+                <h2 className="mt-1 text-xl font-semibold text-[var(--rich-soil)]">
+                  {product.seasonalDates || 'Year-round availability'}
+                </h2>
+              </div>
+              <Badge variant="secondary" className="w-fit">
+                {isOutOfSeason ? 'Out of season' : effectiveAvailability === 'unavailable' ? 'Unavailable' : 'Local supply'}
+              </Badge>
+            </div>
+            <p className="mt-3 text-sm font-semibold leading-6 text-[var(--rich-soil)]">
+              {product.seasonalStatusMessage || product.seasonalDates || 'Year-round'}
+            </p>
+            <p className="mt-3 text-sm leading-6 text-green-900">
+              {seasonalEducationCopy}
+            </p>
+          </div>
+
+          <div className="rounded-3xl border border-[#dfe8d9] bg-white/80 p-5 shadow-sm">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--earth-accent)]">
+                  Certification details
+                </p>
+                <h2 className="mt-1 text-xl font-semibold text-[var(--rich-soil)]">
+                  {product.isOrganic ? 'Organic certification' : 'Organic status'}
+                </h2>
+              </div>
+              <Badge variant={product.isOrganic ? 'default' : 'outline'} className="w-fit">
+                {product.isOrganic ? 'Certified Organic' : 'Not Certified Organic'}
+              </Badge>
+            </div>
+            <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+              <div>
+                <span className="block text-xs font-medium uppercase tracking-[0.08em] text-[var(--muted-foreground)]">
+                  Certification record
+                </span>
+                <span className="mt-1 block font-semibold leading-snug text-[var(--rich-soil)]">
+                  {product.isOrganic
+                    ? product.organicCertification || 'Certification details not supplied'
+                    : 'No organic certification registered'}
+                </span>
+              </div>
+              <div>
+                <span className="block text-xs font-medium uppercase tracking-[0.08em] text-[var(--muted-foreground)]">
+                  Allergen statement
+                </span>
+                <span className="mt-1 block font-semibold leading-snug text-[var(--rich-soil)]">
+                  {product.allergens.length > 0 ? product.allergens.join(', ') : 'No common allergens'}
+                </span>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -1570,6 +1684,21 @@ export function ProductDetailPage() {
                             >
                               {isExpanded ? 'Hide Recipe' : 'View Full Recipe'}
                             </Button>
+                            {!isAdminReadOnly && (
+                              <Button
+                                variant={recipe.saved ? 'secondary' : 'outline'}
+                                size="sm"
+                                disabled={savingRecipeIds.includes(recipe.id)}
+                                onClick={() => void handleSaveRecipe(recipe)}
+                              >
+                                <Bookmark className="mr-2 size-4" />
+                                {savingRecipeIds.includes(recipe.id)
+                                  ? 'Saving...'
+                                  : recipe.saved
+                                    ? 'Saved'
+                                    : 'Save Recipe'}
+                              </Button>
+                            )}
                             {!isAdminReadOnly && (
                               <Button
                                 variant="ghost"

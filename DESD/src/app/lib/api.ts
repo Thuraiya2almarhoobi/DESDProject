@@ -138,6 +138,15 @@ export interface ApiCartItem {
   quantity: string;
   unit_price: string;
   line_total: string;
+  original_unit_price?: string;
+  image_url?: string;
+  allergen_info?: string;
+  is_organic?: boolean;
+  organic_certification?: string;
+  is_surplus?: boolean;
+  surplus_discount_percent?: number | null;
+  surplus_best_before?: string;
+  surplus_note?: string;
   available_stock: string;
   availability?: Product['availability'];
   seasonal_dates?: string;
@@ -166,14 +175,26 @@ export interface ApiOrderSummary {
   order_number: string;
   status: string;
   payment_status: string;
+  payment_method?: string;
+  payment_terms?: string;
+  purchase_order_number?: string;
+  customer_postcode?: string;
   created_at: string;
   delivery_date_from: string | null;
   delivery_date_to: string | null;
   subtotal_amount: string;
+  commission_rate?: string;
   commission_amount: string;
+  producer_payout_total?: string;
   total_amount: string;
+  total_food_miles?: string;
+  max_food_miles?: string;
+  within_twenty_miles?: boolean;
+  delivery_address_label?: string;
   producer_names: string[];
   sub_orders?: ApiProducerSubOrder[];
+  items_preview?: ApiOrderItem[];
+  can_update_delivery_address?: boolean;
 }
 
 export interface ApiOrderItem {
@@ -185,6 +206,15 @@ export interface ApiOrderItem {
   quantity: string;
   unit_price: string;
   line_total: string;
+  product_image_url?: string;
+  allergen_info?: string;
+  is_organic?: boolean;
+  organic_certification?: string;
+  is_surplus?: boolean;
+  surplus_discount_percent?: number | null;
+  surplus_original_unit_price?: string | null;
+  surplus_best_before?: string;
+  surplus_note?: string;
 }
 
 export interface ApiProducerSubOrder {
@@ -205,6 +235,7 @@ export interface ApiProducerSubOrder {
     new_status: string;
     note: string;
     actor_email?: string;
+    actor_role?: string;
     created_at: string;
   }>;
 }
@@ -215,16 +246,24 @@ export interface ApiOrderDetail {
   status: string;
   payment_status: string;
   delivery_address: string;
+  delivery_address_label?: string;
+  selected_address_id?: number | null;
   customer_postcode: string;
   special_instructions?: string;
+  total_food_miles?: string;
+  max_food_miles?: string;
+  within_twenty_miles?: boolean;
   subtotal_amount: string;
   commission_rate: string;
   commission_amount: string;
   producer_payout_total: string;
   total_amount: string;
   payment_method: string;
+  payment_terms?: string;
+  purchase_order_number?: string;
   payment_reference: string;
   payment_reference_masked?: string;
+  can_update_delivery_address?: boolean;
   is_recurring_instance?: boolean;
   recurring_scheduled_for?: string | null;
   created_at: string;

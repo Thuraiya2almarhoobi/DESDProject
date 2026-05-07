@@ -81,6 +81,9 @@ const commonAllergens = [
 type SortOption = 'relevance' | 'price-low' | 'price-high' | 'nearest' | 'harvest-newest' | 'ending-soon';
 type ViewMode = 'all' | 'surplus';
 type PriceFilter = 'any' | 'under-3' | '3-to-6' | 'over-6';
+type CertificationFilter = 'all' | 'certified' | 'not-certified';
+type SeasonFilter = 'all' | 'in-season' | 'year-round';
+type AllergenPresenceFilter = 'all' | 'contains-allergens' | 'no-common-allergens';
 type ProducerProfileTab = 'products' | 'recipes' | 'stories';
 
 export interface MarketplaceProducer {
@@ -163,15 +166,16 @@ export function MarketplacePage({ producerScopeId }: MarketplacePageProps = {}) 
   const [searchQuery, setSearchQuery] = useState(() => searchParams.get('q') || '');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(() => searchParams.get('q') || '');
   const [selectedCategories, setSelectedCategories] = useState<string[]>(['All']);
-  const [showOnlyOrganic, setShowOnlyOrganic] = useState(false);
+  const [certificationFilter, setCertificationFilter] = useState<CertificationFilter>('all');
   const [priceFilter, setPriceFilter] = useState<PriceFilter>('any');
-  const [showOnlyInSeason, setShowOnlyInSeason] = useState(false);
+  const [seasonFilter, setSeasonFilter] = useState<SeasonFilter>('all');
   const [showOnlyInStock, setShowOnlyInStock] = useState(true);
   const [sortBy, setSortBy] = useState<SortOption>('relevance');
   const [isLoading, setIsLoading] = useState(true);
   const [isFilterChanging, setIsFilterChanging] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('all');
+  const [allergenPresenceFilter, setAllergenPresenceFilter] = useState<AllergenPresenceFilter>('all');
   const [excludedAllergens, setExcludedAllergens] = useState<string[]>([]);
   const [reloadKey, setReloadKey] = useState(0);
   const [producerFavorite, setProducerFavorite] = useState(false);
@@ -247,7 +251,12 @@ export function MarketplacePage({ producerScopeId }: MarketplacePageProps = {}) 
     fetchProducts({
       search: debouncedSearchQuery || undefined,
       category: selectedCategoryValues.length > 0 ? selectedCategoryValues.join(',') : undefined,
-      organic: showOnlyOrganic ? true : undefined,
+      organic:
+        certificationFilter === 'certified'
+          ? true
+          : certificationFilter === 'not-certified'
+            ? false
+            : undefined,
       minPrice,
       maxPrice,
       producerId: producerScopeId,
@@ -272,7 +281,7 @@ export function MarketplacePage({ producerScopeId }: MarketplacePageProps = {}) 
     return () => {
       mounted = false;
     };
-  }, [debouncedSearchQuery, selectedCategories, showOnlyOrganic, priceFilter, producerScopeId, reloadKey]);
+  }, [debouncedSearchQuery, selectedCategories, certificationFilter, priceFilter, producerScopeId, reloadKey]);
 
   // Auto-sort by "ending soon" when on Surplus tab (H)
   useEffect(() => {
@@ -314,14 +323,14 @@ export function MarketplacePage({ producerScopeId }: MarketplacePageProps = {}) 
       return;
     }
 
-    const nextParams = new URLSearchParams(searchParams);
+    const nextParams = new URLSearchParams(location.search);
     if (debouncedSearchQuery) {
       nextParams.set('q', debouncedSearchQuery);
     } else {
       nextParams.delete('q');
     }
     setSearchParams(nextParams, { replace: true });
-  }, [debouncedSearchQuery, queryFromUrl, searchParams, setSearchParams]);
+  }, [debouncedSearchQuery, location.search, queryFromUrl, setSearchParams]);
 
   // Show skeleton briefly on local filter/sort changes.
   useEffect(() => {
@@ -330,7 +339,7 @@ export function MarketplacePage({ producerScopeId }: MarketplacePageProps = {}) 
       setIsFilterChanging(false);
     }, 300);
     return () => clearTimeout(timer);
-  }, [showOnlyInSeason, showOnlyInStock, excludedAllergens, viewMode, sortBy, priceFilter]);
+  }, [seasonFilter, showOnlyInStock, excludedAllergens, viewMode, sortBy, priceFilter, certificationFilter]);
 
   // Filter products (TC-004/005/014)
   const filteredProducts = useMemo(() => {
@@ -340,13 +349,30 @@ export function MarketplacePage({ producerScopeId }: MarketplacePageProps = {}) 
         return false;
       }
 
-      // In season filter
-      if (showOnlyInSeason && product.availability !== 'in-season') {
+      if (
+        seasonFilter === 'in-season' &&
+        !(
+          product.effectiveAvailability === 'in-season' ||
+          product.configuredAvailability === 'year-round' ||
+          product.availability === 'year-round'
+        )
+      ) {
         return false;
       }
 
-      // In stock filter
-      if (showOnlyInStock && (product.availability === 'unavailable' || product.stock === 0)) {
+      if (seasonFilter === 'year-round' && product.configuredAvailability !== 'year-round') {
+        return false;
+      }
+
+      if (showOnlyInStock && !debouncedSearchQuery && product.stock === 0) {
+        return false;
+      }
+
+      if (allergenPresenceFilter === 'contains-allergens' && product.allergens.length === 0) {
+        return false;
+      }
+
+      if (allergenPresenceFilter === 'no-common-allergens' && product.allergens.length > 0) {
         return false;
       }
 
@@ -358,7 +384,7 @@ export function MarketplacePage({ producerScopeId }: MarketplacePageProps = {}) 
 
       return true;
     });
-  }, [products, showOnlyInSeason, showOnlyInStock, excludedAllergens, viewMode]);
+  }, [products, seasonFilter, showOnlyInStock, debouncedSearchQuery, allergenPresenceFilter, excludedAllergens, viewMode]);
 
   // Sort products (H - improved clarity)
   const sortedProducts = useMemo(() => {
@@ -527,12 +553,13 @@ export function MarketplacePage({ producerScopeId }: MarketplacePageProps = {}) 
 
   const clearFilters = () => {
     setSelectedCategories(['All']);
-    setShowOnlyOrganic(false);
+    setCertificationFilter('all');
     setPriceFilter('any');
-    setShowOnlyInSeason(false);
+    setSeasonFilter('all');
     setShowOnlyInStock(true);
     setSearchQuery('');
     setSortBy('relevance');
+    setAllergenPresenceFilter('all');
     setExcludedAllergens([]);
   };
 
@@ -542,10 +569,11 @@ export function MarketplacePage({ producerScopeId }: MarketplacePageProps = {}) 
 
   const activeFiltersCount =
     (selectedCategories.includes('All') ? 0 : selectedCategories.length) +
-    (showOnlyOrganic ? 1 : 0) +
+    (certificationFilter !== 'all' ? 1 : 0) +
     (priceFilter !== 'any' ? 1 : 0) +
-    (showOnlyInSeason ? 1 : 0) +
+    (seasonFilter !== 'all' ? 1 : 0) +
     (!showOnlyInStock ? 1 : 0) +
+    (allergenPresenceFilter !== 'all' ? 1 : 0) +
     excludedAllergens.length +
     (viewMode === 'surplus' ? 1 : 0) +
     (sortBy !== 'relevance' ? 1 : 0);
@@ -766,17 +794,21 @@ export function MarketplacePage({ producerScopeId }: MarketplacePageProps = {}) 
       <div>
         <h3 className="font-medium mb-3">Attributes</h3>
         <div className="space-y-2">
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="organic"
-              checked={showOnlyOrganic}
-              onCheckedChange={(checked) => setShowOnlyOrganic(checked as boolean)}
-              aria-label="Show only organic products"
-              className="focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
-            />
-            <Label htmlFor="organic" className="cursor-pointer">
-              Organic only
-            </Label>
+          <div className="space-y-2">
+            <Label htmlFor="certification-filter">Organic certification</Label>
+            <Select
+              value={certificationFilter}
+              onValueChange={(value) => setCertificationFilter(value as CertificationFilter)}
+            >
+              <SelectTrigger id="certification-filter" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Certified and not certified</SelectItem>
+                <SelectItem value="certified">Certified Organic</SelectItem>
+                <SelectItem value="not-certified">Not Certified Organic</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-2 pt-2">
             <Label htmlFor="price-range">Price range</Label>
@@ -795,17 +827,21 @@ export function MarketplacePage({ producerScopeId }: MarketplacePageProps = {}) 
               </SelectContent>
             </Select>
           </div>
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="in-season"
-              checked={showOnlyInSeason}
-              onCheckedChange={(checked) => setShowOnlyInSeason(checked as boolean)}
-              aria-label="Show only in-season products"
-              className="focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
-            />
-            <Label htmlFor="in-season" className="cursor-pointer">
-              In season only
-            </Label>
+          <div className="space-y-2">
+            <Label htmlFor="season-filter">Seasonality</Label>
+            <Select
+              value={seasonFilter}
+              onValueChange={(value) => setSeasonFilter(value as SeasonFilter)}
+            >
+              <SelectTrigger id="season-filter" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All seasonal statuses</SelectItem>
+                <SelectItem value="in-season">In season and year-round</SelectItem>
+                <SelectItem value="year-round">Year-round only</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div className="flex items-center space-x-2">
             <Checkbox
@@ -824,7 +860,24 @@ export function MarketplacePage({ producerScopeId }: MarketplacePageProps = {}) 
 
       {/* C) Safer allergen filtering with inline hint */}
       <div>
-        <h3 className="font-medium mb-3">Allergens (Exclude)</h3>
+        <h3 className="font-medium mb-3">Allergens</h3>
+        <div className="mb-4 space-y-2">
+          <Label htmlFor="allergen-presence">Allergen status</Label>
+          <Select
+            value={allergenPresenceFilter}
+            onValueChange={(value) => setAllergenPresenceFilter(value as AllergenPresenceFilter)}
+          >
+            <SelectTrigger id="allergen-presence" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All products</SelectItem>
+              <SelectItem value="contains-allergens">Contains allergens</SelectItem>
+              <SelectItem value="no-common-allergens">No common allergens</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <h4 className="mb-3 text-sm font-medium">Exclude specific allergens</h4>
         {excludedAllergens.length > 0 && (
           <div className="mb-3 p-2 bg-orange-50 border border-orange-200 rounded text-xs text-orange-800 flex items-start gap-2">
             <AlertTriangle className="size-4 flex-shrink-0 mt-0.5" />
@@ -893,13 +946,20 @@ export function MarketplacePage({ producerScopeId }: MarketplacePageProps = {}) 
     const hasCategoryFilter = !selectedCategories.includes('All');
     const hasSearch = debouncedSearchQuery.length > 0;
 
-    if (showOnlyOrganic) {
+    if (certificationFilter === 'certified') {
       return {
         title: hasSearch ? 'No organic products found' : 'No organic products match these filters',
         description:
           hasCategoryFilter || hasSearch
-            ? 'Try broadening your search or category filters, or turn off Organic only.'
-            : 'Try turning off Organic only to view both organic and non-organic products.',
+            ? 'Try broadening your search or category filters, or show both certification statuses.'
+            : 'Try showing both certification statuses to view certified and not-certified products.',
+      };
+    }
+
+    if (certificationFilter === 'not-certified') {
+      return {
+        title: hasSearch ? 'No not-certified products found' : 'No not-certified products match these filters',
+        description: 'Try broadening your search or showing both certification statuses.',
       };
     }
 
@@ -921,7 +981,7 @@ export function MarketplacePage({ producerScopeId }: MarketplacePageProps = {}) 
       title: 'No products match these filters',
       description: 'Try adjusting your filters to see more results.',
     };
-  }, [debouncedSearchQuery, selectedCategories, showOnlyOrganic, viewMode]);
+  }, [certificationFilter, debouncedSearchQuery, selectedCategories, viewMode]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[oklch(0.98_0.01_145)] to-[oklch(0.96_0.02_150)]">
@@ -1265,15 +1325,15 @@ export function MarketplacePage({ producerScopeId }: MarketplacePageProps = {}) 
                   ))}
 
                   {/* Attribute chips */}
-                  {showOnlyOrganic && (
+                  {certificationFilter !== 'all' && (
                     <Badge
                       variant="secondary"
                       className="gap-1 cursor-pointer hover:bg-gray-300 transition-colors focus-visible:ring-2 focus-visible:ring-green-600"
-                      onClick={() => setShowOnlyOrganic(false)}
+                      onClick={() => setCertificationFilter('all')}
                       tabIndex={0}
-                      onKeyDown={(e) => e.key === 'Enter' && setShowOnlyOrganic(false)}
+                      onKeyDown={(e) => e.key === 'Enter' && setCertificationFilter('all')}
                     >
-                      Organic
+                      {certificationFilter === 'certified' ? 'Certified Organic' : 'Not Certified Organic'}
                       <X className="size-3" />
                     </Badge>
                   )}
@@ -1289,15 +1349,27 @@ export function MarketplacePage({ producerScopeId }: MarketplacePageProps = {}) 
                       <X className="size-3" />
                     </Badge>
                   )}
-                  {showOnlyInSeason && (
+                  {seasonFilter !== 'all' && (
                     <Badge
                       variant="secondary"
                       className="gap-1 cursor-pointer hover:bg-gray-300 transition-colors focus-visible:ring-2 focus-visible:ring-green-600"
-                      onClick={() => setShowOnlyInSeason(false)}
+                      onClick={() => setSeasonFilter('all')}
                       tabIndex={0}
-                      onKeyDown={(e) => e.key === 'Enter' && setShowOnlyInSeason(false)}
+                      onKeyDown={(e) => e.key === 'Enter' && setSeasonFilter('all')}
                     >
-                      In Season
+                      {seasonFilter === 'in-season' ? 'In season' : 'Year-round'}
+                      <X className="size-3" />
+                    </Badge>
+                  )}
+                  {allergenPresenceFilter !== 'all' && (
+                    <Badge
+                      variant="secondary"
+                      className="gap-1 cursor-pointer hover:bg-gray-300 transition-colors focus-visible:ring-2 focus-visible:ring-green-600"
+                      onClick={() => setAllergenPresenceFilter('all')}
+                      tabIndex={0}
+                      onKeyDown={(e) => e.key === 'Enter' && setAllergenPresenceFilter('all')}
+                    >
+                      {allergenPresenceFilter === 'contains-allergens' ? 'Contains allergens' : 'No common allergens'}
                       <X className="size-3" />
                     </Badge>
                   )}
@@ -1410,8 +1482,8 @@ export function MarketplacePage({ producerScopeId }: MarketplacePageProps = {}) 
                     <p className="text-gray-700 font-medium">{emptyStateCopy.title}</p>
                     <p className="text-sm text-gray-500">{emptyStateCopy.description}</p>
                     <div className="flex flex-wrap gap-2 justify-center">
-                      {showOnlyOrganic && (
-                        <Button onClick={() => setShowOnlyOrganic(false)} variant="outline" size="sm">
+                      {certificationFilter !== 'all' && (
+                        <Button onClick={() => setCertificationFilter('all')} variant="outline" size="sm">
                           Show all products
                         </Button>
                       )}
@@ -1468,6 +1540,7 @@ function ProducerContentPanel({
   returnTo: string;
 }) {
   const navigate = useNavigate();
+  // producer profile tabs reuse content feeds but keep links scoped to this producer
   const [recipes, setRecipes] = useState<ApiRecipe[]>([]);
   const [stories, setStories] = useState<ApiStory[]>([]);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
@@ -1639,16 +1712,24 @@ function ProducerContentPanel({
                         {format(new Date(recipe.created_at), 'MMM d, yyyy')}
                       </div>
 
+                      {/* linked product names open the normal product detail page */}
                       {linkedProducts.length > 0 && (
                         <div className="flex flex-wrap gap-2">
                           {linkedProducts.slice(0, 3).map((product) => (
-                            <Badge
+                            <button
                               key={product.id}
-                              variant="outline"
-                              className="border-[#dcd3c2] bg-[#fbfaf4] text-[var(--forest-green)]"
+                              type="button"
+                              onClick={() =>
+                                navigate(
+                                  isAdminReadOnly
+                                    ? `/admin/product-preview/${product.id}?adminPreview=1&returnTo=${encodeURIComponent(returnTo)}`
+                                    : `/product/${product.id}`,
+                                )
+                              }
+                              className="rounded-full border border-[#dcd3c2] bg-[#fbfaf4] px-2.5 py-0.5 text-xs font-medium text-[var(--forest-green)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--forest-green)]"
                             >
                               {product.name}
-                            </Badge>
+                            </button>
                           ))}
                           {linkedProducts.length > 3 && (
                             <Badge variant="outline" className="border-[#dcd3c2] bg-[#fbfaf4]">
@@ -1805,7 +1886,11 @@ export function ProductCard({
   const [quantityLimitMessage, setQuantityLimitMessage] = useState('');
   const [activeAction, setActiveAction] = useState<'add' | 'buy' | null>(null);
 
-  const isAvailable = product.availability !== 'unavailable' && product.stock > 0;
+  const effectiveAvailability = product.effectiveAvailability || product.availability;
+  const configuredAvailability = product.configuredAvailability || product.availability;
+  const isOutOfStock = product.stock <= 0;
+  const isOutOfSeason = !isOutOfStock && configuredAvailability === 'in-season' && effectiveAvailability === 'unavailable';
+  const isAvailable = effectiveAvailability !== 'unavailable' && !isOutOfStock;
   const hasAllergens = product.allergens && product.allergens.length > 0;
   // Role-aware cap: customers use normal buyer quantities, while restaurant and
   // community buyers can order in bulk, but never above the producer's live
@@ -1892,7 +1977,7 @@ export function ProductCard({
         )}
         {/* badges stay over image so text area height does not change */}
         <div className="absolute right-3 top-3 flex flex-col gap-1">
-          <AvailabilityBadge availability={product.availability} />
+          <AvailabilityBadge availability={isOutOfSeason ? 'unavailable' : effectiveAvailability} />
           {product.isOrganic && <OrganicBadge />}
           {product.isSurplus && !hasSurplusOffer && <SurplusBadge />}
         </div>
@@ -1982,7 +2067,7 @@ export function ProductCard({
                   : 'Harvested this week'}
               </p>
               <p className="line-clamp-1 font-medium text-green-700">
-                Available: {product.seasonalDates || 'Current season'}
+                {product.seasonalStatusMessage || `Available: ${product.seasonalDates || 'Current season'}`}
               </p>
             </div>
           )}
@@ -2004,7 +2089,7 @@ export function ProductCard({
         <div className="mt-auto space-y-1.5 pt-1.5">
           {!isAvailable && (
             <Badge variant="secondary" className="text-xs">
-              Out of stock
+              {isOutOfStock ? 'Out of stock' : 'Out of season'}
             </Badge>
           )}
 

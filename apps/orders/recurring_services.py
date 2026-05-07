@@ -45,6 +45,7 @@ from .services import (
     get_or_create_cart,
     money,
 )
+from .marketplace_sync import default_marketplace_image_url, effective_product_unit_price, product_has_active_surplus_deal
 
 
 @dataclass
@@ -70,6 +71,8 @@ def _frequency_days(frequency: str) -> int:
     or isolates a business rule that should remain easy to test. The wider
     context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
     """
+    # template frequency is converted into days in one place
+    # generation and schedule advance use the same rule
     if frequency == RecurringOrderTemplate.Frequency.FORTNIGHTLY:
         return 14
     return 7
@@ -83,6 +86,8 @@ def advance_template_schedule(template: RecurringOrderTemplate, scheduled_order_
     or isolates a business rule that should remain easy to test. The wider
     context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
     """
+    # advancing from the scheduled date avoids drift if a run happens late
+    # this keeps weekly and fortnightly templates predictable
     template.next_order_date = scheduled_order_date + timedelta(
         days=_frequency_days(template.frequency)
     )
@@ -121,6 +126,8 @@ def _delivery_date_for_producer(
     producer,
     scheduled_order_date: date,
 ) -> date:
+    # delivery date respects both template weekday and producer lead time
+    # producers therefore receive advance notice before generated orders appear
     candidate = scheduled_order_date + timedelta(
         days=_delivery_offset_days(template.order_day, template.delivery_day)
     )
@@ -134,6 +141,8 @@ def _build_template_item_rows_from_cart(
     user,
     selected_cart_item_ids: list[int] | None = None,
 ) -> list[dict]:
+    # recurring templates are created from selected checkout cart rows
+    # this keeps the first paid order and future template items aligned
     cart = get_or_create_cart(user)
     groups = get_cart_groups(cart, selected_cart_item_ids)
     rows: list[dict] = []
@@ -166,6 +175,8 @@ def create_recurring_template_from_checkout(
         else checkout_cart(user, payload)
     )
 
+    # the initial checkout becomes the first recurring instance
+    # future runs reuse the template but create separate orders and payments
     today = timezone.localdate()
     next_order_date = _next_weekday(today, int(payload["order_day"]))
 
@@ -181,6 +192,8 @@ def create_recurring_template_from_checkout(
     )
 
     RecurringOrderTemplateItem.objects.bulk_create(
+        # template items store default quantities only
+        # next instance overrides are stored separately so templates are not mutated
         [
             RecurringOrderTemplateItem(
                 template=template,
@@ -218,6 +231,8 @@ def set_next_instance_override(
     template_products = {item.product_id: item.product for item in template_items}
 
     for row in override_items:
+        # next instance edits cannot add products that were not in the template
+        # stock is checked before the override is saved
         if row["product_id"] not in template_item_product_ids:
             raise ValueError("Override product must exist in the recurring template.")
         product = template_products[row["product_id"]]
@@ -252,6 +267,8 @@ def _build_item_quantities(
     template_items = list(
         template.items.select_related("product__producer").all()
     )
+    # start from template defaults then overlay the saved next instance draft
+    # unavailable rows are returned for warnings instead of silently ignored
     quantities = {
         item.product_id: item.default_quantity for item in template_items
     }
@@ -285,13 +302,14 @@ def _build_item_quantities(
                 }
             )
             continue
+        unit_price = effective_product_unit_price(product)
         chosen.append(
             {
                 "product": product,
                 "producer": product.producer,
                 "quantity": quantity,
-                "unit_price": product.price,
-                "line_total": money(product.price * quantity),
+                "unit_price": unit_price,
+                "line_total": money(unit_price * quantity),
             }
         )
     return chosen, unavailable
@@ -304,6 +322,8 @@ def generate_order_for_template(
 ) -> GeneratedRecurringOrderResult:
     selected_items, unavailable = _build_item_quantities(template, scheduled_order_date)
     if not selected_items:
+        # skipped recurring runs still notify the restaurant with unavailable products
+        # this makes failures visible in the notification panel
         UserNotification.objects.create(
             user=template.restaurant,
             category="recurring_order_alert",
@@ -323,6 +343,8 @@ def generate_order_for_template(
 
     grouped: dict[int, dict] = {}
     for row in selected_items:
+        # generated recurring orders are still split into producer sub orders
+        # this keeps commission payout and fulfilment per producer
         producer_id = row["producer"].id
         if producer_id not in grouped:
             grouped[producer_id] = {
@@ -336,6 +358,8 @@ def generate_order_for_template(
         )
 
     subtotal = money(sum((group["subtotal"] for group in grouped.values()), Decimal("0.00")))
+    # each generated instance snapshots the same 5 percent commission logic
+    # payment records are per instance not only per template
     commission_amount = money(subtotal * COMMISSION_RATE)
     payout_total = money(subtotal - commission_amount)
 
@@ -354,6 +378,7 @@ def generate_order_for_template(
         total_amount=subtotal,
         producer_payout_total=payout_total,
         payment_method=template.payment_method or "test_card",
+        payment_terms="recurring_card_payment_per_instance",
         payment_reference=f"PAY-{uuid4().hex[:10].upper()}",
         special_instructions="Recurring order instance",
     )
@@ -374,6 +399,8 @@ def generate_order_for_template(
         )
 
         for line in group["items"]:
+            # order items snapshot product facts at generation time
+            # later product edits should not rewrite recurring order history
             product = line["product"]
             quantity = line["quantity"]
             OrderItem.objects.create(
@@ -382,6 +409,15 @@ def generate_order_for_template(
                 product=product,
                 product_name=product.name,
                 producer_name=producer.business_name,
+                product_image_url=product.image_url or default_marketplace_image_url(product.id),
+                allergen_info=product.allergen_info,
+                is_organic=product.is_organic,
+                organic_certification=product.organic_certification,
+                is_surplus=product_has_active_surplus_deal(product),
+                surplus_discount_percent=product.surplus_discount_percent if product_has_active_surplus_deal(product) else None,
+                surplus_original_unit_price=product.price if product_has_active_surplus_deal(product) else None,
+                surplus_best_before=product.surplus_best_before if product_has_active_surplus_deal(product) else "",
+                surplus_note=product.surplus_note if product_has_active_surplus_deal(product) else "",
                 unit=product.unit,
                 quantity=quantity,
                 unit_price=line["unit_price"],
@@ -401,6 +437,8 @@ def generate_order_for_template(
             ),
         )
 
+    # recurring instances get their own payment record for demo accounting
+    # this proves payment is processed per generated order instance
     PaymentTransaction.objects.create(
         order=order,
         provider="mock",
@@ -424,6 +462,8 @@ def generate_order_for_template(
     )
 
     template.instance_overrides.filter(scheduled_order_date=scheduled_order_date).delete()
+    # used next instance overrides are removed after generation
+    # the base template remains unchanged for future cycles
     return GeneratedRecurringOrderResult(
         template_id=template.id,
         scheduled_order_date=scheduled_order_date,
@@ -438,6 +478,8 @@ def generate_due_recurring_orders(
     run_date: date | None = None,
 ) -> list[GeneratedRecurringOrderResult]:
     today = run_date or timezone.localdate()
+    # automation picks due active templates only
+    # paused and cancelled templates remain in history but do not generate orders
     templates = (
         RecurringOrderTemplate.objects.filter(
             is_paused=False,
@@ -451,6 +493,8 @@ def generate_due_recurring_orders(
 
     results: list[GeneratedRecurringOrderResult] = []
     for template in templates:
+        # each template is generated then advanced in the same transaction
+        # this prevents duplicate orders if the automation is run again
         scheduled_order_date = template.next_order_date
         result = generate_order_for_template(template, scheduled_order_date)
         results.append(result)
@@ -468,6 +512,8 @@ def build_template_alerts(template: RecurringOrderTemplate) -> list[dict]:
     """
     alerts = []
     for item in template.items.select_related("product").all():
+        # alerts preview stock and season problems before the next run
+        # restaurants can fix quantities before automation creates the order
         if not item.product.is_orderable() or item.product.stock_quantity < item.default_quantity:
             alerts.append(
                 {

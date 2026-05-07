@@ -26,16 +26,7 @@ from django.utils import timezone
 from apps.orders.models import Product
 from bristol_marketplace.seasonality import format_month_range
 
-PRODUCT_IMAGE_LIBRARY = [
-    "https://images.unsplash.com/photo-1542838132-92c53300491e?w=900",
-    "https://images.unsplash.com/photo-1518843875459-f738682238a6?w=900",
-    "https://images.unsplash.com/photo-1471194402529-8e0f5a675de6?w=900",
-    "https://images.unsplash.com/photo-1506617420156-8e4536971650?w=900",
-    "https://images.unsplash.com/photo-1606787366850-de6330128bfc?w=900",
-    "https://images.unsplash.com/photo-1473093295043-cdd812d0e601?w=900",
-    "https://images.unsplash.com/photo-1551183053-bf91a1d81141?w=900",
-    "https://images.unsplash.com/photo-1478145046317-39f10e56b5e9?w=900",
-]
+DEFAULT_PRODUCT_IMAGE_URL = "/product-placeholder.svg"
 
 
 def default_marketplace_image_url(product_id: int) -> str:
@@ -46,8 +37,22 @@ def default_marketplace_image_url(product_id: int) -> str:
     or isolates a business rule that should remain easy to test. The wider
     context is: Ordering domain: carts, checkout, order creation, recurring orders, bulk buyer flows, commission reporting, and demo data.
     """
-    # modulo keeps fallback images deterministic without storing extra state
-    return PRODUCT_IMAGE_LIBRARY[product_id % len(PRODUCT_IMAGE_LIBRARY)]
+    return DEFAULT_PRODUCT_IMAGE_URL
+
+
+def product_has_active_surplus_deal(product) -> bool:
+    if not getattr(product, "is_surplus", False):
+        return False
+    expires_at = getattr(product, "surplus_expires_at", None)
+    return expires_at is None or expires_at > timezone.now()
+
+
+def effective_product_unit_price(product) -> Decimal:
+    price = Decimal(str(getattr(product, "price", Decimal("0.00"))))
+    discount = getattr(product, "surplus_discount_percent", None)
+    if not product_has_active_surplus_deal(product) or not discount:
+        return price.quantize(Decimal("0.01"))
+    return (price * (Decimal("1.00") - (Decimal(str(discount)) / Decimal("100.00")))).quantize(Decimal("0.01"))
 
 
 def product_is_organic(*, name: str, description: str) -> bool:
@@ -248,14 +253,14 @@ def _catalog_product_defaults(order_product: Product) -> dict:
         },
         "category_name": category_name,
         "allergens": allergen_list,
-        "image_url": producer_product.image_url if producer_product and producer_product.image_url else default_marketplace_image_url(order_product.id),
-        "is_organic": getattr(producer_product, "is_organic", None) if producer_product else None,
-        "organic_certification": getattr(producer_product, "organic_certification", "") if producer_product else "",
-        "is_surplus": bool(getattr(producer_product, "is_surplus", False)),
-        "surplus_discount": getattr(producer_product, "surplus_discount_percent", None),
-        "surplus_expires_at": getattr(producer_product, "surplus_expires_at", None) if producer_product else None,
-        "surplus_best_before": getattr(producer_product, "surplus_best_before", "") if producer_product else "",
-        "surplus_note": getattr(producer_product, "surplus_note", "") if producer_product else "",
+        "image_url": order_product.image_url or (producer_product.image_url if producer_product and producer_product.image_url else default_marketplace_image_url(order_product.id)),
+        "is_organic": order_product.is_organic or (getattr(producer_product, "is_organic", None) if producer_product else None),
+        "organic_certification": order_product.organic_certification or (getattr(producer_product, "organic_certification", "") if producer_product else ""),
+        "is_surplus": product_has_active_surplus_deal(order_product),
+        "surplus_discount": order_product.surplus_discount_percent if product_has_active_surplus_deal(order_product) else None,
+        "surplus_expires_at": order_product.surplus_expires_at,
+        "surplus_best_before": order_product.surplus_best_before,
+        "surplus_note": order_product.surplus_note,
         "storage_tips": getattr(producer_product, "storage_tips", "") if producer_product else "",
         "availability": is_available,
     }
@@ -388,7 +393,7 @@ def get_or_create_catalog_product_mirror(order_product: Product):
     defaults = {
         "category": category,
         "description": order_product.description,
-        "price": order_product.price,
+        "price": effective_product_unit_price(order_product),
         "unit": order_product.unit,
         "harvest_date": order_product.harvest_date or timezone.localdate(),
         "availability": availability,
@@ -401,7 +406,7 @@ def get_or_create_catalog_product_mirror(order_product: Product):
         "food_miles": 0,
         "is_surplus": payload["is_surplus"],
         "surplus_discount": payload["surplus_discount"],
-        "surplus_original_price": None,
+        "surplus_original_price": order_product.price if payload["is_surplus"] else None,
         "surplus_expires_at": payload["surplus_expires_at"],
         "surplus_best_before": payload["surplus_best_before"] or payload["surplus_note"],
         "storage_tips": payload["storage_tips"],
@@ -411,13 +416,6 @@ def get_or_create_catalog_product_mirror(order_product: Product):
             .values_list("recipe__title", flat=True)
         ),
     }
-    if defaults["is_surplus"] and defaults["surplus_discount"]:
-        discount = Decimal(str(defaults["surplus_discount"]))
-        if discount < 100:
-            defaults["surplus_original_price"] = (
-                order_product.price / (Decimal("1.00") - (discount / Decimal("100.00")))
-            ).quantize(Decimal("0.01"))
-
     with transaction.atomic():
         catalog_product, _ = _upsert_catalog_product(
             catalog_product_model=CatalogProduct,
@@ -491,6 +489,14 @@ def sync_orders_product_from_producer_product(producer_product):
             "season_end_month": producer_product.season_end_month,
             "harvest_date": producer_product.harvest_date,
             "allergen_info": producer_product.allergen_information,
+            "image_url": producer_product.image_url or "",
+            "is_organic": producer_product.is_organic,
+            "organic_certification": producer_product.organic_certification,
+            "is_surplus": product_has_active_surplus_deal(producer_product),
+            "surplus_discount_percent": producer_product.surplus_discount_percent if product_has_active_surplus_deal(producer_product) else None,
+            "surplus_expires_at": producer_product.surplus_expires_at if product_has_active_surplus_deal(producer_product) else None,
+            "surplus_best_before": producer_product.surplus_best_before if product_has_active_surplus_deal(producer_product) else "",
+            "surplus_note": producer_product.surplus_note if product_has_active_surplus_deal(producer_product) else "",
         },
     )
     sync_catalog_product_from_orders_product(order_product)
