@@ -77,10 +77,6 @@ function buildFeaturedFarms(products: Product[]): FeaturedFarm[] {
   const farms = Array.from(byProducer.entries()).map(([producerId, producerProducts]) => {
     const firstProduct = producerProducts[0];
     const categories = Array.from(new Set(producerProducts.map((product) => product.category).filter(Boolean))).slice(0, 2);
-    const averageFoodMiles =
-      producerProducts.reduce((total, product) => total + (Number.isFinite(product.foodMiles) ? product.foodMiles : 0), 0) /
-      Math.max(1, producerProducts.length);
-
     return {
       id: producerId,
       badge: 'Local farms',
@@ -88,7 +84,7 @@ function buildFeaturedFarms(products: Product[]): FeaturedFarm[] {
       locationLabel: firstProduct.producerPostcode || firstProduct.producerLocation || 'Near Bristol',
       href: `/producers/${producerId}`,
       metrics: [
-        `${averageFoodMiles.toFixed(1)} food miles`,
+        'Food Miles',
         `${producerProducts.length} product${producerProducts.length === 1 ? '' : 's'}`,
         categories.length > 0 ? categories.join(' / ') : `${firstProduct.producerDeliveryLeadTime || 48}h delivery window`,
       ],

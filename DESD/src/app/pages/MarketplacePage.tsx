@@ -14,17 +14,37 @@
  */
 
 import { useState, useMemo, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router';
-import { ArrowLeft, Filter, X, Plus, Minus, AlertCircle, AlertTriangle, Flag, Heart, MapPin, Star, Store } from 'lucide-react';
+import { useLocation, useNavigate, useSearchParams } from 'react-router';
+import {
+  ArrowLeft,
+  BookOpenText,
+  Calendar,
+  Clock,
+  Filter,
+  X,
+  Plus,
+  Minus,
+  AlertCircle,
+  AlertTriangle,
+  Flag,
+  Heart,
+  Leaf,
+  MapPin,
+  Newspaper,
+  Star,
+  Store,
+} from 'lucide-react';
+import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { Product, UserRole } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 import { fetchCategories, fetchProducts } from '../api/catalog';
-import { apiJson } from '../lib/api';
+import { ApiRecipe, ApiStory, apiJson } from '../lib/api';
 import { fuzzyIncludes } from '../lib/fuzzySearch';
 import { fetchMyModerationReportStatus, reportModerationTarget } from '../lib/moderation';
 import { getQuantityCapForRole, isBulkBuyerRole, isBuyerRole } from '../lib/ordering';
+import { formatCompactNumber } from '../lib/numberFormat';
 import { getDashboardPathForRole } from '../lib/roleRouting';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -35,7 +55,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '../c
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Skeleton } from '../components/ui/skeleton';
 import { AvailabilityBadge, OrganicBadge, SurplusBadge } from '../components/ProductBadges';
-import { Card, CardContent } from '../components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { SiteHeader } from '../components/SiteHeader';
 import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip';
@@ -61,6 +81,7 @@ const commonAllergens = [
 type SortOption = 'relevance' | 'price-low' | 'price-high' | 'nearest' | 'harvest-newest' | 'ending-soon';
 type ViewMode = 'all' | 'surplus';
 type PriceFilter = 'any' | 'under-3' | '3-to-6' | 'over-6';
+type ProducerProfileTab = 'products' | 'recipes' | 'stories';
 
 export interface MarketplaceProducer {
   id: number;
@@ -74,6 +95,10 @@ export interface MarketplaceProducer {
 
 interface MarketplacePageProps {
   producerScopeId?: string;
+}
+
+function isProducerProfileTab(value: string | null): value is ProducerProfileTab {
+  return value === 'products' || value === 'recipes' || value === 'stories';
 }
 
 function getPriceBounds(priceFilter: PriceFilter): { minPrice?: number; maxPrice?: number } {
@@ -90,6 +115,34 @@ function getPriceBounds(priceFilter: PriceFilter): { minPrice?: number; maxPrice
   }
 }
 
+function normalizeProducerNameSearch(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+function getProducerNameMatchScore(producerName: string, query: string): number {
+  const name = normalizeProducerNameSearch(producerName);
+  const normalizedQuery = normalizeProducerNameSearch(query);
+  if (!name || !normalizedQuery) {
+    return 0;
+  }
+  if (name === normalizedQuery) {
+    return 100;
+  }
+  if (name.startsWith(normalizedQuery)) {
+    return 90;
+  }
+  if (!normalizedQuery.includes(' ') && name.split(' ').some((word) => word.startsWith(normalizedQuery))) {
+    return 70;
+  }
+  return 0;
+}
+
 /**
  * MarketplacePage boundary.
  *
@@ -100,6 +153,7 @@ function getPriceBounds(priceFilter: PriceFilter): { minPrice?: number; maxPrice
  */
 export function MarketplacePage({ producerScopeId }: MarketplacePageProps = {}) {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const { addToCartAndWait, getProductCartQuantity, prepareSingleItemCheckout, undoLastAdd } = useCart();
@@ -124,8 +178,22 @@ export function MarketplacePage({ producerScopeId }: MarketplacePageProps = {}) 
   const [producerFavoriteSaving, setProducerFavoriteSaving] = useState(false);
   const [producerReported, setProducerReported] = useState(false);
   const [producerReporting, setProducerReporting] = useState(false);
+  const isAdminReadOnly = user?.role === 'ADMIN';
+  const adminReturnTo = searchParams.get('returnTo')?.startsWith('/admin') ? searchParams.get('returnTo') || '/admin/moderation' : '/admin/moderation';
+  const producerProfileTabParam = searchParams.get('producerTab');
+  const producerProfileTab: ProducerProfileTab = isProducerProfileTab(producerProfileTabParam) ? producerProfileTabParam : 'products';
   const isBulkBuyer = isBulkBuyerRole(user?.role);
   const queryFromUrl = searchParams.get('q') || '';
+
+  const setProducerProfileTab = (tab: ProducerProfileTab) => {
+    const next = new URLSearchParams(searchParams);
+    if (tab === 'products') {
+      next.delete('producerTab');
+    } else {
+      next.set('producerTab', tab);
+    }
+    navigate(`${location.pathname}${next.toString() ? `?${next.toString()}` : ''}`);
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -367,22 +435,17 @@ export function MarketplacePage({ producerScopeId }: MarketplacePageProps = {}) 
     if (producerScopeId) {
       return [];
     }
-    const query = debouncedSearchQuery.trim().toLowerCase();
+    const query = debouncedSearchQuery.trim();
     if (!query) {
       return [];
     }
-    const productProducerIds = new Set(
-      products
-        .filter((product) => fuzzyIncludes(query, [product.producerName, product.producerLocation, product.producerPostcode]))
-        .map((product) => product.producerId),
-    );
     return producers
-      .filter((producer) => {
-        const textMatch = fuzzyIncludes(query, [producer.business_name, producer.postcode, producer.contact_email]);
-        return textMatch || productProducerIds.has(String(producer.id));
-      })
+      .map((producer) => ({ producer, score: getProducerNameMatchScore(producer.business_name, query) }))
+      .filter((match) => match.score > 0)
+      .sort((left, right) => right.score - left.score || left.producer.business_name.localeCompare(right.producer.business_name))
+      .map((match) => match.producer)
       .slice(0, 3);
-  }, [debouncedSearchQuery, producers, products, producerScopeId]);
+  }, [debouncedSearchQuery, producers, producerScopeId]);
 
   const scopedProducer = useMemo(() => {
     if (!producerScopeId) {
@@ -400,7 +463,7 @@ export function MarketplacePage({ producerScopeId }: MarketplacePageProps = {}) 
       : String(scopedProducer.user_id);
 
   useEffect(() => {
-    if (!user || !producerScopeId) {
+    if (!user || !producerScopeId || isAdminReadOnly) {
       setProducerFavorite(false);
       return;
     }
@@ -419,10 +482,10 @@ export function MarketplacePage({ producerScopeId }: MarketplacePageProps = {}) 
     return () => {
       mounted = false;
     };
-  }, [producerScopeId, user]);
+  }, [isAdminReadOnly, producerScopeId, user]);
 
   useEffect(() => {
-    if (!user || !scopedProducerUserId) {
+    if (!user || !scopedProducerUserId || isAdminReadOnly) {
       setProducerReported(false);
       return;
     }
@@ -441,7 +504,7 @@ export function MarketplacePage({ producerScopeId }: MarketplacePageProps = {}) 
     return () => {
       mounted = false;
     };
-  }, [scopedProducerUserId, user]);
+  }, [isAdminReadOnly, scopedProducerUserId, user]);
 
   const handleCategoryToggle = (category: string) => {
     if (category === 'All') {
@@ -489,6 +552,11 @@ export function MarketplacePage({ producerScopeId }: MarketplacePageProps = {}) 
 
   const handleAddToCart = async (product: Product, quantity: number, e: React.MouseEvent) => {
     e.stopPropagation();
+
+    if (isAdminReadOnly) {
+      toast.info('Admin preview is read-only.');
+      return;
+    }
 
     if (!user) {
       toast.error('Please sign in to add items to your cart.', {
@@ -551,6 +619,11 @@ export function MarketplacePage({ producerScopeId }: MarketplacePageProps = {}) 
   const handleBuyNow = async (product: Product, quantity: number, e: React.MouseEvent) => {
     e.stopPropagation();
 
+    if (isAdminReadOnly) {
+      toast.info('Admin preview is read-only.');
+      return;
+    }
+
     if (!user) {
       toast.error('Please sign in to buy this item.', {
         action: {
@@ -607,6 +680,10 @@ export function MarketplacePage({ producerScopeId }: MarketplacePageProps = {}) 
   };
 
   const handleToggleProducerFavorite = async () => {
+    if (isAdminReadOnly) {
+      toast.info('Admin preview is read-only.');
+      return;
+    }
     if (!user) {
       navigate('/login');
       return;
@@ -633,6 +710,10 @@ export function MarketplacePage({ producerScopeId }: MarketplacePageProps = {}) 
   };
 
   const handleReportProducer = async () => {
+    if (isAdminReadOnly) {
+      toast.info('Admin preview is read-only.');
+      return;
+    }
     if (!user) {
       navigate('/login');
       return;
@@ -858,8 +939,8 @@ export function MarketplacePage({ producerScopeId }: MarketplacePageProps = {}) 
       <div className="max-w-7xl mx-auto px-4 py-6">
         <div className="flex gap-6">
           {/* Desktop Filters Sidebar */}
-          <aside className="hidden lg:block w-64 flex-shrink-0">
-            <div className="bg-white p-4 rounded-lg border sticky top-24">
+          <aside className={`hidden w-64 flex-shrink-0 ${producerScopeId && producerProfileTab !== 'products' ? '' : 'lg:block'}`}>
+            <div className="sticky top-24 max-h-[calc(100vh-7rem)] overflow-y-auto overscroll-contain rounded-lg border bg-white p-4 pb-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="font-semibold">Filters</h2>
                 {activeFiltersCount > 0 && (
@@ -886,10 +967,10 @@ export function MarketplacePage({ producerScopeId }: MarketplacePageProps = {}) 
                           variant="ghost"
                           size="sm"
                           className="-ml-3 mb-2"
-                          onClick={() => navigate('/marketplace')}
+                          onClick={() => navigate(isAdminReadOnly ? adminReturnTo : '/marketplace')}
                         >
                           <ArrowLeft className="size-4" />
-                          Back to marketplace
+                          {isAdminReadOnly ? 'Back to moderation' : 'Back to marketplace'}
                         </Button>
                         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[oklch(0.42_0.07_145)]">
                           Producer marketplace
@@ -908,33 +989,75 @@ export function MarketplacePage({ producerScopeId }: MarketplacePageProps = {}) 
                         </div>
                       </div>
                     </div>
-                    <div className="flex flex-wrap gap-2 lg:justify-end">
-                      <Button
-                        type="button"
-                        variant={producerFavorite ? 'default' : 'outline'}
-                        disabled={producerFavoriteSaving}
-                        onClick={handleToggleProducerFavorite}
-                      >
-                        <Heart className={`size-4 ${producerFavorite ? 'fill-current' : ''}`} />
-                        {producerFavorite ? 'Saved producer' : producerFavoriteSaving ? 'Saving...' : user ? 'Save producer' : 'Sign in to save'}
-                      </Button>
-                      {scopedProducerUserId ? (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          disabled={producerReporting || producerReported}
-                          onClick={handleReportProducer}
-                        >
-                          <Flag className="size-4" />
-                          {producerReported ? 'Producer reported' : producerReporting ? 'Reporting...' : 'Report'}
-                        </Button>
-                      ) : null}
+                    <div className="flex flex-col gap-3 lg:items-end">
+                      {isAdminReadOnly ? (
+                        <Badge variant="outline" className="rounded-full border-[#c7d7c2] bg-[#f2f8ef] px-3 py-2 text-[#256843]">
+                          Admin read-only preview
+                        </Badge>
+                      ) : (
+                        <div className="flex flex-wrap gap-2 lg:justify-end">
+                          <Button
+                            type="button"
+                            variant={producerFavorite ? 'default' : 'outline'}
+                            disabled={producerFavoriteSaving}
+                            onClick={handleToggleProducerFavorite}
+                          >
+                            <Heart className={`size-4 ${producerFavorite ? 'fill-current' : ''}`} />
+                            {producerFavorite ? 'Saved producer' : producerFavoriteSaving ? 'Saving...' : user ? 'Save producer' : 'Sign in to save'}
+                          </Button>
+                          {scopedProducerUserId ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              disabled={producerReporting || producerReported}
+                              onClick={handleReportProducer}
+                            >
+                              <Flag className="size-4" />
+                              {producerReported ? 'Producer reported' : producerReporting ? 'Reporting...' : 'Report'}
+                            </Button>
+                          ) : null}
+                        </div>
+                      )}
+
+                      <div className="inline-flex rounded-xl border border-[#d7dfd0] bg-[#f7faf4] p-1 shadow-sm">
+                        {[
+                          { value: 'products' as const, label: 'Products' },
+                          { value: 'recipes' as const, label: 'Recipes' },
+                          { value: 'stories' as const, label: 'Farm Stories' },
+                        ].map((tab) => (
+                          <Button
+                            key={tab.value}
+                            type="button"
+                            size="sm"
+                            variant={producerProfileTab === tab.value ? 'default' : 'ghost'}
+                            className="min-w-24 justify-center"
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              setProducerProfileTab(tab.value);
+                            }}
+                          >
+                            {tab.label}
+                          </Button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </CardContent>
               </Card>
             ) : null}
 
+            {producerScopeId && producerProfileTab !== 'products' ? (
+              <ProducerContentPanel
+                producerId={producerScopeId}
+                producerName={scopedProducerName}
+                activeTab={producerProfileTab}
+                searchQuery={debouncedSearchQuery}
+                isAdminReadOnly={isAdminReadOnly}
+                returnTo={`${location.pathname}${location.search}`}
+              />
+            ) : (
+              <>
             {isBulkBuyer && (
               <Card className="mb-4 overflow-hidden border-[oklch(0.82_0.07_145)] bg-[linear-gradient(135deg,rgba(240,248,241,0.98),rgba(255,255,255,0.96))]">
                 <CardContent className="flex flex-col gap-4 p-5 lg:flex-row lg:items-start lg:justify-between">
@@ -1315,14 +1438,338 @@ export function MarketplacePage({ producerScopeId }: MarketplacePageProps = {}) 
                     currentCartQuantity={getProductCartQuantity(product.id)}
                     isBulkBuyer={isBulkBuyer}
                     userRole={user?.role}
+                    isAdminReadOnly={isAdminReadOnly}
                   />
                 ))}
               </div>
+            )}
+              </>
             )}
           </main>
         </div>
       </div>
     </div>
+  );
+}
+
+function ProducerContentPanel({
+  producerId,
+  producerName,
+  activeTab,
+  searchQuery,
+  isAdminReadOnly,
+  returnTo,
+}: {
+  producerId: string;
+  producerName: string;
+  activeTab: Exclude<ProducerProfileTab, 'products'>;
+  searchQuery: string;
+  isAdminReadOnly: boolean;
+  returnTo: string;
+}) {
+  const navigate = useNavigate();
+  const [recipes, setRecipes] = useState<ApiRecipe[]>([]);
+  const [stories, setStories] = useState<ApiStory[]>([]);
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const isRecipesTab = activeTab === 'recipes';
+
+  useEffect(() => {
+    let mounted = true;
+    setLoading(true);
+    setError('');
+    setExpandedKey(null);
+
+    const loadProducerContent = async () => {
+      try {
+        if (isRecipesTab) {
+          const payload = await apiJson<ApiRecipe[]>('/api/content/recipes/');
+          if (mounted) {
+            setRecipes(payload.filter((recipe) => String(recipe.producer) === producerId));
+          }
+        } else {
+          const payload = await apiJson<ApiStory[]>('/api/content/stories/');
+          if (mounted) {
+            setStories(payload.filter((story) => String(story.producer) === producerId));
+          }
+        }
+      } catch (loadError) {
+        if (mounted) {
+          setError(loadError instanceof Error ? loadError.message : 'Unable to load producer content.');
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void loadProducerContent();
+
+    return () => {
+      mounted = false;
+    };
+  }, [activeTab, isRecipesTab, producerId]);
+
+  const normalizedSearch = searchQuery.trim().toLowerCase();
+  const visibleRecipes = recipes.filter((recipe) => {
+    if (!normalizedSearch) {
+      return true;
+    }
+    const linkedProducts = Array.isArray(recipe.linked_products) ? recipe.linked_products : [];
+    return [
+      recipe.title || '',
+      recipe.description || '',
+      recipe.ingredients || '',
+      recipe.instructions || '',
+      recipe.seasonal_tag || '',
+      ...linkedProducts.map((product) => product.name || ''),
+    ]
+      .join(' ')
+      .toLowerCase()
+      .includes(normalizedSearch);
+  });
+  const visibleStories = stories.filter((story) => {
+    if (!normalizedSearch) {
+      return true;
+    }
+    return [story.title || '', story.body || '', story.seasonal_tag || ''].join(' ').toLowerCase().includes(normalizedSearch);
+  });
+  const visibleItems = isRecipesTab ? visibleRecipes : visibleStories;
+  const contentNoun = isRecipesTab
+    ? visibleItems.length === 1
+      ? 'recipe'
+      : 'recipes'
+    : visibleItems.length === 1
+      ? 'farm story'
+      : 'farm stories';
+
+  if (loading) {
+    return (
+      <div className="grid gap-4 md:grid-cols-2">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <Card key={index} className="border-[#e4e1d8] bg-[#fffefa] shadow-sm">
+            <CardContent className="space-y-4 p-5">
+              <Skeleton className="h-6 w-2/3" />
+              <Skeleton className="h-4 w-1/2" />
+              <Skeleton className="h-20 w-full" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card className="border-[#e4e1d8] bg-[#fffefa] shadow-sm">
+        <CardContent className="py-12 text-center">
+          <AlertCircle className="mx-auto mb-3 size-10 text-red-500" />
+          <p className="font-medium text-gray-800">Unable to load {isRecipesTab ? 'recipes' : 'farm stories'}</p>
+          <p className="mt-2 text-sm text-gray-500">{error}</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <section className="space-y-4">
+      <Card className="border-[#dfe8d8] bg-[#fffefa] shadow-sm">
+        <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--earth-accent)]">
+              {isRecipesTab ? 'Producer recipes' : 'Farm stories'}
+            </p>
+            <h2 className="mt-1 text-2xl font-semibold text-[var(--rich-soil)]">
+              {isRecipesTab ? `${producerName} recipes` : `${producerName} farm stories`}
+            </h2>
+            <p className="mt-1 text-sm text-[var(--warm-earth)]">
+              Showing {formatCompactNumber(visibleItems.length)} {contentNoun} from this producer only.
+            </p>
+          </div>
+          {isAdminReadOnly ? (
+            <Badge variant="outline" className="rounded-full border-[#c7d7c2] bg-[#f2f8ef] px-3 py-2 text-[#256843]">
+              Admin read-only preview
+            </Badge>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      {visibleItems.length === 0 ? (
+        <Card className="border-[#e4e1d8] bg-[#fffefa] shadow-sm">
+          <CardContent className="py-12 text-center text-[var(--warm-earth)]">
+            {normalizedSearch
+              ? `No ${contentNoun} match this search for ${producerName}.`
+              : `${producerName} has not published any ${contentNoun} yet.`}
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2">
+          {isRecipesTab
+            ? visibleRecipes.map((recipe) => {
+                const key = `recipe-${recipe.id}`;
+                const expanded = expandedKey === key;
+                const linkedProducts = Array.isArray(recipe.linked_products) ? recipe.linked_products : [];
+                return (
+                  <Card id={`content-entry-recipe-${recipe.id}`} key={key} className="border-[#e4e1d8] bg-[#fffefa] shadow-sm">
+                    <CardHeader>
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <CardTitle className="text-lg text-[var(--rich-soil)]">{recipe.title}</CardTitle>
+                          <p className="mt-1 text-sm text-[var(--warm-earth)]">By {recipe.producer_name}</p>
+                        </div>
+                        <div className="flex flex-wrap justify-end gap-2">
+                          {recipe.is_ai_generated && (
+                            <Badge variant="outline" className="border-[#d6cab8] bg-[#fbfaf4] text-[var(--earth-accent)]">
+                              AI generated
+                            </Badge>
+                          )}
+                          <Badge variant="secondary">Recipe</Badge>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <p className="text-sm leading-6 text-[var(--warm-earth)]">{recipe.description}</p>
+
+                      <div className="flex items-center gap-2 text-xs text-[var(--muted-foreground)]">
+                        <Leaf className="size-3" />
+                        {recipe.seasonal_tag || 'All seasons'}
+                        <span>&bull;</span>
+                        {format(new Date(recipe.created_at), 'MMM d, yyyy')}
+                      </div>
+
+                      {linkedProducts.length > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                          {linkedProducts.slice(0, 3).map((product) => (
+                            <Badge
+                              key={product.id}
+                              variant="outline"
+                              className="border-[#dcd3c2] bg-[#fbfaf4] text-[var(--forest-green)]"
+                            >
+                              {product.name}
+                            </Badge>
+                          ))}
+                          {linkedProducts.length > 3 && (
+                            <Badge variant="outline" className="border-[#dcd3c2] bg-[#fbfaf4]">
+                              +{linkedProducts.length - 3} more
+                            </Badge>
+                          )}
+                        </div>
+                      )}
+
+                      <Button variant="outline" size="sm" onClick={() => setExpandedKey(expanded ? null : key)}>
+                        {expanded ? 'Hide Recipe' : 'View Full Recipe'}
+                      </Button>
+
+                      {expanded ? (
+                        <div className="space-y-3 rounded-2xl border border-[#e4e1d8] bg-[#fbfaf4] p-4">
+                          {recipe.is_ai_generated && (
+                            <Badge variant="outline" className="border-[#d6cab8] bg-white text-[var(--earth-accent)]">
+                              AI generated
+                            </Badge>
+                          )}
+                          {recipe.image_url ? (
+                            <img src={recipe.image_url} alt={recipe.title} className="h-48 w-full rounded-xl object-cover" />
+                          ) : null}
+                          <div className="flex items-center gap-2 text-sm font-medium text-[var(--rich-soil)]">
+                            <BookOpenText className="size-4" />
+                            Ingredients
+                          </div>
+                          <p className="whitespace-pre-line text-sm leading-6 text-[var(--warm-earth)]">{recipe.ingredients}</p>
+                          <div className="mt-3 flex items-center gap-2 text-sm font-medium text-[var(--rich-soil)]">
+                            <Newspaper className="size-4" />
+                            Instructions
+                          </div>
+                          <p className="whitespace-pre-line text-sm leading-6 text-[var(--warm-earth)]">{recipe.instructions}</p>
+                          {linkedProducts.length > 0 && (
+                            <div className="pt-2">
+                              <p className="text-xs text-[var(--muted-foreground)]">Linked products</p>
+                              <div className="mt-1 flex flex-wrap gap-2">
+                                {linkedProducts.map((product) => (
+                                  <Button
+                                    key={product.id}
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() =>
+                                      navigate(
+                                        isAdminReadOnly
+                                          ? `/admin/product-preview/${product.id}?adminPreview=1&returnTo=${encodeURIComponent(returnTo)}`
+                                          : `/product/${product.id}`,
+                                      )
+                                    }
+                                  >
+                                    {product.name}
+                                  </Button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : null}
+                    </CardContent>
+                  </Card>
+                );
+              })
+            : visibleStories.map((story) => {
+                const key = `story-${story.id}`;
+                const expanded = expandedKey === key;
+                return (
+                  <Card id={`content-entry-story-${story.id}`} key={key} className="border-[#e4e1d8] bg-[#fffefa] shadow-sm">
+                    <CardHeader>
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <CardTitle className="text-lg text-[var(--rich-soil)]">{story.title}</CardTitle>
+                          <p className="mt-1 text-sm text-[var(--warm-earth)]">By {story.producer_name}</p>
+                        </div>
+                        <div className="flex flex-wrap justify-end gap-2">
+                          {story.is_ai_generated && (
+                            <Badge variant="outline" className="border-[#d6cab8] bg-[#fbfaf4] text-[var(--earth-accent)]">
+                              AI generated
+                            </Badge>
+                          )}
+                          <Badge variant="outline">Story</Badge>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <p className="text-sm leading-6 text-[var(--warm-earth)]">
+                        {(story.body || '').slice(0, 300)}
+                      </p>
+
+                      <div className="flex items-center gap-2 text-xs text-[var(--muted-foreground)]">
+                        <Leaf className="size-3" />
+                        {story.seasonal_tag || 'All seasons'}
+                        <span>&bull;</span>
+                        {format(new Date(story.created_at), 'MMM d, yyyy')}
+                      </div>
+                      <Button variant="outline" size="sm" onClick={() => setExpandedKey(expanded ? null : key)}>
+                        {expanded ? 'Hide Story' : 'View Full Story'}
+                      </Button>
+                      {expanded ? (
+                        <div className="space-y-3 rounded-2xl border border-[#e4e1d8] bg-[#fbfaf4] p-4">
+                          {story.is_ai_generated && (
+                            <Badge variant="outline" className="border-[#d6cab8] bg-white text-[var(--earth-accent)]">
+                              AI generated
+                            </Badge>
+                          )}
+                          {story.image_url ? (
+                            <img src={story.image_url} alt={story.title} className="h-48 w-full rounded-xl object-cover" />
+                          ) : null}
+                          <div className="flex items-center gap-2 text-sm font-medium text-[var(--rich-soil)]">
+                            <Newspaper className="size-4" />
+                            Story
+                          </div>
+                          <p className="whitespace-pre-line text-sm leading-6 text-[var(--warm-earth)]">{story.body || ''}</p>
+                        </div>
+                      ) : null}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -1342,6 +1789,7 @@ export function ProductCard({
   currentCartQuantity,
   isBulkBuyer,
   userRole,
+  isAdminReadOnly = false,
 }: {
   product: Product;
   handleAddToCart: (product: Product, quantity: number, e: React.MouseEvent) => Promise<void>;
@@ -1349,8 +1797,10 @@ export function ProductCard({
   currentCartQuantity: number;
   isBulkBuyer: boolean;
   userRole?: UserRole | null;
+  isAdminReadOnly?: boolean;
 }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const [quantity, setQuantity] = useState(1);
   const [quantityLimitMessage, setQuantityLimitMessage] = useState('');
   const [activeAction, setActiveAction] = useState<'add' | 'buy' | null>(null);
@@ -1362,6 +1812,21 @@ export function ProductCard({
   // available stock once existing cart quantity is considered.
   const remainingStock = Math.max(0, getQuantityCapForRole(userRole, product.stock) - currentCartQuantity);
   const maxQuantity = Math.max(1, remainingStock);
+  const adminReturnTo = `${location.pathname}${location.search}`;
+  const productDetailPath = isAdminReadOnly
+    ? `/admin/product-preview/${product.id}?adminPreview=1&returnTo=${encodeURIComponent(adminReturnTo)}`
+    : `/product/${product.id}`;
+  const showOrderingControls = isAvailable && !isAdminReadOnly;
+  const hasSurplusOffer = Boolean(
+    product.isSurplus && product.surplusDiscount && product.surplusOriginalPrice && product.surplusExpiresAt && product.surplusBestBefore,
+  );
+  const surplusHoursRemaining = product.surplusExpiresAt
+    ? Math.max(0, (new Date(product.surplusExpiresAt).getTime() - Date.now()) / (1000 * 60 * 60))
+    : 0;
+  const surplusEndsLabel =
+    surplusHoursRemaining < 1
+      ? `${Math.max(1, Math.round(surplusHoursRemaining * 60))} min`
+      : `${Math.round(surplusHoursRemaining)}h`;
 
   useEffect(() => {
     setQuantity((previous) => Math.max(1, Math.min(previous, maxQuantity)));
@@ -1402,30 +1867,40 @@ export function ProductCard({
 
   return (
     <Card
-      className="group flex h-full min-h-[31rem] cursor-pointer flex-col gap-0 overflow-hidden transition-shadow hover:shadow-lg focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
-      onClick={() => navigate(`/product/${product.id}`)}
+      className="group flex h-[31.75rem] cursor-pointer flex-col gap-0 overflow-hidden hover:shadow-lg transition-shadow focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
+      onClick={() => navigate(productDetailPath)}
       tabIndex={0}
-      onKeyDown={(e) => e.key === 'Enter' && navigate(`/product/${product.id}`)}
+      onKeyDown={(e) => e.key === 'Enter' && navigate(productDetailPath)}
     >
-      {/* product cards keep fixed sections so all rows line up */}
-      <div className="relative h-36 shrink-0 overflow-hidden bg-[linear-gradient(180deg,#f8faf8_0%,#edf3ea_100%)] sm:h-40">
+      {/* product images use the restored taller crop from the polished card layout. */}
+      <div className="relative h-44 shrink-0 overflow-hidden bg-[linear-gradient(180deg,#f8faf8_0%,#edf3ea_100%)] sm:h-48">
         <img
           src={product.imageUrl}
           alt={product.name}
           className="h-full w-full object-cover object-center transition-transform duration-300 group-hover:scale-[1.03]"
         />
+        {hasSurplusOffer && (
+          <div className="absolute left-3 top-3 flex flex-col gap-1.5">
+            <Badge variant="destructive" className="rounded-full px-3 py-1 text-xs font-semibold shadow-sm">
+              {product.surplusDiscount}% off
+            </Badge>
+            <Badge className="rounded-full bg-white/95 px-3 py-1 text-[11px] font-semibold text-orange-700 shadow-sm hover:bg-white">
+              <Clock className="mr-1 size-3" />
+              Ends in {surplusEndsLabel}
+            </Badge>
+          </div>
+        )}
         {/* badges stay over image so text area height does not change */}
         <div className="absolute right-3 top-3 flex flex-col gap-1">
           <AvailabilityBadge availability={product.availability} />
           {product.isOrganic && <OrganicBadge />}
-          {product.isSurplus && <SurplusBadge />}
+          {product.isSurplus && !hasSurplusOffer && <SurplusBadge />}
         </div>
       </div>
 
-      <CardContent className="flex min-h-0 flex-1 flex-col justify-between px-4 pb-3.5 pt-4">
-          {/* top details get a minimum height so price row does not jump */}
-          <div className="min-h-[9.5rem] space-y-1.5">
-          <div className="mb-1 flex items-start gap-2">
+      <CardContent className="flex min-h-0 flex-1 flex-col px-4 pb-3 pt-3.5">
+        <div className="min-h-0 flex-1 space-y-1">
+          <div className="flex items-start gap-2">
             <h3 className="line-clamp-2 flex-1 font-semibold leading-tight">{product.name}</h3>
             {hasAllergens && (
               /* warning icon keep cards tidy but still gives allergen context */
@@ -1451,20 +1926,34 @@ export function ProductCard({
           {/* producer name is clickable without opening the product card */}
           <button
             type="button"
-            className="mb-1 line-clamp-1 text-left text-sm font-medium text-[var(--forest-green)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600"
+            className="line-clamp-1 text-left text-sm text-gray-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600"
             onClick={(event) => {
               event.stopPropagation();
-              navigate(`/producers/${product.producerId}`);
+              navigate(
+                isAdminReadOnly
+                  ? `/admin/producer-preview/${product.producerId}?adminPreview=1&returnTo=${encodeURIComponent(adminReturnTo)}`
+                  : `/producers/${product.producerId}`,
+              );
             }}
             onKeyDown={(event) => event.stopPropagation()}
           >
             {product.producerName}
           </button>
-          <p className="line-clamp-1 text-xs text-gray-500">{product.category}</p>
+          <div className="flex min-h-5 flex-wrap items-center gap-1.5">
+            <Badge variant="outline" className="px-2 py-0.5 text-[11px] font-medium">
+              {product.category}
+            </Badge>
+            {hasSurplusOffer && product.surplusBestBefore ? (
+              <Badge variant="outline" className="border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-medium text-orange-700">
+                <Calendar className="mr-1 size-3" />
+                Best before {product.surplusBestBefore}
+              </Badge>
+            ) : null}
+          </div>
 
           {/* bulk buyers see compact supply metadata because they compare many items */}
           {isBulkBuyer ? (
-            <div className="space-y-1.5 text-xs text-gray-600">
+            <div className="space-y-1 text-xs text-gray-600">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="outline" className="px-2 py-0.5 text-[11px] font-medium">
                   {product.producerLocation}
@@ -1476,27 +1965,29 @@ export function ProductCard({
                   {product.seasonalDates}
                 </Badge>
               </div>
-              <p className="text-[11px] text-gray-500">
+              <p className="line-clamp-1 text-[11px] text-gray-500">
                 {new Date(product.harvestDate).toDateString() === new Date().toDateString()
                   ? 'Harvested today'
                   : 'Fresh local supply'}
               </p>
             </div>
           ) : (
-            <div className="flex flex-wrap items-center gap-1.5 text-xs text-gray-600">
-              <Badge variant="outline" className="px-2 py-0.5 text-[11px] font-medium">
-                {product.producerLocation}
-              </Badge>
-              <Badge variant="outline" className="px-2 py-0.5 text-[11px] font-medium">
-                {product.foodMiles.toFixed(1)} mi
-              </Badge>
-              <Badge variant="secondary" className="px-2 py-0.5 text-[11px] font-medium">
-                {product.seasonalDates || 'Current season'}
-              </Badge>
+            <div className="space-y-0.5 text-xs leading-5 text-gray-600">
+              <p className="line-clamp-1">
+                {product.producerLocation} &bull; Food Miles: {product.foodMiles.toFixed(2)} miles &bull; Go Green
+              </p>
+              <p className="line-clamp-1">
+                {new Date(product.harvestDate).toDateString() === new Date().toDateString()
+                  ? 'Harvested today'
+                  : 'Harvested this week'}
+              </p>
+              <p className="line-clamp-1 font-medium text-green-700">
+                Available: {product.seasonalDates || 'Current season'}
+              </p>
             </div>
           )}
           {product.averageRating !== undefined && product.reviewCount ? (
-            <div className="mt-2 flex min-h-5 flex-wrap items-center gap-2 text-sm">
+            <div className="flex min-h-4 flex-wrap items-center gap-2 text-sm">
               <div className="flex items-center gap-1 text-amber-500">
                 <Star className="size-4 fill-current" />
                 <span className="font-medium text-gray-900">{product.averageRating.toFixed(1)}</span>
@@ -1506,11 +1997,11 @@ export function ProductCard({
               </span>
             </div>
           ) : (
-            <p className="mt-2 min-h-5 text-sm text-gray-500">No customer ratings yet</p>
+            <p className="min-h-4 text-sm text-gray-500">No customer ratings yet</p>
           )}
         </div>
 
-        <div className="space-y-2.5 pt-3">
+        <div className="mt-auto space-y-1.5 pt-1.5">
           {!isAvailable && (
             <Badge variant="secondary" className="text-xs">
               Out of stock
@@ -1520,26 +2011,18 @@ export function ProductCard({
           {/* price and quantity share one row so card bottoms stay even */}
           <div className="space-y-1">
             <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3">
-              {product.isSurplus && product.surplusDiscount && product.surplusOriginalPrice && product.surplusExpiresAt && product.surplusBestBefore ? (
-                <div className="min-w-0 space-y-1">
-                  {/* surplus labels sit above price so price baseline matches normal cards */}
-                  <div className="flex flex-wrap gap-1 text-[11px] text-gray-600">
-                    <Badge variant="destructive" className="px-2 py-0.5 text-[11px] font-semibold">
-                      {product.surplusDiscount}% off
-                    </Badge>
-                    <Badge variant="outline" className="px-2 py-0.5 text-[11px]">
-                      Ends {new Date(product.surplusExpiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                    </Badge>
-                    <Badge variant="outline" className="px-2 py-0.5 text-[11px]">
-                      Best before {product.surplusBestBefore}
-                    </Badge>
-                  </div>
-                  <div className="flex min-w-0 flex-wrap items-baseline gap-2">
-                    <span className="text-lg font-semibold text-green-700">£{product.price.toFixed(2)}</span>
-                    <span className="text-sm text-gray-500">/{product.unit}</span>
-                    <span className="text-xs text-gray-500 line-through">
-                      £{product.surplusOriginalPrice.toFixed(2)}/{product.unit}
+              {hasSurplusOffer && product.surplusOriginalPrice ? (
+                <div className="min-w-0">
+                  <div className="leading-tight">
+                    <span className="block text-xs text-gray-500 line-through">
+                      &pound;{product.surplusOriginalPrice.toFixed(2)}
                     </span>
+                    <div className="flex min-w-0 flex-wrap items-baseline gap-x-1.5">
+                      <span className="text-lg font-semibold text-green-700">
+                        &pound;{product.price.toFixed(2)}
+                      </span>
+                      <span className="text-sm text-gray-500">/{product.unit}</span>
+                    </div>
                   </div>
                 </div>
               ) : (
@@ -1551,7 +2034,7 @@ export function ProductCard({
                 </div>
               )}
 
-              {isAvailable && (
+              {showOrderingControls && (
                 <div className="flex items-center justify-end gap-2">
                   <div className="flex items-center rounded-md border bg-white">
                     <Button
@@ -1599,7 +2082,7 @@ export function ProductCard({
           </div>
 
           {/* B) CTA */}
-          {isAvailable && (
+          {showOrderingControls && (
             <div className="space-y-2">
               {isBulkBuyer && (
                 <div className="flex flex-wrap items-center justify-between gap-2">

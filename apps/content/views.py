@@ -43,6 +43,11 @@ def _get_request_producer(user) -> Producer | None:
     return Producer.objects.filter(user=user, is_active=True).first()
 
 
+def _is_admin_user(user) -> bool:
+    """Return true for authenticated admin accounts that need read-only moderation previews."""
+    return getattr(user, "role", "") == "ADMIN"
+
+
 def _product_ai_payload(product: Product) -> dict:
     """
     Helper for the file role: Exposes HTTP/API behavior and coordinates validation, permissions, service calls, and response formatting.
@@ -127,6 +132,7 @@ class ContentFeedAPIView(APIView):
                     "id": recipe.id,
                     "title": recipe.title,
                     "description": recipe.description,
+                    "producer": recipe.producer_id,
                     "producer_name": recipe.producer.business_name,
                     "seasonal_tag": recipe.seasonal_tag,
                     "is_ai_generated": recipe.is_ai_generated,
@@ -141,6 +147,7 @@ class ContentFeedAPIView(APIView):
                     "id": story.id,
                     "title": story.title,
                     "description": story.body[:300],
+                    "producer": story.producer_id,
                     "producer_name": story.producer.business_name,
                     "seasonal_tag": story.seasonal_tag,
                     "is_ai_generated": story.is_ai_generated,
@@ -205,7 +212,7 @@ class RecipeDetailAPIView(APIView):
     def get(self, request, recipe_id: int):
         recipe = get_object_or_404(Recipe.objects.select_related("producer"), id=recipe_id)
         producer = _get_request_producer(request.user)
-        if not recipe.is_published and (not producer or recipe.producer_id != producer.id):
+        if not recipe.is_published and not _is_admin_user(request.user) and (not producer or recipe.producer_id != producer.id):
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
         return Response(RecipeSerializer(recipe, context={"request": request}).data)
 
@@ -279,7 +286,7 @@ class FarmStoryDetailAPIView(APIView):
     def get(self, request, story_id: int):
         story = get_object_or_404(FarmStory.objects.select_related("producer"), id=story_id)
         producer = _get_request_producer(request.user)
-        if not story.is_published and (not producer or story.producer_id != producer.id):
+        if not story.is_published and not _is_admin_user(request.user) and (not producer or story.producer_id != producer.id):
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
         return Response(FarmStorySerializer(story).data)
 

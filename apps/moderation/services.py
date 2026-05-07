@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from typing import Any
+from urllib.parse import urlencode
 
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
@@ -54,16 +55,50 @@ def _producer_for_user(user: User) -> OrderProducer | None:
     return OrderProducer.objects.filter(user=user).first()
 
 
+def _public_product_url(target: Any) -> str:
+    product_name = getattr(target, "name", "")
+    order_product = target if isinstance(target, OrderProduct) else None
+
+    if isinstance(target, CatalogProduct):
+        order_product = (
+            OrderProduct.objects.filter(
+                producer__business_name=target.producer.name,
+                name=target.name,
+                unit=target.unit,
+            )
+            .order_by("-updated_at", "-id")
+            .first()
+        )
+
+    if order_product is not None:
+        query = urlencode({"adminPreview": "1", "returnTo": "/admin/moderation"})
+        return f"/admin/product-preview/{order_product.id}?{query}"
+
+    public_product_id = getattr(target, "id", None)
+    if not public_product_id:
+        return "/browse"
+    query = urlencode({"focusProduct": public_product_id, "q": product_name or ""})
+    return f"/browse?{query}"
+
+
+def _admin_preview_query(**extra: Any) -> str:
+    query = {"adminPreview": "1", "returnTo": "/admin/moderation"}
+    query.update({key: value for key, value in extra.items() if value not in (None, "")})
+    return urlencode(query)
+
+
 def _public_url_for_target(target_type: str, target: Any) -> str:
     if target_type == ModerationReport.TargetType.PRODUCT:
-        return f"/product/{target.id}"
+        return _public_product_url(target)
     if target_type == ModerationReport.TargetType.PRODUCER_ACCOUNT:
         producer = _producer_for_user(target)
-        return f"/producers/{producer.id}" if producer else "/producers"
+        return f"/admin/producer-preview/{producer.id}?{_admin_preview_query()}" if producer else "/producers"
+    if target_type == ModerationReport.TargetType.REVIEW and isinstance(target, ProductReview):
+        return _public_product_url(target.product)
     if target_type == ModerationReport.TargetType.RECIPE:
-        return "/content/recipes"
+        return f"/admin/content-preview/recipes?{_admin_preview_query(recipeId=target.id)}"
     if target_type == ModerationReport.TargetType.FARM_STORY:
-        return "/content/stories"
+        return f"/admin/content-preview/stories?{_admin_preview_query(storyId=target.id)}"
     return ""
 
 

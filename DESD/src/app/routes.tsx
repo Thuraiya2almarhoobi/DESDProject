@@ -77,6 +77,38 @@ export const router = createBrowserRouter([
     element: <AppShell />,
     children: [
       {
+        path: '/admin/product-preview/:id',
+        element: (
+          <RoleProtectedRoute requiredRole="ADMIN">
+            <ProductDetailPage />
+          </RoleProtectedRoute>
+        ),
+      },
+      {
+        path: '/admin/producer-preview/:producerId',
+        element: (
+          <RoleProtectedRoute requiredRole="ADMIN">
+            <ProducerProfilePage />
+          </RoleProtectedRoute>
+        ),
+      },
+      {
+        path: '/admin/content-preview/recipes',
+        element: (
+          <RoleProtectedRoute requiredRole="ADMIN">
+            <ContentFeedPage contentView="recipes" />
+          </RoleProtectedRoute>
+        ),
+      },
+      {
+        path: '/admin/content-preview/stories',
+        element: (
+          <RoleProtectedRoute requiredRole="ADMIN">
+            <ContentFeedPage contentView="stories" />
+          </RoleProtectedRoute>
+        ),
+      },
+      {
         element: <SiteShell />,
         children: [
           // Public marketing and discovery pages.
@@ -157,7 +189,7 @@ export const router = createBrowserRouter([
           {
             path: '/product/:id',
             element: (
-              <ProtectedRoute allowedRoles={['CUSTOMER', 'COMMUNITY', 'RESTAURANT', 'PRODUCER']}>
+              <ProtectedRoute allowedRoles={['CUSTOMER', 'COMMUNITY', 'RESTAURANT', 'PRODUCER', 'ADMIN']}>
                 <ProductDetailPage />
               </ProtectedRoute>
             ),

@@ -145,6 +145,7 @@ export function ProducerOrdersPage() {
   const [updatingOrderId, setUpdatingOrderId] = useState<number | null>(null);
   const [deliveryActionOrderId, setDeliveryActionOrderId] = useState<number | null>(null);
   const [deliveryErrors, setDeliveryErrors] = useState<Record<number, string>>({});
+  const [focusedUrgentOrderId, setFocusedUrgentOrderId] = useState<number | null>(null);
 
   const loadOrders = useCallback(async (background = false) => {
     if (!background) {
@@ -239,6 +240,40 @@ export function ProducerOrdersPage() {
       return searchableText.includes(normalizedSearch);
     });
   }, [customerFilter, fromDateFilter, orders, searchQuery, statusFilter, toDateFilter]);
+
+  const handleViewUrgentOrder = () => {
+    const urgentOrder = urgentOrders[0];
+    if (!urgentOrder) {
+      return;
+    }
+
+    setStatusFilter('all');
+    setCustomerFilter('all');
+    setFromDateFilter('');
+    setToDateFilter('');
+    setFocusedUrgentOrderId(urgentOrder.id);
+
+    if (searchQuery) {
+      navigate('/producer/orders?view=sales', { replace: true });
+    }
+  };
+
+  useEffect(() => {
+    if (!focusedUrgentOrderId || loading) {
+      return;
+    }
+
+    const urgentOrderCard = document.getElementById(`producer-order-${focusedUrgentOrderId}`);
+    if (!urgentOrderCard) {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      urgentOrderCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      urgentOrderCard.focus({ preventScroll: true });
+      setFocusedUrgentOrderId(null);
+    });
+  }, [filteredOrders, focusedUrgentOrderId, loading]);
 
   const updateOrderStatus = async (order: ProducerSubOrderApi, nextStatus: ProducerOrderStatus) => {
     if (nextStatus === order.status) {
@@ -569,7 +604,7 @@ export function ProducerOrdersPage() {
                   </p>
                   <p className="text-sm text-red-700 mt-0.5">Prioritise these first to avoid delays</p>
                 </div>
-                <Button variant="destructive" size="sm" onClick={() => setStatusFilter('pending')}>
+                <Button variant="destructive" size="sm" onClick={handleViewUrgentOrder}>
                   View urgent
                 </Button>
               </div>
@@ -726,7 +761,12 @@ export function ProducerOrdersPage() {
                 : getStatusColor(order.status);
 
               return (
-                <Card key={order.id} className={`transition-shadow hover:shadow-md ${urgent ? 'border-red-300 bg-red-50/30' : ''}`}>
+                <Card
+                  key={order.id}
+                  id={`producer-order-${order.id}`}
+                  tabIndex={-1}
+                  className={`scroll-mt-24 transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 ${urgent ? 'border-red-300 bg-red-50/30' : ''}`}
+                >
                   <CardHeader>
                     <div className="flex items-start justify-between">
                       <div className="flex-1">

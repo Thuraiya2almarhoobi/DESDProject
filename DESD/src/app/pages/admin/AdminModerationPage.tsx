@@ -25,6 +25,7 @@ import {
   fetchModerationItemDetail,
   fetchModerationItems,
   fetchModerationSummary,
+  keepModerationReport,
   ModerationAction,
   ModerationItem,
   ModerationItemDetail,
@@ -134,6 +135,7 @@ export function AdminModerationPage() {
   const [ownerFilter, setOwnerFilter] = useState('');
   const [actionNote, setActionNote] = useState('');
   const [submittingAction, setSubmittingAction] = useState<ModerationAction['action'] | null>(null);
+  const [submittingReportId, setSubmittingReportId] = useState<number | null>(null);
 
   const activeFilterCount = [
     searchQuery.trim(),
@@ -230,6 +232,90 @@ export function AdminModerationPage() {
       toast.error(error instanceof Error ? error.message : 'Unable to apply moderation action.');
     } finally {
       setSubmittingAction(null);
+    }
+  };
+
+  const publicPageUrlForSelected = async (): Promise<string> => {
+    if (!selected?.public_url) {
+      return '';
+    }
+    const adminPreviewQuery = (extra: Record<string, string> = {}) => {
+      const query = new URLSearchParams({ adminPreview: '1', returnTo: '/admin/moderation', ...extra });
+      return query.toString();
+    };
+
+    if (selected.target_type === 'recipe') {
+      return `/admin/content-preview/recipes?${adminPreviewQuery({ recipeId: String(selected.object_id) })}`;
+    }
+
+    if (selected.target_type === 'farm_story') {
+      return `/admin/content-preview/stories?${adminPreviewQuery({ storyId: String(selected.object_id) })}`;
+    }
+
+    if (selected.target_type === 'producer_account') {
+      try {
+        const publicUrl = new URL(selected.public_url, window.location.origin);
+        const previewMatch = publicUrl.pathname.match(/^\/admin\/producer-preview\/([^/?#]+)/);
+        const publicMatch = publicUrl.pathname.match(/^\/producers\/([^/?#]+)/);
+        const producerId = previewMatch?.[1] ?? publicMatch?.[1];
+        if (producerId) {
+          return `/admin/producer-preview/${encodeURIComponent(producerId)}?${adminPreviewQuery()}`;
+        }
+      } catch {
+        // Keep the moderation page usable even if the stored URL is malformed.
+      }
+      return selected.public_url;
+    }
+
+    if (selected.target_type !== 'product' && selected.target_type !== 'review') {
+      return selected.public_url;
+    }
+
+    try {
+      const publicUrl = new URL(selected.public_url, window.location.origin);
+      if (publicUrl.pathname.startsWith('/admin/product-preview/')) {
+        publicUrl.searchParams.set('adminPreview', '1');
+        publicUrl.searchParams.set('returnTo', '/admin/moderation');
+        return `${publicUrl.pathname}?${publicUrl.searchParams.toString()}`;
+      }
+      const productPathMatch = publicUrl.pathname.match(/^\/product\/([^/?#]+)/);
+      if (productPathMatch) {
+        const query = new URLSearchParams({ adminPreview: '1', returnTo: '/admin/moderation' });
+        return `/admin/product-preview/${encodeURIComponent(productPathMatch[1])}?${query.toString()}`;
+      }
+    } catch {
+      // Keep the moderation page usable even if the stored URL is malformed.
+    }
+    const query = new URLSearchParams({ adminPreview: '1', returnTo: '/admin/moderation' });
+    return `/admin/product-preview/${encodeURIComponent(String(selected.object_id))}?${query.toString()}`;
+  };
+
+  const openPublicPage = async () => {
+    const url = await publicPageUrlForSelected();
+    if (!url) {
+      toast.error('No public page is available for this moderation item.');
+      return;
+    }
+    window.location.assign(url);
+  };
+
+  const keepOpenReport = async (reportId: number) => {
+    if (!selected || submittingReportId !== null) {
+      return;
+    }
+    setSubmittingReportId(reportId);
+    try {
+      await keepModerationReport(reportId, actionNote.trim() || 'Reviewed and kept live from the moderation dashboard.');
+      const updated = await fetchModerationItemDetail(selected.target_type, selected.object_id);
+      setSelected(updated);
+      setActionNote('');
+      toast.success('Report marked as kept live.');
+      await loadItems();
+      setSelected(updated);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to keep this report live.');
+    } finally {
+      setSubmittingReportId(null);
     }
   };
 
@@ -466,7 +552,7 @@ export function AdminModerationPage() {
                           variant="outline"
                           size="sm"
                           className="mt-3"
-                          onClick={() => window.open(selected.public_url, '_blank', 'noopener,noreferrer')}
+                          onClick={() => void openPublicPage()}
                         >
                           <ArrowUpRight className="size-4" />
                           Open public page
@@ -487,22 +573,6 @@ export function AdminModerationPage() {
                           </div>
                         ))}
                       </dl>
-                    </div>
-
-                    <div className="rounded-2xl border border-[#e0e6dc] bg-white p-4">
-                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#6a786c]">Linked uploads</p>
-                      <div className="mt-3 grid gap-2 text-sm">
-                        {(selected.context?.related_items || []).length > 0 ? (
-                          selected.context?.related_items?.slice(0, 8).map((item) => (
-                            <div key={`${item.type}-${item.id}`} className="flex items-center justify-between gap-3 rounded-xl bg-[#f7f8f4] px-3 py-2">
-                              <span className="min-w-0 truncate text-[#243127]">{item.label}</span>
-                              <Badge variant="outline" className="shrink-0">{item.type}{item.status ? ` · ${item.status}` : ''}</Badge>
-                            </div>
-                          ))
-                        ) : (
-                          <p className="text-[#6a786c]">No linked uploads found.</p>
-                        )}
-                      </div>
                     </div>
 
                     <div className="rounded-2xl border border-[#e0e6dc] bg-white p-4">
@@ -547,6 +617,19 @@ export function AdminModerationPage() {
                             <div className="flex flex-wrap items-center gap-2">
                               <Badge variant={report.status === 'open' ? 'destructive' : 'outline'}>{report.status}</Badge>
                               <span className="text-[#6a786c]">{formatDate(report.created_at)}</span>
+                              {report.status === 'open' ? (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="ml-auto h-8 rounded-full border-[#cbd8c6] text-[#256843] hover:bg-[#edf5e9]"
+                                  disabled={submittingReportId !== null}
+                                  onClick={() => void keepOpenReport(report.id)}
+                                >
+                                  <CheckCircle2 className="size-4" />
+                                  {submittingReportId === report.id ? 'Keeping...' : 'Keep'}
+                                </Button>
+                              ) : null}
                             </div>
                             <p className="mt-1 text-[#243127]">{report.reason || 'No reason supplied.'}</p>
                             <p className="mt-1 text-xs text-[#6a786c]">By {report.reported_by_email || 'Unknown user'}</p>

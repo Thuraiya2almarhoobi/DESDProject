@@ -43,12 +43,18 @@ export function SurplusInfo({ discount, originalPrice, currentPrice, expiresAt, 
   return (
     <div className="space-y-2">
       {/* Discount and Price */}
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        <span className="inline-flex items-baseline gap-1 whitespace-nowrap">
+          <span className="text-lg font-semibold text-green-700">
+            &pound;{currentPrice.toFixed(2)}
+          </span>
+          <span className="text-sm text-gray-500">/{unit}</span>
+        </span>
         <Badge variant="destructive" className="text-xs font-semibold">
           {discount}% off
         </Badge>
-        <span className="text-xs text-gray-500 line-through">
-          £{originalPrice.toFixed(2)}/{unit}
+        <span className="whitespace-nowrap text-xs text-gray-500 line-through">
+          &pound;{originalPrice.toFixed(2)}/{unit}
         </span>
       </div>
 

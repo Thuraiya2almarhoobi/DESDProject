@@ -13,7 +13,7 @@
  *   unless they communicate an important layout or accessibility choice.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import {
   ArrowLeft,
@@ -214,9 +214,13 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
   const location = useLocation();
   const { user } = useAuth();
   const isProducer = user?.role === 'PRODUCER';
+  const isAdminReadOnly = user?.role === 'ADMIN';
+  const adminReturnTo = new URLSearchParams(location.search).get('returnTo')?.startsWith('/admin')
+    ? new URLSearchParams(location.search).get('returnTo') || '/admin/moderation'
+    : '/admin/moderation';
   const isPublishMode = mode === 'publish';
   const showProducerPublisher = isProducer && isPublishMode;
-  const isBuyer = user?.role === 'CUSTOMER' || user?.role === 'PRODUCER' || user?.role === 'COMMUNITY' || user?.role === 'RESTAURANT';
+  const isBuyer = !isAdminReadOnly && (user?.role === 'CUSTOMER' || user?.role === 'PRODUCER' || user?.role === 'COMMUNITY' || user?.role === 'RESTAURANT');
   const goBack = useSafeBack(showProducerPublisher ? '/producer/dashboard' : '/marketplace');
   const pageFilter: FeedFilter =
     contentView === 'recipes' ? 'recipe' : contentView === 'stories' ? 'story' : 'all';
@@ -248,10 +252,12 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
   const [publishingRecipe, setPublishingRecipe] = useState(false);
   const [publishingStory, setPublishingStory] = useState(false);
   const [productPickerTarget, setProductPickerTarget] = useState<ProductPickerTarget | null>(null);
+  const focusedContentKeyRef = useRef<string | null>(null);
+  const adminScopedReturnTo = `${location.pathname}${location.search}`;
   const backButton = (
-    <Button variant="ghost" onClick={goBack}>
+    <Button variant="ghost" onClick={isAdminReadOnly ? () => navigate(adminReturnTo) : goBack}>
       <ArrowLeft className="mr-2 size-4" />
-      Back
+      {isAdminReadOnly ? 'Back to moderation' : 'Back'}
     </Button>
   );
   const activeContentSection = showProducerPublisher
@@ -278,7 +284,7 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
         variant={activeContentSection === 'recipes' ? 'default' : 'ghost'}
         size="sm"
         className={contentNavButtonClass}
-        onClick={() => navigate('/content/recipes')}
+        onClick={() => navigate(isAdminReadOnly ? '/admin/content-preview/recipes?adminPreview=1&returnTo=/admin/moderation' : '/content/recipes')}
       >
         Recipes
       </Button>
@@ -287,7 +293,7 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
         variant={activeContentSection === 'stories' ? 'default' : 'ghost'}
         size="sm"
         className={contentNavButtonClass}
-        onClick={() => navigate('/content/stories')}
+        onClick={() => navigate(isAdminReadOnly ? '/admin/content-preview/stories?adminPreview=1&returnTo=/admin/moderation' : '/content/stories')}
       >
         Farm Stories
       </Button>
@@ -376,8 +382,8 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
 
   useEffect(() => {
     const requestedFilter = new URLSearchParams(location.search).get('filter');
-    setFilter(requestedFilter === 'saved' ? 'saved' : pageFilter);
-  }, [location.search, pageFilter]);
+    setFilter(!isAdminReadOnly && requestedFilter === 'saved' ? 'saved' : pageFilter);
+  }, [isAdminReadOnly, location.search, pageFilter]);
 
   useEffect(() => {
     setContentSearch('');
@@ -419,6 +425,15 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
     () => Array.from(new Set(pageFeed.map((entry) => entry.producer_name))).sort((a, b) => a.localeCompare(b)),
     [pageFeed],
   );
+  const producerIdByName = useMemo(() => {
+    const lookup = new Map<string, number>();
+    pageFeed.forEach((entry) => {
+      if (entry.producer) {
+        lookup.set(entry.producer_name, entry.producer);
+      }
+    });
+    return lookup;
+  }, [pageFeed]);
 
   const productOptions = useMemo(() => {
     const products = new Map<number, { id: number; name: string; unit: string; price: string }>();
@@ -517,6 +532,10 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
     setSeasonFilter(ALL_SEASONS);
   };
   const toggleSavedRecipe = async (recipeId: number) => {
+    if (isAdminReadOnly) {
+      toast.info('Admin preview is read-only.');
+      return;
+    }
     try {
       const payload = await apiJson<{ saved: boolean }>(`/api/content/recipes/${recipeId}/save/`, {
         method: 'POST',
@@ -539,6 +558,10 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
   };
 
   const reportContentEntry = async (entry: ApiFeedEntry) => {
+    if (isAdminReadOnly) {
+      toast.info('Admin preview is read-only.');
+      return;
+    }
     if (!user) {
       toast.error('Please sign in to report content.');
       return;
@@ -583,6 +606,103 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
       setDetailLoadingKey(null);
     }
   };
+
+  useEffect(() => {
+    if (!isAdminReadOnly || loading) {
+      return;
+    }
+
+    const params = new URLSearchParams(location.search);
+    const recipeId = Number(params.get('recipeId'));
+    const storyId = Number(params.get('storyId'));
+    const focusedType = Number.isFinite(recipeId) && recipeId > 0 ? 'recipe' : Number.isFinite(storyId) && storyId > 0 ? 'story' : null;
+    const focusedId = focusedType === 'recipe' ? recipeId : focusedType === 'story' ? storyId : 0;
+
+    if (!focusedType || !focusedId) {
+      return;
+    }
+
+    const key = detailKey(focusedType, focusedId);
+    if (focusedContentKeyRef.current === key) {
+      return;
+    }
+    focusedContentKeyRef.current = key;
+
+    const scrollToFocusedCard = () => {
+      window.setTimeout(() => {
+        document
+          .getElementById(`content-entry-${focusedType}-${focusedId}`)
+          ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 80);
+    };
+
+    const existingEntry = feed.find((entry) => entry.type === focusedType && entry.id === focusedId);
+    if (existingEntry) {
+      if (!detailsByKey[key]) {
+        void openDetails(existingEntry);
+      }
+      scrollToFocusedCard();
+      return;
+    }
+
+    const loadFocusedModerationContent = async () => {
+      setDetailLoadingKey(key);
+      try {
+        if (focusedType === 'recipe') {
+          const recipe = await apiJson<ApiRecipe>(`/api/content/recipes/${focusedId}/`);
+          setDetailsByKey((previous) => ({ ...previous, [key]: recipe }));
+          setFeed((previous) =>
+            previous.some((entry) => entry.type === 'recipe' && entry.id === recipe.id)
+              ? previous
+              : [
+                  {
+                    type: 'recipe',
+                    id: recipe.id,
+                    title: recipe.title,
+                    description: recipe.description,
+                    producer: recipe.producer,
+                    producer_name: recipe.producer_name,
+                    seasonal_tag: recipe.seasonal_tag,
+                    is_ai_generated: recipe.is_ai_generated,
+                    linked_products: recipe.linked_products,
+                    created_at: recipe.created_at,
+                  },
+                  ...previous,
+                ],
+          );
+        } else {
+          const story = await apiJson<ApiStory>(`/api/content/stories/${focusedId}/`);
+          setDetailsByKey((previous) => ({ ...previous, [key]: story }));
+          setFeed((previous) =>
+            previous.some((entry) => entry.type === 'story' && entry.id === story.id)
+              ? previous
+              : [
+                  {
+                    type: 'story',
+                    id: story.id,
+                    title: story.title,
+                    description: story.body.slice(0, 300),
+                    producer: story.producer,
+                    producer_name: story.producer_name,
+                    seasonal_tag: story.seasonal_tag,
+                    is_ai_generated: story.is_ai_generated,
+                    linked_products: [],
+                    created_at: story.created_at,
+                  },
+                  ...previous,
+                ],
+          );
+        }
+        scrollToFocusedCard();
+      } catch {
+        toast.error('Unable to load the moderation preview content.');
+      } finally {
+        setDetailLoadingKey(null);
+      }
+    };
+
+    void loadFocusedModerationContent();
+  }, [detailsByKey, feed, isAdminReadOnly, loading, location.search]);
 
   const toggleRecipeProduct = (productId: number, checked: boolean) => {
     setRecipeDraft((previous) => ({
@@ -949,6 +1069,10 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
 	                Order History
 	              </Button>
 	            </div>
+	          ) : isAdminReadOnly ? (
+	            <Badge variant="outline" className="rounded-full border-[#c7d7c2] bg-[#f2f8ef] px-3 py-2 text-[#256843]">
+	              Admin read-only preview
+	            </Badge>
 	          ) : (
 	            <Button variant="outline" onClick={() => navigate('/marketplace')}>
 	              Marketplace
@@ -956,6 +1080,12 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
 	          )}
 	          </div>
 	        </div>
+
+	        {isAdminReadOnly && (
+	          <div className="mt-4 rounded-2xl border border-[#c7d7c2] bg-[#f2f8ef] px-4 py-3 text-sm text-[#36573d]">
+	            You are viewing this content as an administrator. Reports, saves, publishing, and other write actions are disabled.
+	          </div>
+	        )}
 
 	        <section className="mt-5 rounded-3xl border border-[#dfe8d9] bg-[#fffefa] px-5 py-6 shadow-sm sm:px-7">
 	          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -990,7 +1120,7 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
                       {contentView === 'all' && <TabsTrigger value="all">All Content</TabsTrigger>}
                       <TabsTrigger value="recipe">Recipes</TabsTrigger>
                       {contentView === 'all' && <TabsTrigger value="story">Farm Stories</TabsTrigger>}
-                      <TabsTrigger value="saved">Saved Recipes</TabsTrigger>
+                      {!isAdminReadOnly && <TabsTrigger value="saved">Saved Recipes</TabsTrigger>}
                     </TabsList>
                   </Tabs>
                 )}
@@ -1505,14 +1635,34 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
 	                  const key = detailKey(entry.type, entry.id);
 	                  const details = detailsByKey[key];
 	                  const isRecipe = entry.type === 'recipe';
+	                  const producerId = entry.producer ?? producerIdByName.get(entry.producer_name);
 
 	                  return (
-	                    <Card key={key} className="border-[#e4e1d8] bg-[#fffefa] shadow-sm">
+	                    <Card id={`content-entry-${entry.type}-${entry.id}`} key={key} className="border-[#e4e1d8] bg-[#fffefa] shadow-sm">
 	                      <CardHeader>
 	                        <div className="flex items-start justify-between gap-3">
 	                          <div>
 	                            <CardTitle className="text-lg text-[var(--rich-soil)]">{entry.title}</CardTitle>
-	                            <p className="mt-1 text-sm text-[var(--warm-earth)]">By {entry.producer_name}</p>
+	                            <p className="mt-1 text-sm text-[var(--warm-earth)]">
+	                              By{' '}
+	                              {producerId ? (
+	                                <button
+	                                  type="button"
+	                                  className="inline-flex rounded-md text-left font-semibold text-[var(--forest-green)] underline-offset-4 transition-colors hover:text-[oklch(0.34_0.09_145)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
+	                                  onClick={() =>
+	                                    navigate(
+	                                      isAdminReadOnly
+	                                        ? `/admin/producer-preview/${producerId}?adminPreview=1&returnTo=${encodeURIComponent(adminScopedReturnTo)}`
+	                                        : `/producers/${producerId}`,
+	                                    )
+	                                  }
+	                                >
+	                                  {entry.producer_name}
+	                                </button>
+	                              ) : (
+	                                <span className="font-semibold text-[var(--forest-green)]">{entry.producer_name}</span>
+	                              )}
+	                            </p>
 	                          </div>
 	                          <div className="flex flex-wrap justify-end gap-2">
 	                            {entry.is_ai_generated && (
@@ -1565,16 +1715,18 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
 	                                ? 'View Full Recipe'
 	                                : 'View Full Story'}
 	                          </Button>
-	                          <Button
-	                            variant="ghost"
-	                            size="sm"
-	                            className="text-[#6a4f45] hover:bg-[#f3eee5] hover:text-[#4b382f]"
-	                            disabled={activeReportKey === key}
-	                            onClick={() => void reportContentEntry(entry)}
-	                          >
-	                            <Flag className="mr-2 size-4" />
-	                            {activeReportKey === key ? 'Reporting...' : 'Report'}
-	                          </Button>
+	                          {!isAdminReadOnly && (
+	                            <Button
+	                              variant="ghost"
+	                              size="sm"
+	                              className="text-[#6a4f45] hover:bg-[#f3eee5] hover:text-[#4b382f]"
+	                              disabled={activeReportKey === key}
+	                              onClick={() => void reportContentEntry(entry)}
+	                            >
+	                              <Flag className="mr-2 size-4" />
+	                              {activeReportKey === key ? 'Reporting...' : 'Report'}
+	                            </Button>
+	                          )}
 	                          {isRecipe && isBuyer && (
 	                            <Button
 	                              size="sm"
@@ -1631,7 +1783,13 @@ export function ContentFeedPage({ mode = 'feed', contentView = 'all' }: ContentF
 	                                          key={product.id}
 	                                          variant="outline"
 	                                          size="sm"
-	                                          onClick={() => navigate(`/product/${product.id}`)}
+	                                          onClick={() =>
+	                                            navigate(
+	                                              isAdminReadOnly
+	                                                ? `/admin/product-preview/${product.id}?adminPreview=1&returnTo=${encodeURIComponent(adminScopedReturnTo)}`
+	                                                : `/product/${product.id}`,
+	                                            )
+	                                          }
 	                                        >
 	                                          {product.name}
 	                                        </Button>

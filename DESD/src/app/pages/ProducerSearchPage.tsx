@@ -11,11 +11,38 @@ import { Card, CardContent } from '../components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { useAuth } from '../contexts/AuthContext';
 import { apiJson } from '../lib/api';
-import { fuzzyIncludes } from '../lib/fuzzySearch';
 import { Product } from '../types';
 import type { MarketplaceProducer } from './MarketplacePage';
 
 type ProducerDirectoryView = 'all' | 'saved';
+
+function normalizeProducerNameSearch(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+function getProducerNameMatchScore(producerName: string, query: string): number {
+  const name = normalizeProducerNameSearch(producerName);
+  const normalizedQuery = normalizeProducerNameSearch(query);
+  if (!name || !normalizedQuery) {
+    return 0;
+  }
+  if (name === normalizedQuery) {
+    return 100;
+  }
+  if (name.startsWith(normalizedQuery)) {
+    return 90;
+  }
+  if (!normalizedQuery.includes(' ') && name.split(' ').some((word) => word.startsWith(normalizedQuery))) {
+    return 70;
+  }
+  return 0;
+}
 
 export function ProducerSearchPage() {
   const navigate = useNavigate();
@@ -112,20 +139,16 @@ export function ProducerSearchPage() {
 
   const displayedProducers = useMemo(() => {
     const source = view === 'saved' ? savedProducers : producers;
-    const query = searchQuery.trim().toLowerCase();
+    const query = searchQuery.trim();
     if (!query) {
       return source;
     }
-    return source.filter((producer) => {
-      const productsForProducer = producerProducts.get(String(producer.id)) || [];
-      return fuzzyIncludes(query, [
-        producer.business_name,
-        producer.contact_email,
-        producer.postcode,
-        ...productsForProducer.flatMap((product) => [product.name, product.category, product.description]),
-      ]);
-    });
-  }, [producerProducts, producers, savedProducers, searchQuery, view]);
+    return source
+      .map((producer) => ({ producer, score: getProducerNameMatchScore(producer.business_name, query) }))
+      .filter((match) => match.score > 0)
+      .sort((left, right) => right.score - left.score || left.producer.business_name.localeCompare(right.producer.business_name))
+      .map((match) => match.producer);
+  }, [producers, savedProducers, searchQuery, view]);
 
   const toggleSavedProducer = async (producer: MarketplaceProducer, event: React.MouseEvent) => {
     event.stopPropagation();

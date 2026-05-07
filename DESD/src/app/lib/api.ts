@@ -244,6 +244,7 @@ export interface ApiFeedEntry {
   id: number;
   title: string;
   description: string;
+  producer?: number;
   producer_name: string;
   seasonal_tag: string;
   is_ai_generated: boolean;

@@ -14,7 +14,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useParams, useNavigate } from 'react-router';
+import { Link, useParams, useNavigate, useSearchParams } from 'react-router';
 import {
   ArrowLeft,
   ShoppingCart,
@@ -119,6 +119,7 @@ function scrollToReviewForm(): void {
 export function ProductDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const goBack = useSafeBack('/marketplace');
   const {
     addToCartAndWait,
@@ -128,6 +129,9 @@ export function ProductDetailPage() {
     prepareSingleItemCheckout,
   } = useCart();
   const { user } = useAuth();
+  const isAdminReadOnly = user?.role === 'ADMIN';
+  const requestedAdminReturnTo = searchParams.get('returnTo');
+  const adminReturnTo = requestedAdminReturnTo?.startsWith('/admin') ? requestedAdminReturnTo : '/admin/moderation';
 
   const [product, setProduct] = useState<Product | null>(null);
   const [reviews, setReviews] = useState<ProductReview[]>([]);
@@ -261,7 +265,7 @@ export function ProductDetailPage() {
   }, [id]);
 
   useEffect(() => {
-    if (!product || !user) {
+    if (!product || !user || isAdminReadOnly) {
       return;
     }
 
@@ -280,10 +284,10 @@ export function ProductDetailPage() {
     return () => {
       mounted = false;
     };
-  }, [product, user]);
+  }, [product, user, isAdminReadOnly]);
 
   useEffect(() => {
-    if (!id) {
+    if (!id || isAdminReadOnly) {
       setReviewEligibility(null);
       setIsReviewEligibilityLoading(false);
       return;
@@ -313,7 +317,7 @@ export function ProductDetailPage() {
     return () => {
       mounted = false;
     };
-  }, [id, user]);
+  }, [id, user, isAdminReadOnly]);
 
   useEffect(() => {
     if (!product) {
@@ -325,7 +329,7 @@ export function ProductDetailPage() {
     setHasReviewedAllergens(product.allergens.length === 0);
     setAllergenConfirmationError('');
 
-    if (product.allergens.length > 0 && user) {
+    if (product.allergens.length > 0 && user && !isAdminReadOnly) {
       apiJson<{ acknowledged: boolean }>(`/api/orders/products/${product.id}/allergen-acknowledgement/`)
         .then((payload) => {
           setHasReviewedAllergens(payload.acknowledged);
@@ -334,7 +338,7 @@ export function ProductDetailPage() {
           setHasReviewedAllergens(false);
         });
     }
-  }, [product, user]);
+  }, [product, user, isAdminReadOnly]);
 
   useEffect(() => {
     setProducerReplyDrafts((currentDrafts) => {
@@ -398,7 +402,15 @@ export function ProductDetailPage() {
     return Math.max(0, Math.min(MAX_ORDER_ITEM_QUANTITY, product.stock) - cartQuantity);
   }, [cartQuantity, product]);
 
+  const showAdminReadOnlyNotice = () => {
+    toast.info('Admin preview is read-only. Use moderation tools from the admin dashboard.');
+  };
+
   const validateBuyerPurchaseAction = () => {
+    if (isAdminReadOnly) {
+      showAdminReadOnlyNotice();
+      return false;
+    }
     if (!product || !isAvailable) {
       return false;
     }
@@ -472,6 +484,10 @@ export function ProductDetailPage() {
   };
 
   const handleRemoveFromCart = async () => {
+    if (isAdminReadOnly) {
+      showAdminReadOnlyNotice();
+      return;
+    }
     if (!product || !isInCart) {
       return;
     }
@@ -488,10 +504,18 @@ export function ProductDetailPage() {
   };
 
   const handleViewCart = () => {
+    if (isAdminReadOnly) {
+      showAdminReadOnlyNotice();
+      return;
+    }
     navigate('/cart');
   };
 
   const handleReport = async (targetType: ModerationTargetType, objectId: string | number, label: string) => {
+    if (isAdminReadOnly) {
+      showAdminReadOnlyNotice();
+      return;
+    }
     if (!user) {
       toast.error('Please sign in to report this item.');
       return;
@@ -522,9 +546,9 @@ export function ProductDetailPage() {
   };
 
   const backToMarketplaceButton = (
-    <Button variant="ghost" onClick={goBack}>
+    <Button variant="ghost" onClick={() => (isAdminReadOnly ? navigate(adminReturnTo) : goBack())}>
       <ArrowLeft className="mr-2 size-4" />
-      Back to Marketplace
+      {isAdminReadOnly ? 'Back to moderation' : 'Back to Marketplace'}
     </Button>
   );
 
@@ -623,6 +647,10 @@ export function ProductDetailPage() {
   );
 
   const handleAllergenReviewToggle = async (checked: boolean) => {
+    if (isAdminReadOnly) {
+      showAdminReadOnlyNotice();
+      return;
+    }
     if (!product) {
       return;
     }
@@ -659,7 +687,7 @@ export function ProductDetailPage() {
   };
 
   const refreshReviewEligibility = async () => {
-    if (!id) {
+    if (!id || isAdminReadOnly) {
       return;
     }
 
@@ -672,6 +700,10 @@ export function ProductDetailPage() {
   };
 
   const openReviewForm = () => {
+    if (isAdminReadOnly) {
+      showAdminReadOnlyNotice();
+      return;
+    }
     if (isReviewEligibilityLoading) {
       toast.info('Checking whether this product can be reviewed.');
       return;
@@ -700,6 +732,10 @@ export function ProductDetailPage() {
   };
 
   const handleReviewSubmit = async () => {
+    if (isAdminReadOnly) {
+      showAdminReadOnlyNotice();
+      return;
+    }
     if (!id) {
       return;
     }
@@ -771,6 +807,10 @@ export function ProductDetailPage() {
   };
 
   const handleProducerResponseSubmit = async (reviewId: string) => {
+    if (isAdminReadOnly) {
+      showAdminReadOnlyNotice();
+      return;
+    }
     if (!id) {
       return;
     }
@@ -866,6 +906,22 @@ export function ProductDetailPage() {
 
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-5 lg:px-6">
         <div className="mb-6">{backToMarketplaceButton}</div>
+        {isAdminReadOnly && (
+          <div className="mb-6 rounded-3xl border border-[#d6cab8] bg-[#fff8e8] px-5 py-4 text-sm text-[#6a4f45] shadow-sm">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-semibold text-[#3b2c24]">Admin read-only product preview</p>
+                <p className="mt-1">
+                  Inspect the reported product, reviews, recipes, allergens, stock, and producer details without buyer
+                  actions enabled.
+                </p>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => navigate(adminReturnTo)}>
+                Back to moderation
+              </Button>
+            </div>
+          </div>
+        )}
 
         <section>
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
@@ -944,20 +1000,22 @@ export function ProductDetailPage() {
                         </>
                       )}
                     </a>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="rounded-full border-[#d6cab8] bg-[#fbfaf4] text-[#6a4f45] hover:bg-[#f3eee5] hover:text-[#4b382f]"
-                      disabled={activeReportKey === `product:${product.id}` || isProductReported}
-                      onClick={() => void handleReport('product', product.id, 'Product')}
-                    >
-                      <Flag className="mr-2 size-4" />
-                      {isProductReported
-                        ? 'Product reported'
-                        : activeReportKey === `product:${product.id}`
-                          ? 'Reporting...'
-                          : 'Report product'}
-                    </Button>
+                    {!isAdminReadOnly && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="rounded-full border-[#d6cab8] bg-[#fbfaf4] text-[#6a4f45] hover:bg-[#f3eee5] hover:text-[#4b382f]"
+                        disabled={activeReportKey === `product:${product.id}` || isProductReported}
+                        onClick={() => void handleReport('product', product.id, 'Product')}
+                      >
+                        <Flag className="mr-2 size-4" />
+                        {isProductReported
+                          ? 'Product reported'
+                          : activeReportKey === `product:${product.id}`
+                            ? 'Reporting...'
+                            : 'Report product'}
+                      </Button>
+                    )}
                   </div>
 
                   {firstReview && (
@@ -1036,7 +1094,7 @@ export function ProductDetailPage() {
                 </div>
               </div>
 
-              {isAvailable && (
+              {isAvailable && !isAdminReadOnly && (
                 <div className="mt-4 flex items-center justify-between gap-5">
                   <label className="shrink-0 text-sm font-medium text-[var(--rich-soil)]">Quantity</label>
                   <div className="inline-flex items-center overflow-hidden rounded-2xl border border-[#d6cab8] bg-[#fffdf8]">
@@ -1090,33 +1148,47 @@ export function ProductDetailPage() {
                     <p className="font-semibold">Allergen warning</p>
                     <p className="mt-1">Contains: <strong>{product.allergens.join(', ')}</strong></p>
                   </div>
-                  <div className="rounded-2xl border border-orange-200 bg-orange-50/80 px-3 py-2">
-                    <div className="flex items-start gap-3">
-                      <Checkbox
-                        id="allergen-review-confirmation"
-                        checked={hasReviewedAllergens}
-                        onCheckedChange={(checked) => handleAllergenReviewToggle(checked === true)}
-                        className="mt-0.5"
-                        aria-label="Confirm allergen information has been reviewed"
-                      />
-                      <div className="space-y-1">
-                        <Label htmlFor="allergen-review-confirmation" className="font-medium">
-                          I have reviewed this product&apos;s allergen information
-                        </Label>
-                        <p className="text-xs text-gray-600">Required before checkout.</p>
+                  {!isAdminReadOnly && (
+                    <>
+                      <div className="rounded-2xl border border-orange-200 bg-orange-50/80 px-3 py-2">
+                        <div className="flex items-start gap-3">
+                          <Checkbox
+                            id="allergen-review-confirmation"
+                            checked={hasReviewedAllergens}
+                            onCheckedChange={(checked) => handleAllergenReviewToggle(checked === true)}
+                            className="mt-0.5"
+                            aria-label="Confirm allergen information has been reviewed"
+                          />
+                          <div className="space-y-1">
+                            <Label htmlFor="allergen-review-confirmation" className="font-medium">
+                              I have reviewed this product&apos;s allergen information
+                            </Label>
+                            <p className="text-xs text-gray-600">Required before checkout.</p>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                  {allergenConfirmationError && (
-                    <p className="text-sm font-medium text-red-700">
-                      {allergenConfirmationError}
-                    </p>
+                      {allergenConfirmationError && (
+                        <p className="text-sm font-medium text-red-700">
+                          {allergenConfirmationError}
+                        </p>
+                      )}
+                    </>
                   )}
                 </div>
               )}
 
               <div className={requiresAllergenReview ? 'mt-2.5' : 'mt-5 border-t border-[#dfe8d9] pt-4'}>
-                {cartActionPanel}
+                {isAdminReadOnly ? (
+                  <div className="rounded-2xl border border-[#d6cab8] bg-[#fbfaf4] px-4 py-3 text-sm text-[#6a4f45]">
+                    <p className="font-semibold text-[#3b2c24]">Ordering disabled in admin preview</p>
+                    <p className="mt-1">
+                      Admins can inspect product information here, but cart, checkout, and saved buyer actions are
+                      intentionally unavailable.
+                    </p>
+                  </div>
+                ) : (
+                  cartActionPanel
+                )}
               </div>
             </aside>
           </div>
@@ -1145,14 +1217,16 @@ export function ProductDetailPage() {
                     <p className="text-sm text-gray-600">No reviews yet</p>
                   )}
                 </div>
-                {user?.role === 'CUSTOMER' ? (
-                  <Button variant="outline" size="sm" onClick={openReviewForm}>
-                    {existingReview ? 'Edit your review' : 'Write a review'}
-                  </Button>
-                ) : (
-                  <Button variant="outline" size="sm" onClick={openReviewForm} disabled={isReviewEligibilityLoading}>
-                    {user?.role === 'PRODUCER' && canRespondToReviews ? 'Respond as producer below' : 'Write a review'}
-                  </Button>
+                {!isAdminReadOnly && (
+                  user?.role === 'CUSTOMER' ? (
+                    <Button variant="outline" size="sm" onClick={openReviewForm}>
+                      {existingReview ? 'Edit your review' : 'Write a review'}
+                    </Button>
+                  ) : (
+                    <Button variant="outline" size="sm" onClick={openReviewForm} disabled={isReviewEligibilityLoading}>
+                      {user?.role === 'PRODUCER' && canRespondToReviews ? 'Respond as producer below' : 'Write a review'}
+                    </Button>
+                  )
                 )}
               </div>
               <p className="text-xs text-gray-500">
@@ -1164,7 +1238,12 @@ export function ProductDetailPage() {
                 </div>
               )}
 
-              {!user ? (
+              {isAdminReadOnly ? (
+                <div className="rounded-lg border border-dashed border-[#d6cab8] bg-[#fbfaf4] px-4 py-5 text-sm text-[#6a4f45]">
+                  Reviews are visible for moderation inspection only. Admin review, report, and reply actions are
+                  disabled on this preview page.
+                </div>
+              ) : !user ? (
                 <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-5">
                   <p className="font-medium text-gray-700">Log in to write a review.</p>
                   <p className="mt-1 text-sm text-gray-500">
@@ -1353,16 +1432,18 @@ export function ProductDetailPage() {
                                 Edit
                               </Button>
                             )}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 px-2 text-xs text-[#6a4f45] hover:bg-[#f3eee5] hover:text-[#4b382f]"
-                              disabled={activeReportKey === `review:${review.id}`}
-                              onClick={() => void handleReport('review', review.id, 'Review')}
-                            >
-                              <Flag className="mr-1.5 size-3.5" />
-                              {activeReportKey === `review:${review.id}` ? 'Reporting...' : 'Report'}
-                            </Button>
+                            {!isAdminReadOnly && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 text-xs text-[#6a4f45] hover:bg-[#f3eee5] hover:text-[#4b382f]"
+                                disabled={activeReportKey === `review:${review.id}`}
+                                onClick={() => void handleReport('review', review.id, 'Review')}
+                              >
+                                <Flag className="mr-1.5 size-3.5" />
+                                {activeReportKey === `review:${review.id}` ? 'Reporting...' : 'Report'}
+                              </Button>
+                            )}
                           </div>
                           <p className="text-sm text-gray-700">{review.comment || 'No written comment.'}</p>
                           {review.producerResponse && (
@@ -1378,7 +1459,7 @@ export function ProductDetailPage() {
                               <p className="mt-2 text-sm text-emerald-900">{review.producerResponse}</p>
                             </div>
                           )}
-                          {canRespondToReviews && (
+                          {!isAdminReadOnly && canRespondToReviews && (
                             <div className="mt-4 rounded-lg border bg-gray-50 p-4 space-y-3">
                               <div>
                                 <p className="text-sm font-medium text-gray-900">
@@ -1489,16 +1570,18 @@ export function ProductDetailPage() {
                             >
                               {isExpanded ? 'Hide Recipe' : 'View Full Recipe'}
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="text-[#6a4f45] hover:bg-[#f3eee5] hover:text-[#4b382f]"
-                              disabled={activeReportKey === `recipe:${recipe.id}`}
-                              onClick={() => void handleReport('recipe', recipe.id, 'Recipe')}
-                            >
-                              <Flag className="mr-2 size-4" />
-                              {activeReportKey === `recipe:${recipe.id}` ? 'Reporting...' : 'Report'}
-                            </Button>
+                            {!isAdminReadOnly && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-[#6a4f45] hover:bg-[#f3eee5] hover:text-[#4b382f]"
+                                disabled={activeReportKey === `recipe:${recipe.id}`}
+                                onClick={() => void handleReport('recipe', recipe.id, 'Recipe')}
+                              >
+                                <Flag className="mr-2 size-4" />
+                                {activeReportKey === `recipe:${recipe.id}` ? 'Reporting...' : 'Report'}
+                              </Button>
+                            )}
                           </div>
                         </div>
 
